@@ -3,6 +3,7 @@ package com.personalkanban.ui;
 import com.personalkanban.application.BoardService;
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
+import com.personalkanban.ui.markdown.MarkdownSummary;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -40,10 +41,14 @@ final class CardViewBuilder {
         ColorCss.applyAccent(view, card.color());
 
         if (!card.description().isBlank()) {
-            Label description = new Label(card.description());
-            description.getStyleClass().add("card-description");
-            description.setWrapText(true);
-            view.getChildren().add(description);
+            var summaryLines = MarkdownSummary.render(card.description(), 4);
+            if (!summaryLines.isEmpty()) {
+                javafx.scene.text.TextFlow summary = new javafx.scene.text.TextFlow(
+                        summaryLines.toArray(new javafx.scene.text.Text[0]));
+                summary.getStyleClass().add("card-description");
+                summary.setPrefWidth(220);
+                view.getChildren().add(summary);
+            }
         }
 
         addDueBadgeIfPresent(i18n, card, view);
@@ -54,6 +59,14 @@ final class CardViewBuilder {
                 cardButton(i18n, "\u2715", "card.delete", board, card.id(), false));
         actions.setAlignment(Pos.CENTER_RIGHT);
         view.getChildren().add(actions);
+
+        // Double-click opens the markdown detail window.
+        view.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                board.onOpenCardDetail(card.id());
+                event.consume();
+            }
+        });
 
         installDragSource(view, card.id());
         return view;

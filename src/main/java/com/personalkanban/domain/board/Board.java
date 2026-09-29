@@ -133,6 +133,19 @@ public final class Board {
         return event;
     }
 
+    /**
+     * Moves a card into the empty slot that visually existed between two
+     * neighbors at drag time (the drop indicator's position). Slot indexes are
+     * pre-drop: dropping into the slot right after card X lands the card
+     * exactly there, including when reordering inside one column (a drop onto
+     * the card's own trailing slot is a no-op). {@link #moveCard} already
+     * carries these pre-drop semantics, so this method is an explicit,
+     * intention-revealing alias for drag & drop use.
+     */
+    public CardMoved moveCardToSlot(CardId cardId, ColumnId targetColumnId, int slotIndex) {
+        return moveCard(cardId, targetColumnId, slotIndex);
+    }
+
     // ------------------------------------------------------------------
     // Queries
     // ------------------------------------------------------------------

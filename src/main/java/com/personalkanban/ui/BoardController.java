@@ -223,8 +223,20 @@ public final class BoardController {
         databaseMenu.getItems().setAll(
                 itemOf("db.new", this::onNewDatabase),
                 itemOf("db.open", this::onOpenDatabase),
-                new SeparatorMenuItem(),
-                currentFile);
+                new SeparatorMenuItem());
+
+        MenuItem recentHeader = new MenuItem(i18n.text("db.recent"));
+        recentHeader.setDisable(true);
+        databaseMenu.getItems().add(recentHeader);
+        for (java.nio.file.Path recent : context.recentDatabases()) {
+            boolean current = isCurrentDatabase(recent);
+            MenuItem recentItem = new MenuItem((current ? "\u25CF " : "\u25CB ") + recent);
+            recentItem.setDisable(current);
+            recentItem.setOnAction(e -> switchDatabase(() -> context.openDatabase(recent)));
+            databaseMenu.getItems().add(recentItem);
+        }
+
+        databaseMenu.getItems().addAll(new SeparatorMenuItem(), currentFile);
     }
 
     private void rebuildBoardMenu() {
@@ -476,6 +488,21 @@ public final class BoardController {
                         })));
     }
 
+    /** Opens the non-modal markdown detail window for a card. */
+    public void onOpenCardDetail(com.personalkanban.domain.board.CardId cardId) {
+        service.board().findCard(cardId).ifPresent(card ->
+                CardDetailWindow.open(card, this, i18n, themeManager));
+    }
+
+    /** Persists a description edited in the detail window (keeps other fields). */
+    public void onDescriptionSaved(com.personalkanban.domain.board.CardId cardId, String markdown) {
+        service.board().findCard(cardId).ifPresent(card -> guarded(() -> {
+            service.editCard(cardId, card.title(), markdown, card.color(),
+                    card.dueDate(), card.labels());
+            refresh();
+        }));
+    }
+
     public void onRemoveCard(com.personalkanban.domain.board.CardId cardId) {
         if (dialogs.confirm(i18n.text("confirm.delete.card"))) {
             guarded(() -> {
@@ -518,6 +545,14 @@ public final class BoardController {
                            com.personalkanban.domain.board.ColumnId targetColumn, int targetIndex) {
         guarded(() -> {
             service.moveCard(cardId, targetColumn, targetIndex);
+            refresh();
+        });
+    }
+
+    public void onMoveCardToSlot(com.personalkanban.domain.board.CardId cardId,
+                                 com.personalkanban.domain.board.ColumnId targetColumn, int slotIndex) {
+        guarded(() -> {
+            service.moveCardToSlot(cardId, targetColumn, slotIndex);
             refresh();
         });
     }

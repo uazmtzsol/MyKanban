@@ -88,6 +88,29 @@
 .card.pk-color-pink   { -fx-border-color: #e91e63; -fx-border-width: 0 0 0 4; }
 .card.pk-color-gray   { -fx-border-color: #607d8b; -fx-border-width: 0 0 0 4; }
 
+/* Drop slots between cards: invisible gap that becomes an insertion line. */
+.drop-slot {
+    -fx-pref-height: 8;
+    -fx-min-height: 4;
+    -fx-background-radius: 2;
+}
+.drop-slot-active {
+    -fx-background-color: #1976d2;
+    -fx-pref-height: 5;
+    -fx-min-height: 5;
+    -fx-background-insets: 0 2;
+}
+
+/* Card detail window (markdown) */
+.detail-window { -fx-background-color: #ffffff; }
+.detail-title { -fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 0 0 8 0; }
+.detail-caption { -fx-font-size: 11px; -fx-text-fill: #6b7280; }
+.md-editor {
+    -fx-font-family: Consolas, monospace;
+    -fx-font-size: 13px;
+    -fx-background-color: #fafbfc;
+}
+
 .color-swatch { -fx-arc-width: 4; -fx-arc-height: 4; }
 .pk-color-blue-swatch   { -fx-fill: #2196f3; }
 .pk-color-green-swatch  { -fx-fill: #4caf50; }

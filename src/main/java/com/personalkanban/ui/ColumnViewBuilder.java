@@ -5,6 +5,7 @@ import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.LabelFilter;
+import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
@@ -14,6 +15,8 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.DataFormat;
 import javafx.scene.input.TransferMode;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 
 import java.util.Map;
 import javafx.scene.layout.HBox;
@@ -90,11 +93,16 @@ final class ColumnViewBuilder {
         view.setPrefWidth(280);
         view.getChildren().add(header);
 
-        // --- Cards (label-filtered; WIP badge keeps counting everything) ---
-        VBox cardsBox = new VBox(8);
+        // --- Cards (label-filtered; WIP badge keeps counting everything).
+        //     Every card is followed by a drop slot, so a drop can land exactly
+        //     where the indicator showed at drag time (slot = card index + 1). ---
+        VBox cardsBox = new VBox(0);
+        int cardIndex = 0;
         for (var card : column.cards()) {
             if (labelFilter.matches(card)) {
                 cardsBox.getChildren().add(CardViewBuilder.build(service, i18n, dialogs, board, card));
+                cardsBox.getChildren().add(slotRegion(column.id(), cardIndex + 1, board));
+                cardIndex++;
             }
         }
         ScrollPane cardsScroll = new ScrollPane(cardsBox);
@@ -103,7 +111,7 @@ final class ColumnViewBuilder {
         VBox.setVgrow(cardsScroll, javafx.scene.layout.Priority.ALWAYS);
         view.getChildren().add(cardsScroll);
 
-        installCardDropTarget(cardsBox, column.id(), service, board);
+        installCardDropTarget(cardsBox, column.id(), service, board, Integer.MAX_VALUE);
         installColumnDragSource(view, column.id(), service, board);
         return view;
     }
@@ -165,9 +173,9 @@ final class ColumnViewBuilder {
         });
     }
 
-    /** The cards list accepts cards from any column; drops append at the end. */
+    /** The whole cards area accepts drops as a fallback: append at the end. */
     private static void installCardDropTarget(VBox cardsBox, ColumnId columnId,
-                                              BoardService service, BoardController board) {
+                                              BoardService service, BoardController board, int slotIndex) {
         cardsBox.setOnDragOver(event -> {
             if (event.getDragboard().hasContent(CARD_FORMAT)) {
                 event.acceptTransferModes(TransferMode.MOVE);
@@ -178,10 +186,46 @@ final class ColumnViewBuilder {
             var dragboard = event.getDragboard();
             if (dragboard.hasContent(CARD_FORMAT)) {
                 CardId dragged = new CardId((String) dragboard.getContent(CARD_FORMAT));
-                board.onMoveCard(dragged, columnId, Integer.MAX_VALUE);
+                board.onMoveCard(dragged, columnId, slotIndex);
                 event.setDropCompleted(true);
                 event.consume();
             }
         });
+    }
+
+    /**
+     * An invisible gap after each card; during a card drag it grows into a
+     * visible insertion line. Dropping on slot N places the card between
+     * neighbors exactly as the indicator showed.
+     */
+    private static Region slotRegion(ColumnId columnId, int slotIndex, BoardController board) {
+        Region slot = new Region();
+        slot.getStyleClass().add("drop-slot");
+        slot.setPrefHeight(8);
+        slot.setMinHeight(4);
+        slot.setOnDragOver(event -> {
+            if (event.getDragboard().hasContent(CARD_FORMAT)) {
+                if (!slot.getStyleClass().contains("drop-slot-active")) {
+                    slot.getStyleClass().add("drop-slot-active");
+                }
+                event.acceptTransferModes(TransferMode.MOVE);
+                event.consume();
+            }
+        });
+        slot.setOnDragExited(event -> {
+            slot.getStyleClass().remove("drop-slot-active");
+            event.consume();
+        });
+        slot.setOnDragDropped(event -> {
+            slot.getStyleClass().remove("drop-slot-active");
+            var dragboard = event.getDragboard();
+            if (dragboard.hasContent(CARD_FORMAT)) {
+                CardId dragged = new CardId((String) dragboard.getContent(CARD_FORMAT));
+                board.onMoveCardToSlot(dragged, columnId, slotIndex);
+                event.setDropCompleted(true);
+                event.consume();
+            }
+        });
+        return slot;
     }
 }

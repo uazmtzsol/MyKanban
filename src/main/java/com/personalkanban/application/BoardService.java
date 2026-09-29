@@ -11,6 +11,7 @@ import com.personalkanban.application.command.ClearColumnCommand;
 import com.personalkanban.application.command.EditCardCommand;
 import com.personalkanban.application.command.EditColumnCommand;
 import com.personalkanban.application.command.MoveCardCommand;
+import com.personalkanban.application.command.MoveCardToSlotCommand;
 import com.personalkanban.application.command.MoveColumnCommand;
 import com.personalkanban.application.command.RemoveCardCommand;
 import com.personalkanban.application.command.RemoveColumnCommand;
@@ -210,6 +211,11 @@ public final class BoardService {
 
     public void moveCard(CardId cardId, ColumnId targetColumnId, int targetIndex) {
         execute(new MoveCardCommand(cardId, targetColumnId, targetIndex));
+    }
+
+    /** Moves a card into the visual slot between two neighbors (drop indicator). */
+    public void moveCardToSlot(CardId cardId, ColumnId targetColumnId, int slotIndex) {
+        execute(new MoveCardToSlotCommand(cardId, targetColumnId, slotIndex));
     }
 
     // ------------------------------------------------------------------

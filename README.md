@@ -18,7 +18,14 @@ leaves your machine.
 - **JSON export/import** — back up or share any board as a portable `.json` file
 - Columns & cards: add, edit, delete, delete-all-in-column, clear board
 - **Card due dates** with an overdue badge, and **labels** (chips)
-- Drag & drop: reorder columns, move/reorder cards across columns
+- **Markdown notes** — double-click a card to open a detail window with a
+  live-split markdown editor and preview (GFM tables & strikethrough);
+  the card front shows a lightweight styled summary. Storage stays plain
+  text; the preview WebView runs with JavaScript disabled
+- **Recent databases** — the *Database* menu lists the last 5 opened files
+  for one-click switching between computers' setups
+- Drag & drop: reorder columns, move/reorder cards across columns with a
+  **visual insertion indicator** — drop into the exact slot between two cards
 - WIP limits with a visible `count/limit` badge (red when full)
 - 8-color palette for columns and cards
 - Dark mode toggle (persisted)

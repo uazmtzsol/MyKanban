@@ -14,8 +14,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Properties;
 
 /**
@@ -33,8 +34,11 @@ public final class AppContext implements AutoCloseable {
     private static final String SETTING_LANGUAGE = "ui.language";
     private static final String SETTING_THEME = "ui.theme";
     private static final String CONFIG_DB_PATH = "db.path";
+    private static final String CONFIG_RECENT_PREFIX = "db.recent.";
+    private static final int RECENT_LIMIT = 5;
 
     private final Path configFile;
+    private final List<Path> recentDatabases = new ArrayList<>();
 
     private Database database;
     private BoardService boardService;
@@ -44,6 +48,7 @@ public final class AppContext implements AutoCloseable {
 
     private AppContext(Path configFile) {
         this.configFile = configFile;
+        this.recentDatabases.addAll(readRecentDatabases(configFile));
     }
 
     /** Wires the last-used database (if it still exists) or the default one. */
@@ -74,14 +79,27 @@ public final class AppContext implements AutoCloseable {
      * current one stays open and the failure propagates to the caller.
      */
     public void openDatabase(Path dbFile) {
-        Path target = dbFile.toAbsolutePath().normalize();
-        switchDatabase(target); // may throw; current state stays intact then
-        writeConfiguredDatabase(target);
+        // switchDatabase persists the choice and updates the recents list.
+        switchDatabase(dbFile.toAbsolutePath().normalize());
     }
 
     /** The SQLite file currently in use. */
     public Path databasePath() {
         return databasePath;
+    }
+
+    /** Most recently opened databases, most recent first (for the menu). */
+    public List<Path> recentDatabases() {
+        return List.copyOf(recentDatabases);
+    }
+
+    /** Moves the target to the front of the recents list, capping the size. */
+    private void rememberRecent(Path target) {
+        recentDatabases.removeIf(path -> path.equals(target));
+        recentDatabases.add(0, target);
+        while (recentDatabases.size() > RECENT_LIMIT) {
+            recentDatabases.removeLast();
+        }
     }
 
     private void switchDatabase(Path dbFile) {
@@ -106,6 +124,8 @@ public final class AppContext implements AutoCloseable {
             settings = newSettings;
             themeManager = newTheme;
             databasePath = dbFile;
+            rememberRecent(dbFile);
+            writeConfiguredDatabase(dbFile);
         } catch (RuntimeException failure) {
             try {
                 newDatabase.close();
@@ -137,14 +157,40 @@ public final class AppContext implements AutoCloseable {
     private void writeConfiguredDatabase(Path dbFile) {
         Properties properties = new Properties();
         properties.setProperty(CONFIG_DB_PATH, dbFile.toString());
+        for (int i = 0; i < recentDatabases.size(); i++) {
+            properties.setProperty(CONFIG_RECENT_PREFIX + i, recentDatabases.get(i).toString());
+        }
         try {
             Files.createDirectories(configFile.getParent());
             try (OutputStream out = Files.newOutputStream(configFile)) {
                 properties.store(out, "Personal Kanban launcher config");
             }
         } catch (IOException e) {
-            // Remembering the path is best-effort; the app still works.
+            // Remembering paths is best-effort; the app still works.
         }
+    }
+
+    private static List<Path> readRecentDatabases(Path configFile) {
+        if (!Files.isRegularFile(configFile)) {
+            return List.of();
+        }
+        Properties properties = new Properties();
+        try (InputStream in = Files.newInputStream(configFile)) {
+            properties.load(in);
+        } catch (IOException e) {
+            return List.of();
+        }
+        List<Path> recents = new ArrayList<>();
+        for (int i = 0; i < RECENT_LIMIT; i++) {
+            String value = properties.getProperty(CONFIG_RECENT_PREFIX + i);
+            if (value != null && !value.isBlank()) {
+                Path path = Path.of(value);
+                if (Files.isRegularFile(path) && recents.stream().noneMatch(path::equals)) {
+                    recents.add(path);
+                }
+            }
+        }
+        return recents;
     }
 
     // ------------------------------------------------------------------
