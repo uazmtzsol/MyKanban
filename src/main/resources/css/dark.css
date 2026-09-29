@@ -1,0 +1,94 @@
+/* Personal Kanban - dark theme. */
+
+.root {
+    -fx-base: #16181d;
+    -fx-background-color: #16181d;
+    -fx-font-family: "Segoe UI", "System", sans-serif;
+    -fx-font-size: 13px;
+    -fx-text-fill: #e5e7eb;
+}
+
+.board-root { -fx-background-color: #16181d; }
+
+.toolbar {
+    -fx-background-color: #1f2229;
+    -fx-border-color: transparent transparent #2b2f38 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.brand {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 8 0 0;
+}
+
+.tool-button {
+    -fx-background-color: transparent;
+    -fx-border-color: #3a3f4b;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 4 8 4 8;
+    -fx-cursor: hand;
+    -fx-text-fill: #e5e7eb;
+}
+.tool-button:hover { -fx-background-color: #262a33; }
+
+.column {
+    -fx-background-color: #1f2229;
+    -fx-background-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 6, 0.1, 0, 2);
+    -fx-padding: 10;
+}
+
+.column-header { -fx-padding: 0 0 4 0; }
+.column-title { -fx-font-weight: bold; -fx-font-size: 14px; }
+.column-wip {
+    -fx-background-color: #2b2f38;
+    -fx-background-radius: 10;
+    -fx-padding: 1 8 1 8;
+    -fx-font-size: 11px;
+}
+.wip-full { -fx-background-color: #4c1d1d; -fx-text-fill: #fca5a5; }
+
+.cards-scroll { -fx-background-color: transparent; }
+.cards-scroll > .viewport { -fx-background-color: transparent; }
+
+.card {
+    -fx-background-color: #262a33;
+    -fx-background-radius: 6;
+    -fx-border-color: #343947;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-padding: 8;
+}
+
+.card-title { -fx-font-weight: bold; }
+.card-description { -fx-text-fill: #9ca3af; -fx-font-size: 12px; }
+
+.column.pk-color-blue   { -fx-border-color: #42a5f5; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.column.pk-color-green  { -fx-border-color: #66bb6a; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.column.pk-color-red    { -fx-border-color: #ef5350; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.column.pk-color-orange { -fx-border-color: #ffa726; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.column.pk-color-purple { -fx-border-color: #ab47bc; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.column.pk-color-teal   { -fx-border-color: #26a69a; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.column.pk-color-pink   { -fx-border-color: #ec407a; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.column.pk-color-gray   { -fx-border-color: #78909c; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+
+.card.pk-color-blue   { -fx-border-color: #42a5f5; -fx-border-width: 0 0 0 4; }
+.card.pk-color-green  { -fx-border-color: #66bb6a; -fx-border-width: 0 0 0 4; }
+.card.pk-color-red    { -fx-border-color: #ef5350; -fx-border-width: 0 0 0 4; }
+.card.pk-color-orange { -fx-border-color: #ffa726; -fx-border-width: 0 0 0 4; }
+.card.pk-color-purple { -fx-border-color: #ab47bc; -fx-border-width: 0 0 0 4; }
+.card.pk-color-teal   { -fx-border-color: #26a69a; -fx-border-width: 0 0 0 4; }
+.card.pk-color-pink   { -fx-border-color: #ec407a; -fx-border-width: 0 0 0 4; }
+.card.pk-color-gray   { -fx-border-color: #78909c; -fx-border-width: 0 0 0 4; }
+
+.color-swatch { -fx-arc-width: 4; -fx-arc-height: 4; }
+.pk-color-blue-swatch   { -fx-fill: #42a5f5; }
+.pk-color-green-swatch  { -fx-fill: #66bb6a; }
+.pk-color-red-swatch    { -fx-fill: #ef5350; }
+.pk-color-orange-swatch { -fx-fill: #ffa726; }
+.pk-color-purple-swatch { -fx-fill: #ab47bc; }
+.pk-color-teal-swatch   { -fx-fill: #26a69a; }
+.pk-color-pink-swatch   { -fx-fill: #ec407a; }
+.pk-color-gray-swatch   { -fx-fill: #78909c; }

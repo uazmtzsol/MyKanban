@@ -1,0 +1,67 @@
+package com.personalkanban.infrastructure.sqlite;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Objects;
+
+/**
+ * Owns the single SQLite connection (GRASP Pure Fabrication: nobody else
+ * touches JDBC beyond the repository and migrator). Enables WAL journaling
+ * and foreign-key enforcement on every connection.
+ */
+public final class Database implements AutoCloseable {
+
+    static {
+        // Fails fast at startup if the driver artifact is missing from the classpath.
+        try {
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("SQLite JDBC driver not found on classpath", e);
+        }
+    }
+
+    private final Connection connection;
+
+    public Database(Path databaseFile) {
+        Objects.requireNonNull(databaseFile);
+        try {
+            if (databaseFile.getParent() != null) {
+                Files.createDirectories(databaseFile.getParent());
+            }
+            String url = "jdbc:sqlite:" + databaseFile.toAbsolutePath();
+            this.connection = DriverManager.getConnection(url);
+            configure(connection);
+        } catch (IOException | SQLException e) {
+            throw new DataAccessException("Could not open SQLite database at " + databaseFile, e);
+        }
+    }
+
+    /** In-memory database for tests and quick trials. */
+    public static Database inMemory() {
+        return new Database(Path.of(":memory:"));
+    }
+
+    private static void configure(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            statement.execute("PRAGMA journal_mode = WAL");
+            statement.execute("PRAGMA foreign_keys = ON");
+        }
+    }
+
+    public Connection connection() {
+        return connection;
+    }
+
+    @Override
+    public void close() {
+        try {
+            connection.close();
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not close SQLite connection", e);
+        }
+    }
+}
