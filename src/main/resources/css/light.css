@@ -74,6 +74,10 @@
 .column.pk-color-pink   { -fx-border-color: #e91e63; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
 .column.pk-color-gray   { -fx-border-color: #607d8b; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
 
+/* Custom (color-picker) colors: hue arrives inline via -fx-border-color. */
+.column.pk-color-custom { -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.card.pk-color-custom   { -fx-border-width: 0 0 0 4; }
+
 /* Card accent (left border) per palette color. */
 .card.pk-color-blue   { -fx-border-color: #2196f3; -fx-border-width: 0 0 0 4; }
 .card.pk-color-green  { -fx-border-color: #4caf50; -fx-border-width: 0 0 0 4; }

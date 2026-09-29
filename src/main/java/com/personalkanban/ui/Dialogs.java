@@ -4,16 +4,16 @@ import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.WipLimit;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.ComboBox;
+import javafx.scene.control.ColorPicker;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
-import javafx.scene.shape.Rectangle;
+import javafx.scene.paint.Color;
 
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -49,7 +49,7 @@ final class Dialogs {
     Optional<ColumnForm> columnDialog(ColumnForm initial) {
         TextField titleField = new TextField(initial == null ? "" : initial.title());
         TextField descriptionField = new TextField(initial == null ? "" : initial.description());
-        ComboBox<BoardColor> colorBox = colorPicker(initial == null ? BoardColor.DEFAULT : initial.color());
+        ColorPicker colorPicker = colorPicker(initial == null ? BoardColor.DEFAULT : initial.color());
         TextField wipField = new TextField(initial == null || initial.wipLimit().isUnlimited()
                 ? "" : String.valueOf(initial.wipLimit().asOptional().get()));
         wipField.setPromptText(i18n.text("dialog.wip.prompt"));
@@ -63,7 +63,7 @@ final class Dialogs {
         grid.add(new Label(i18n.text("dialog.description")), 0, 1);
         grid.add(descriptionField, 1, 1);
         grid.add(new Label(i18n.text("dialog.color")), 0, 2);
-        grid.add(colorBox, 1, 2);
+        grid.add(colorPicker, 1, 2);
         grid.add(new Label(i18n.text("dialog.wip")), 0, 3);
         grid.add(wipField, 1, 3);
         dialog.getDialogPane().setContent(grid);
@@ -78,7 +78,7 @@ final class Dialogs {
             }
             WipLimit wipLimit = wip == 0 ? WipLimit.unlimited() : WipLimit.of(wip);
             return new ColumnForm(titleField.getText(), descriptionField.getText(),
-                    colorBox.getValue(), wipLimit);
+                    selectedColor(colorPicker), wipLimit);
         });
 
         return dialog.showAndWait();
@@ -92,7 +92,7 @@ final class Dialogs {
         TextField titleField = new TextField(initial == null ? "" : initial.title());
         TextArea descriptionArea = new TextArea(initial == null ? "" : initial.description());
         descriptionArea.setPrefRowCount(3);
-        ComboBox<BoardColor> colorBox = colorPicker(initial == null ? BoardColor.DEFAULT : initial.color());
+        ColorPicker colorPicker = colorPicker(initial == null ? BoardColor.DEFAULT : initial.color());
         DatePicker dueDatePicker = new DatePicker(initial == null ? null : initial.dueDate());
         dueDatePicker.setPromptText(i18n.text("card.due.none"));
         TextField labelsField = new TextField(initial == null || initial.labels().isEmpty()
@@ -108,7 +108,7 @@ final class Dialogs {
         grid.add(new Label(i18n.text("dialog.description")), 0, 1);
         grid.add(descriptionArea, 1, 1);
         grid.add(new Label(i18n.text("dialog.color")), 0, 2);
-        grid.add(colorBox, 1, 2);
+        grid.add(colorPicker, 1, 2);
         grid.add(new Label(i18n.text("card.due")), 0, 3);
         grid.add(dueDatePicker, 1, 3);
         grid.add(new Label(i18n.text("card.labels")), 0, 4);
@@ -123,22 +123,36 @@ final class Dialogs {
             if (title == null || title.isBlank()) {
                 return null;
             }
-            return new CardForm(title, descriptionArea.getText(), colorBox.getValue(),
+            return new CardForm(title, descriptionArea.getText(), selectedColor(colorPicker),
                     dueDatePicker.getValue(), parseLabels(labelsField.getText()));
         });
 
         return dialog.showAndWait();
     }
 
-    /** Splits comma-separated labels into the normalized list the domain expects. */
-    private List<String> parseLabels(String text) {
-        if (text == null || text.isBlank()) {
-            return List.of();
-        }
-        return Arrays.stream(text.split(","))
-                .map(String::strip)
-                .filter(part -> !part.isEmpty())
-                .toList();
+    // ------------------------------------------------------------------
+    // Color selection: named palette + free custom color in one control
+    // ------------------------------------------------------------------
+
+    /**
+     * A ColorPicker preloaded with the 8 named palette swatches. Users pick a
+     * named color from the grid or any custom color from the spectrum; the
+     * tooltip shows the resolved name/hex.
+     */
+    private ColorPicker colorPicker(BoardColor current) {
+        ColorPicker picker = new ColorPicker(Color.web(current.hex()));
+        picker.getCustomColors().setAll(BoardColor.palette().stream()
+                .map(color -> Color.web(color.hex()))
+                .toList());
+        picker.valueProperty().addListener((obs, old, value) ->
+                picker.setTooltip(new Tooltip(BoardColor.fromHex(ColorCss.toHex(value)).displayName())));
+        picker.setTooltip(new Tooltip(current.displayName()));
+        return picker;
+    }
+
+    private BoardColor selectedColor(ColorPicker picker) {
+        Color value = picker.getValue();
+        return value == null ? BoardColor.DEFAULT : BoardColor.fromHex(ColorCss.toHex(value));
     }
 
     // ------------------------------------------------------------------
@@ -181,31 +195,15 @@ final class Dialogs {
         return grid;
     }
 
-    private ComboBox<BoardColor> colorPicker(BoardColor current) {
-        ComboBox<BoardColor> comboBox = new ComboBox<>();
-        comboBox.getItems().setAll(BoardColor.values());
-        comboBox.setValue(current);
-        comboBox.setCellFactory(listView -> new ColorListCell());
-        comboBox.setButtonCell(new ColorListCell());
-        return comboBox;
-    }
-
-    /** Shows a swatch + name for each palette entry. */
-    private static final class ColorListCell extends ListCell<BoardColor> {
-        @Override
-        protected void updateItem(BoardColor item, boolean empty) {
-            super.updateItem(item, empty);
-            if (empty || item == null) {
-                setText(null);
-                setGraphic(null);
-                return;
-            }
-            Rectangle swatch = new Rectangle(14, 14);
-            swatch.getStyleClass().add(ColorCss.styleClass(item) + "-swatch");
-            swatch.getStyleClass().add("color-swatch");
-            setText(item.name());
-            setGraphic(swatch);
+    /** Splits comma-separated labels into the normalized list the domain expects. */
+    static List<String> parseLabels(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
         }
+        return Arrays.stream(text.split(","))
+                .map(String::strip)
+                .filter(part -> !part.isEmpty())
+                .toList();
     }
 
     /** Parses WIP input; null means invalid; 0 means unlimited. */

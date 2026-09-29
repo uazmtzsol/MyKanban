@@ -241,7 +241,7 @@ public final class SqliteBoardRepository implements BoardRepository {
                 new ColumnId(resultSet.getString("id")),
                 resultSet.getString("title"),
                 resultSet.getString("description"),
-                BoardColor.fromName(resultSet.getString("color")),
+                BoardColor.fromStored(resultSet.getString("color")),
                 readWipLimit(resultSet),
                 Instant.ofEpochMilli(resultSet.getLong("created_at")),
                 List.of());
@@ -263,7 +263,7 @@ public final class SqliteBoardRepository implements BoardRepository {
                             new CardId(resultSet.getString("id")),
                             resultSet.getString("title"),
                             resultSet.getString("description"),
-                            BoardColor.fromName(resultSet.getString("color")),
+                            BoardColor.fromStored(resultSet.getString("color")),
                             readDueDate(resultSet),
                             readLabels(resultSet),
                             Instant.ofEpochMilli(resultSet.getLong("created_at"))));

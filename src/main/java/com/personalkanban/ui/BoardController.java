@@ -2,16 +2,18 @@ package com.personalkanban.ui;
 
 import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
+import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.BoardDescriptor;
 import com.personalkanban.domain.board.BoardId;
+import com.personalkanban.domain.board.LabelFilter;
 import com.personalkanban.ui.theme.ThemeManager;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -19,6 +21,7 @@ import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
@@ -40,18 +43,28 @@ import java.util.Optional;
  */
 public final class BoardController {
 
-    private final AppContext context;
-    private final BoardService service;
-    private final I18n i18n;
-    private final ThemeManager themeManager;
-    private final UndoRedoController undoRedo;
-    private final Dialogs dialogs;
+    // Non-final by design: {@link #rebind} rewires every collaborator when the
+    // user opens or creates another database file; only the scene-root identity
+    // of this controller survives the swap.
+    private AppContext context;
+    private BoardService service;
+    private I18n i18n;
+    private ThemeManager themeManager;
+    private UndoRedoController undoRedo;
+    private Dialogs dialogs;
 
     private final StringProperty title = new SimpleStringProperty();
     private final VBox root;
 
     private HBox columnsRow;
     private Menu boardMenu;
+    private Menu databaseMenu;
+
+    // Label filter state; survives language-driven rebuilds of the controls.
+    private String activeFilterLabels = "";
+    private String activeFilterMode; // null (= show all), "AND" or "OR"
+    private TextField labelFilterField;
+    private ComboBox<String> labelFilterMode;
 
     public BoardController(AppContext context) {
         this.context = context;
@@ -83,6 +96,7 @@ public final class BoardController {
 
     private void rebuildAll() {
         HBox toolbar = buildToolbar();
+        HBox filterBar = buildFilterBar();
         MenuBar menuBar = buildMenuBar();
 
         columnsRow = new HBox(12);
@@ -92,8 +106,8 @@ public final class BoardController {
         scroller.setFitToHeight(true);
         VBox.setVgrow(scroller, Priority.ALWAYS);
 
-        root.getChildren().setAll(menuBar, toolbar, scroller);
-        title.set(i18n.text("app.title"));
+        root.getChildren().setAll(menuBar, toolbar, filterBar, scroller);
+        title.set(i18n.text("app.title") + " \u2014 " + context.databasePath().getFileName());
         refresh();
     }
 
@@ -128,7 +142,64 @@ public final class BoardController {
         return toolbar;
     }
 
+    /**
+     * The label filter bar: free-text labels plus an AND/OR selector.
+     * Empty selector = no filtering (the domain's {@link LabelFilter#none()}).
+     */
+    private HBox buildFilterBar() {
+        Label filterLabel = new Label(i18n.text("filter.labels"));
+
+        labelFilterField = new TextField(activeFilterLabels);
+        labelFilterField.setPromptText(i18n.text("filter.labels.prompt"));
+        labelFilterField.setPrefWidth(240);
+        labelFilterField.textProperty().addListener((obs, old, value) -> {
+            activeFilterLabels = value == null ? "" : value;
+            refresh();
+        });
+
+        labelFilterMode = new ComboBox<>();
+        labelFilterMode.getItems().addAll("AND", "OR");
+        labelFilterMode.setPromptText(i18n.text("filter.mode.empty"));
+        labelFilterMode.setValue(activeFilterMode);
+        labelFilterMode.setPrefWidth(90);
+        labelFilterMode.setTooltip(new Tooltip(i18n.text("filter.mode.tooltip")));
+        labelFilterMode.setOnAction(e -> {
+            activeFilterMode = labelFilterMode.getValue();
+            refresh();
+        });
+
+        Button clearFilter = toolButton("\u2715", "filter.clear");
+        clearFilter.setOnAction(e -> {
+            labelFilterField.clear();
+            labelFilterMode.setValue(null);
+            activeFilterLabels = "";
+            activeFilterMode = null;
+            refresh();
+        });
+
+        HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.getStyleClass().addAll("toolbar", "filter-bar");
+        bar.setPadding(new Insets(6, 10, 6, 10));
+        return bar;
+    }
+
+    /** Builds the domain filter from the current UI state (Translator). */
+    private LabelFilter currentLabelFilter() {
+        var labels = Dialogs.parseLabels(activeFilterLabels);
+        if (labels.isEmpty()) {
+            return LabelFilter.none();
+        }
+        LabelFilter.Mode mode = "OR".equalsIgnoreCase(activeFilterMode)
+                ? LabelFilter.Mode.ANY
+                : LabelFilter.Mode.ALL;
+        return new LabelFilter(labels, mode);
+    }
+
     private MenuBar buildMenuBar() {
+        databaseMenu = new Menu(i18n.text("menu.database"));
+        rebuildDatabaseMenu();
+
         boardMenu = new Menu();
         boardMenu.textProperty().set(i18n.text("menu.boards"));
         rebuildBoardMenu();
@@ -139,7 +210,21 @@ public final class BoardController {
             item.setOnAction(e -> onSwitchLanguage(locale));
             languageMenu.getItems().add(item);
         }
-        return new MenuBar(boardMenu, languageMenu);
+        return new MenuBar(databaseMenu, boardMenu, languageMenu);
+    }
+
+    private void rebuildDatabaseMenu() {
+        if (databaseMenu == null) {
+            return;
+        }
+        MenuItem currentFile = new MenuItem(i18n.text("db.current") + " "
+                + context.databasePath());
+        currentFile.setDisable(true);
+        databaseMenu.getItems().setAll(
+                itemOf("db.new", this::onNewDatabase),
+                itemOf("db.open", this::onOpenDatabase),
+                new SeparatorMenuItem(),
+                currentFile);
     }
 
     private void rebuildBoardMenu() {
@@ -169,6 +254,78 @@ public final class BoardController {
         MenuItem item = new MenuItem(i18n.text(textKey));
         item.setOnAction(e -> action.run());
         return item;
+    }
+
+    // ------------------------------------------------------------------
+    // Intents: database files (create / open / transport)
+    // ------------------------------------------------------------------
+
+    /** Rewires the controller after the underlying database changed. */
+    private void rebind() {
+        this.service = context.boardService();
+        this.i18n = new I18n(context.savedLocale());
+        this.themeManager = context.themeManager();
+        this.undoRedo = new UndoRedoController(service, i18n, this::refresh);
+        this.dialogs = new Dialogs(i18n);
+        rebuildAll();
+        Scene scene = root.getScene();
+        if (scene != null) {
+            scene.getStylesheets().setAll(themeManager.stylesheet());
+        }
+    }
+
+    private void onNewDatabase() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(i18n.text("db.new"));
+        chooser.setInitialFileName("kanban.db");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("SQLite database", "*.db", "*.sqlite"));
+        java.io.File file = chooser.showSaveDialog(window());
+        if (file == null) {
+            return;
+        }
+        if (isCurrentDatabase(file.toPath())) {
+            dialogs.info(i18n.text("db.same.file"));
+            return;
+        }
+        if (file.exists() && !dialogs.confirm(i18n.text("db.overwrite.confirm"))) {
+            return;
+        }
+        switchDatabase(() -> context.openDatabase(file.toPath()));
+    }
+
+    private void onOpenDatabase() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(i18n.text("db.open"));
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("SQLite database", "*.db", "*.sqlite"));
+        java.io.File file = chooser.showOpenDialog(window());
+        if (file == null) {
+            return;
+        }
+        if (isCurrentDatabase(file.toPath())) {
+            dialogs.info(i18n.text("db.same.file"));
+            return;
+        }
+        switchDatabase(() -> context.openDatabase(file.toPath()));
+    }
+
+    private boolean isCurrentDatabase(java.nio.file.Path candidate) {
+        return candidate.toAbsolutePath().normalize().equals(context.databasePath());
+    }
+
+    /** Runs a database switch, rebinds on success, shows the error on failure. */
+    private void switchDatabase(Runnable openAction) {
+        try {
+            openAction.run();
+            rebind();
+        } catch (RuntimeException e) {
+            dialogs.error(i18n.text("db.open.failed") + "\n" + e.getMessage());
+        }
+    }
+
+    private javafx.stage.Window window() {
+        return root.getScene() == null ? null : root.getScene().getWindow();
     }
 
     // ------------------------------------------------------------------
@@ -386,8 +543,9 @@ public final class BoardController {
     // ------------------------------------------------------------------
 
     private void refresh() {
+        LabelFilter filter = currentLabelFilter();
         columnsRow.getChildren().setAll(
-                ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo));
+                ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter));
         rebuildBoardMenu(); // keep the active-board marker in sync
     }
 

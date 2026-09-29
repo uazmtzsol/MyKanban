@@ -10,6 +10,11 @@ leaves your machine.
 
 - **Multiple boards** — keep personal, work, and project boards independent;
   switch from the *Boards* menu, create/rename/delete, last board reopened on start
+- **Portable database files** — create a new database or open an existing one
+  (*Database* menu) anywhere: a USB folder, a Dropbox/OneDrive/Drive synced
+  folder, a network share. The chosen file is remembered across launches, and
+  undo history always lives in a `history/` folder next to it, so a database
+  is one self-contained unit you can move between computers
 - **JSON export/import** — back up or share any board as a portable `.json` file
 - Columns & cards: add, edit, delete, delete-all-in-column, clear board
 - **Card due dates** with an overdue badge, and **labels** (chips)
@@ -72,12 +77,24 @@ Without the launchers you can also run directly:
 java -Dpk.data.dir=./data -jar personal-kanban.jar
 ```
 
-## Data locations
+## Data locations & transporting your data
 
 | Mode | Location |
 |---|---|
 | Default | `~/.personalkanban/` (`kanban.db`, `history/*.json`) |
 | Portable (launchers) | `<drive>/data/` next to the jar |
+| User-chosen | Anywhere you pick in *Database → New/Open database* |
+
+Use **Database → New database...** to start a fresh file (name and folder of
+your choice) or **Database → Open database...** to work on an existing one —
+for example a `.db` file living in a synced cloud folder or on a USB stick.
+The menu shows the file in use, and the window title carries its name. The
+choice is remembered (machine-local `config.properties`), so each computer
+reopens its last database — and since one database file plus its `history/`
+folder is the whole unit, moving or syncing that folder moves everything.
+
+> Tip for cloud use: close the app before switching computers so SQLite
+> finishes writing; the WAL journal checkpoints on close.
 
 Existing single-board databases from earlier versions are migrated
 automatically (schema versions V1→V4); your columns and cards become the

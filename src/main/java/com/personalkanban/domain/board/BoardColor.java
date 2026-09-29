@@ -1,52 +1,84 @@
 package com.personalkanban.domain.board;
 
-import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 /**
- * The fixed color palette for columns and cards (OCP: a new color means a new
- * enum constant, never a magic string scattered through the code).
- * Names match CSS classes used by the UI, e.g. {@code pk-color-blue}.
+ * A board color: either one of the 8 named palette presets or a custom color
+ * chosen with a color picker. Identity is the hex value, so presets and
+ * custom colors compare equal by appearance (records give that for free).
+ * Carrying hex makes persistence and JSON export self-describing, and lets
+ * the UI paint swatches programmatically (immune to missing stylesheets).
  */
-public enum BoardColor {
+public record BoardColor(String name, String hex) {
 
-    BLUE("blue", "#2196f3"),
-    GREEN("green", "#4caf50"),
-    RED("red", "#f44336"),
-    ORANGE("orange", "#ff9800"),
-    PURPLE("purple", "#9c27b0"),
-    TEAL("teal", "#009688"),
-    PINK("pink", "#e91e63"),
-    GRAY("gray", "#607d8b");
+    public static final BoardColor BLUE = new BoardColor("blue", "#2196f3");
+    public static final BoardColor GREEN = new BoardColor("green", "#4caf50");
+    public static final BoardColor RED = new BoardColor("red", "#f44336");
+    public static final BoardColor ORANGE = new BoardColor("orange", "#ff9800");
+    public static final BoardColor PURPLE = new BoardColor("purple", "#9c27b0");
+    public static final BoardColor TEAL = new BoardColor("teal", "#009688");
+    public static final BoardColor PINK = new BoardColor("pink", "#e91e63");
+    public static final BoardColor GRAY = new BoardColor("gray", "#607d8b");
 
     public static final BoardColor DEFAULT = BLUE;
 
-    private final String cssSuffix;
-    private final String hex;
+    private static final List<BoardColor> PALETTE =
+            List.of(BLUE, GREEN, RED, ORANGE, PURPLE, TEAL, PINK, GRAY);
 
-    BoardColor(String cssSuffix, String hex) {
-        this.cssSuffix = cssSuffix;
-        this.hex = hex;
+    public BoardColor {
+        if (hex == null || !hex.matches("#[0-9a-fA-F]{6}")) {
+            throw new IllegalArgumentException("Color must be #rrggbb but was: " + hex);
+        }
+        hex = hex.toLowerCase(Locale.ROOT);
+        name = (name == null || name.isBlank()) ? null : name.strip().toLowerCase(Locale.ROOT);
     }
 
-    /** Suffix used to build CSS classes such as {@code pk-color-blue}. */
-    public String cssSuffix() {
-        return cssSuffix;
+    /** The 8 named presets, in stable display order. */
+    public static List<BoardColor> palette() {
+        return PALETTE;
     }
 
-    /** Plain hex value, handy for small inline swatches. */
-    public String hex() {
-        return hex;
+    /** Parses any stored value: a hex code, or a legacy palette name. */
+    public static BoardColor fromStored(String stored) {
+        if (stored == null || stored.isBlank()) {
+            throw new IllegalArgumentException("Stored color must not be blank");
+        }
+        String value = stored.strip();
+        if (value.startsWith("#")) {
+            return fromHex(value);
+        }
+        return fromName(value);
     }
 
+    /** Preset lookup by hex; anything else becomes a custom color. */
+    public static BoardColor fromHex(String hex) {
+        String normalized = hex.strip().toLowerCase(Locale.ROOT);
+        return PALETTE.stream()
+                .filter(color -> color.hex().equals(normalized))
+                .findFirst()
+                .orElseGet(() -> new BoardColor(null, normalized));
+    }
+
+    /** Legacy palette-name lookup (old databases stored enum names). */
     public static BoardColor fromName(String name) {
         if (name == null) {
-            throw new IllegalArgumentException("Board color must not be null");
+            throw new IllegalArgumentException("Color name must not be null");
         }
-        String normalized = name.strip().toUpperCase(Locale.ROOT);
-        return Arrays.stream(values())
-                .filter(color -> color.name().equals(normalized))
+        String normalized = name.strip().toLowerCase(Locale.ROOT);
+        return PALETTE.stream()
+                .filter(color -> normalized.equals(color.name()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown board color: " + name));
+                .orElseThrow(() -> new IllegalArgumentException("Unknown board color name: " + name));
+    }
+
+    /** True when the color is not one of the named presets. */
+    public boolean isCustom() {
+        return name == null;
+    }
+
+    /** Human-readable label: preset name or the hex itself for custom colors. */
+    public String displayName() {
+        return isCustom() ? hex : name;
     }
 }

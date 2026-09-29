@@ -74,6 +74,10 @@
 .column.pk-color-pink   { -fx-border-color: #ec407a; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
 .column.pk-color-gray   { -fx-border-color: #78909c; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
 
+/* Custom (color-picker) colors: hue arrives inline via -fx-border-color. */
+.column.pk-color-custom { -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
+.card.pk-color-custom   { -fx-border-width: 0 0 0 4; }
+
 .card.pk-color-blue   { -fx-border-color: #42a5f5; -fx-border-width: 0 0 0 4; }
 .card.pk-color-green  { -fx-border-color: #66bb6a; -fx-border-width: 0 0 0 4; }
 .card.pk-color-red    { -fx-border-color: #ef5350; -fx-border-width: 0 0 0 4; }

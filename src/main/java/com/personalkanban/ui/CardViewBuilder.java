@@ -37,6 +37,7 @@ final class CardViewBuilder {
 
         VBox view = new VBox(4, title);
         view.getStyleClass().addAll("card", ColorCss.styleClass(card.color()));
+        ColorCss.applyAccent(view, card.color());
 
         if (!card.description().isBlank()) {
             Label description = new Label(card.description());

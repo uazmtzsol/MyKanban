@@ -4,6 +4,7 @@ import com.personalkanban.application.BoardService;
 import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.ColumnId;
+import com.personalkanban.domain.board.LabelFilter;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
@@ -38,17 +39,19 @@ final class ColumnViewBuilder {
     }
 
     static List<VBox> buildAll(BoardService service, I18n i18n, Dialogs dialogs,
-                               BoardController board, UndoRedoController undoRedo) {
+                               BoardController board, UndoRedoController undoRedo,
+                               LabelFilter labelFilter) {
+        LabelFilter effective = labelFilter == null ? LabelFilter.none() : labelFilter;
         List<VBox> views = new ArrayList<>();
         for (BoardColumn column : service.board().columns()) {
-            views.add(buildOne(service, i18n, dialogs, board, undoRedo, column));
+            views.add(buildOne(service, i18n, dialogs, board, undoRedo, column, effective));
         }
         return views;
     }
 
     private static VBox buildOne(BoardService service, I18n i18n, Dialogs dialogs,
                                  BoardController board, UndoRedoController undoRedo,
-                                 BoardColumn column) {
+                                 BoardColumn column, LabelFilter labelFilter) {
         // --- Header: title + wip caption + menu ---
         Label title = new Label(column.title());
         title.getStyleClass().add("column-title");
@@ -81,15 +84,18 @@ final class ColumnViewBuilder {
 
         VBox view = new VBox(8);
         view.getStyleClass().addAll("column", ColorCss.styleClass(column.color()));
+        ColorCss.applyAccent(view, column.color());
         view.setUserData(column.id());
         view.setMinWidth(240);
         view.setPrefWidth(280);
         view.getChildren().add(header);
 
-        // --- Cards ---
+        // --- Cards (label-filtered; WIP badge keeps counting everything) ---
         VBox cardsBox = new VBox(8);
         for (var card : column.cards()) {
-            cardsBox.getChildren().add(CardViewBuilder.build(service, i18n, dialogs, board, card));
+            if (labelFilter.matches(card)) {
+                cardsBox.getChildren().add(CardViewBuilder.build(service, i18n, dialogs, board, card));
+            }
         }
         ScrollPane cardsScroll = new ScrollPane(cardsBox);
         cardsScroll.setFitToWidth(true);
