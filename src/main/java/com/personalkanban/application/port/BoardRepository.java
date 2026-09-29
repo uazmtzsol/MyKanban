@@ -1,19 +1,34 @@
 package com.personalkanban.application.port;
 
+import com.personalkanban.domain.board.BoardDescriptor;
+import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
 
+import java.util.List;
+import java.util.Optional;
+
 /**
- * Outbound port for board persistence (DIP). The {@link BoardMemento} record
- * doubles as the exchanged DTO: it is already an immutable, complete picture
- * of the board. Splitting read/write into capabilities was considered, but
- * both halves always travel together here, so one focused interface wins
- * on simplicity without hurting segregation.
+ * Outbound port for multi-board persistence (DIP). A store holds a catalog of
+ * boards plus one complete snapshot per board. The {@link BoardMemento} record
+ * doubles as the exchanged DTO.
  */
 public interface BoardRepository {
 
-    /** Persists the complete board state, replacing whatever was stored. */
-    void save(BoardMemento board);
+    /** Lists the board catalog, ordered by creation time (GRASP Information Expert). */
+    List<BoardDescriptor> listBoards();
 
-    /** Loads the complete board state; {@link BoardMemento#empty()} when nothing is stored. */
-    BoardMemento load();
+    /** Creates a board entry in the catalog and stores its (initially empty) snapshot. */
+    BoardDescriptor createBoard(String name);
+
+    /** Renames a board in the catalog. */
+    void renameBoard(BoardId boardId, String newName);
+
+    /** Deletes a board and everything it contains. */
+    void deleteBoard(BoardId boardId);
+
+    /** Loads the complete state of one board; {@link BoardMemento#empty()} when unknown. */
+    BoardMemento load(BoardId boardId);
+
+    /** Persists the complete state of one board, replacing whatever was stored. */
+    void save(BoardId boardId, BoardMemento board);
 }

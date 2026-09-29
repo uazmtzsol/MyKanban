@@ -1,26 +1,43 @@
 package com.personalkanban.domain.board;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * A work item. Deliberately immutable: every mutation goes through the
- * aggregate root ({@link Board}), which owns the invariants.
+ * aggregate root ({@link Board}), which owns the invariants. Cards carry an
+ * optional due date and a small set of free-form labels.
  */
 public final class Card {
+
+    private static final int MAX_LABELS = 8;
+    private static final int MAX_LABEL_LENGTH = 40;
 
     private final CardId id;
     private final ColumnId columnId;
     private String title;
     private String description;
     private BoardColor color;
+    private LocalDate dueDate;
+    private List<String> labels = List.of();
     private final Instant createdAt;
 
     Card(ColumnId columnId, String title, String description, BoardColor color) {
-        this(Ids.newCardId(), columnId, title, description, color, Instant.now());
+        this(Ids.newCardId(), columnId, title, description, color, null, List.of(), Instant.now());
     }
 
-    Card(CardId id, ColumnId columnId, String title, String description, BoardColor color, Instant createdAt) {
+    Card(ColumnId columnId, String title, String description, BoardColor color,
+         LocalDate dueDate, List<String> labels) {
+        this(Ids.newCardId(), columnId, title, description, color, dueDate, labels, Instant.now());
+    }
+
+    Card(CardId id, ColumnId columnId, String title, String description, BoardColor color,
+         LocalDate dueDate, List<String> labels, Instant createdAt) {
         if (id == null || columnId == null || color == null || createdAt == null) {
             throw new IllegalArgumentException("Card fields must not be null");
         }
@@ -29,12 +46,14 @@ public final class Card {
         setTitle(title);
         setDescription(description);
         this.color = color;
+        this.dueDate = dueDate;
+        setLabels(labels);
         this.createdAt = createdAt;
     }
 
     static Card restore(CardId id, ColumnId columnId, String title, String description,
-                        BoardColor color, Instant createdAt) {
-        return new Card(id, columnId, title, description, color, createdAt);
+                        BoardColor color, LocalDate dueDate, List<String> labels, Instant createdAt) {
+        return new Card(id, columnId, title, description, color, dueDate, labels, createdAt);
     }
 
     void rename(String newTitle) {
@@ -47,6 +66,41 @@ public final class Card {
 
     void recolor(BoardColor newColor) {
         this.color = Objects.requireNonNull(newColor, "color");
+    }
+
+    void schedule(LocalDate newDueDate) {
+        this.dueDate = newDueDate;
+    }
+
+    void tag(List<String> newLabels) {
+        setLabels(newLabels);
+    }
+
+    /** Normalizes labels: stripped, deduplicated, bounded. */
+    private void setLabels(List<String> labels) {
+        if (labels == null) {
+            this.labels = List.of();
+            return;
+        }
+        Set<String> unique = new LinkedHashSet<>();
+        for (String label : labels) {
+            if (label == null) {
+                continue;
+            }
+            String stripped = label.strip();
+            if (stripped.isEmpty()) {
+                continue;
+            }
+            if (stripped.length() > MAX_LABEL_LENGTH) {
+                throw new IllegalArgumentException(
+                        "Label longer than " + MAX_LABEL_LENGTH + " chars: " + stripped);
+            }
+            if (unique.size() >= MAX_LABELS) {
+                throw new IllegalArgumentException("A card may have at most " + MAX_LABELS + " labels");
+            }
+            unique.add(stripped);
+        }
+        this.labels = List.copyOf(unique);
     }
 
     private void setTitle(String title) {
@@ -80,7 +134,19 @@ public final class Card {
         return color;
     }
 
+    public LocalDate dueDate() {
+        return dueDate;
+    }
+
+    public List<String> labels() {
+        return labels;
+    }
+
     public Instant createdAt() {
         return createdAt;
+    }
+
+    public boolean isOverdueOn(LocalDate today) {
+        return dueDate != null && dueDate.isBefore(today);
     }
 }

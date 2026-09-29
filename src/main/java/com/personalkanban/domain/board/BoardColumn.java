@@ -69,11 +69,12 @@ public final class BoardColumn {
     }
 
     /** Appends a card, enforcing the WIP limit, and returns the resulting event. */
-    CardAdded addCard(String title, String description, BoardColor color) {
+    CardAdded addCard(String title, String description, BoardColor color,
+                      java.time.LocalDate dueDate, List<String> labels) {
         if (wipLimit.isExceededBy(cards.size() + 1)) {
             throw new com.personalkanban.domain.exception.WipLimitExceededException(id, wipLimit.value());
         }
-        Card card = new Card(id, title, description, color);
+        Card card = new Card(id, title, description, color, dueDate, labels);
         cards.add(card);
         return new CardAdded(card.id(), id, Instant.now());
     }

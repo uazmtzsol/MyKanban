@@ -1,5 +1,8 @@
 package com.personalkanban.application;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.personalkanban.application.command.AddCardCommand;
 import com.personalkanban.application.command.AddColumnCommand;
 import com.personalkanban.application.command.BoardCommand;
@@ -13,37 +16,139 @@ import com.personalkanban.application.command.RemoveCardCommand;
 import com.personalkanban.application.command.RemoveColumnCommand;
 import com.personalkanban.application.command.RenameColumnCommand;
 import com.personalkanban.application.port.BoardRepository;
+import com.personalkanban.application.port.SettingsStore;
+import com.personalkanban.application.port.UndoHistory;
 import com.personalkanban.domain.board.Board;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
+import com.personalkanban.domain.board.BoardDescriptor;
+import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
+import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.WipLimit;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 import java.util.Objects;
-import java.util.function.Supplier;
+import java.util.Optional;
 
 /**
- * Single entry point for the UI (GoF Facade). Executes commands against the
- * board, keeps bounded memento-based undo/redo, and persists the whole board
- * after every mutation. The UI never touches JDBC; the domain never touches
- * JavaFX.
+ * Single entry point for the UI (GoF Facade). Coordinates the active board,
+ * the board catalog (multi-board), command execution with memento snapshots,
+ * persistent undo/redo, and JSON export/import of any board. The JSON
+ * serialization lives here — Jackson is a technology-neutral library, not a
+ * layer violation.
  */
 public final class BoardService {
 
-    private static final int UNDO_CAPACITY = 100;
+    private static final String LAST_BOARD_KEY = "board.last";
 
-    private final Board board = new Board();
     private final BoardRepository repository;
-    private final Deque<BoardMemento> undoStack = new ArrayDeque<>();
+    private final UndoHistory history;
+    private final SettingsStore settings;
+
+    private final List<BoardDescriptor> catalog = new ArrayList<>();
+    private Board activeBoard;
+    private BoardMemento current = BoardMemento.empty();
     private final Deque<BoardMemento> redoStack = new ArrayDeque<>();
 
-    public BoardService(BoardRepository repository) {
+    private final ObjectMapper mapper;
+
+    public BoardService(BoardRepository repository, UndoHistory history, SettingsStore settings) {
         this.repository = Objects.requireNonNull(repository);
-        board.restore(repository.load());
+        this.history = Objects.requireNonNull(history);
+        this.settings = Objects.requireNonNull(settings);
+        this.mapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        this.catalog.addAll(repository.listBoards());
+        this.activeBoard = selectInitialBoard();
+    }
+
+    /** Opens the last-used board, else the oldest one, else creates the first board. */
+    private Board selectInitialBoard() {
+        Optional<String> lastId = settings.get(LAST_BOARD_KEY);
+        if (lastId.isPresent()) {
+            BoardId candidate = new BoardId(lastId.get());
+            if (catalog.stream().anyMatch(descriptor -> descriptor.id().equals(candidate))) {
+                return hydrate(candidate);
+            }
+        }
+        if (!catalog.isEmpty()) {
+            return hydrate(catalog.get(0).id());
+        }
+        BoardDescriptor first = repository.createBoard("My Board");
+        catalog.add(first);
+        activeBoard = new Board(first.id());
+        current = BoardMemento.empty();
+        persist();
+        return activeBoard;
+    }
+
+    // ------------------------------------------------------------------
+    // Multi-board use cases
+    // ------------------------------------------------------------------
+
+    /** Immutable view of the board catalog, ordered by creation time. */
+    public List<BoardDescriptor> boards() {
+        return List.copyOf(catalog);
+    }
+
+    public BoardId activeBoardId() {
+        return activeBoard.id();
+    }
+
+    public void openBoard(BoardId boardId) {
+        requireInCatalog(boardId);
+        flushRedo();
+        activeBoard = hydrate(boardId);
+        settings.put(LAST_BOARD_KEY, boardId.value());
+    }
+
+    public BoardId createBoard(String name) {
+        BoardDescriptor descriptor = repository.createBoard(name);
+        catalog.add(descriptor);
+        history.clear(descriptor.id());
+        return descriptor.id();
+    }
+
+    public void renameBoard(BoardId boardId, String newName) {
+        repository.renameBoard(boardId, newName);
+        for (int i = 0; i < catalog.size(); i++) {
+            BoardDescriptor descriptor = catalog.get(i);
+            if (descriptor.id().equals(boardId)) {
+                catalog.set(i, new BoardDescriptor(boardId, newName, descriptor.createdAt()));
+            }
+        }
+    }
+
+    public void deleteBoard(BoardId boardId) {
+        if (catalog.size() <= 1) {
+            throw new IllegalStateException("The last board cannot be deleted");
+        }
+        repository.deleteBoard(boardId);
+        history.clear(boardId);
+        catalog.removeIf(descriptor -> descriptor.id().equals(boardId));
+        if (activeBoard.id().equals(boardId)) {
+            openBoard(catalog.get(0).id());
+        }
+    }
+
+    private void requireInCatalog(BoardId boardId) {
+        if (catalog.stream().noneMatch(descriptor -> descriptor.id().equals(boardId))) {
+            throw new IllegalStateException("Board not in catalog: " + boardId);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -76,12 +181,23 @@ public final class BoardService {
     // ------------------------------------------------------------------
 
     public CardId addCard(ColumnId columnId, String title, String description, BoardColor color) {
-        AddCardCommand command = new AddCardCommand(columnId, title, description, color);
+        return addCard(columnId, title, description, color, null, List.of());
+    }
+
+    public CardId addCard(ColumnId columnId, String title, String description, BoardColor color,
+                          LocalDate dueDate, List<String> labels) {
+        AddCardCommand command = new AddCardCommand(columnId, title, description, color, dueDate, labels);
         return execute(command, command::createdCardId);
     }
 
     public void editCard(CardId cardId, String title, String description, BoardColor color) {
-        execute(new EditCardCommand(cardId, title, description, color));
+        editCard(cardId, title, description, color,
+                currentDueDateOf(cardId), currentLabelsOf(cardId));
+    }
+
+    public void editCard(CardId cardId, String title, String description, BoardColor color,
+                         LocalDate dueDate, List<String> labels) {
+        execute(new EditCardCommand(cardId, title, description, color, dueDate, labels));
     }
 
     public void removeCard(CardId cardId) {
@@ -109,19 +225,19 @@ public final class BoardService {
     // ------------------------------------------------------------------
 
     public Board board() {
-        return board;
+        return activeBoard;
     }
 
     public BoardColumn column(ColumnId columnId) {
-        return board.columnOrThrow(columnId);
+        return activeBoard.columnOrThrow(columnId);
     }
 
     // ------------------------------------------------------------------
-    // Undo / redo
+    // Undo / redo (persistent via the UndoHistory port)
     // ------------------------------------------------------------------
 
     public boolean canUndo() {
-        return !undoStack.isEmpty();
+        return history.depth(activeBoard.id()) > 0;
     }
 
     public boolean canRedo() {
@@ -129,60 +245,135 @@ public final class BoardService {
     }
 
     public void undo() {
-        if (undoStack.isEmpty()) {
+        Optional<BoardMemento> target = history.pop(activeBoard.id());
+        if (target.isEmpty()) {
             return;
         }
-        BoardMemento current = BoardMemento.capture(board);
-        BoardMemento target = undoStack.pop();
-        redoStack.push(current);
-        board.restore(target);
-        finishTransaction();
+        redoStack.push(BoardMemento.capture(activeBoard));
+        applySnapshot(target.get());
+        persist();
+        activeBoard.drainEvents();
     }
 
     public void redo() {
         if (redoStack.isEmpty()) {
             return;
         }
-        BoardMemento current = BoardMemento.capture(board);
         BoardMemento target = redoStack.pop();
-        undoStack.push(current);
-        board.restore(target);
-        finishTransaction();
+        history.push(activeBoard.id(), BoardMemento.capture(activeBoard));
+        applySnapshot(target);
+        persist();
+        activeBoard.drainEvents();
+    }
+
+    // ------------------------------------------------------------------
+    // JSON export / import
+    // ------------------------------------------------------------------
+
+    public void exportBoard(Path targetFile) {
+        Objects.requireNonNull(targetFile);
+        String name = catalog.stream()
+                .filter(descriptor -> descriptor.id().equals(activeBoard.id()))
+                .findFirst()
+                .map(BoardDescriptor::name)
+                .orElse("board");
+        BoardExport export = new BoardExport(
+                new BoardExportPayload(activeBoard.id().value(), name, current));
+        try (OutputStream out = Files.newOutputStream(targetFile)) {
+            mapper.writerWithDefaultPrettyPrinter().writeValue(out, export);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not export board to " + targetFile, e);
+        }
+    }
+
+    /** Imports a board file as a NEW board with a unique name; returns its id. */
+    public BoardId importBoard(Path sourceFile) {
+        Objects.requireNonNull(sourceFile);
+        BoardExport export;
+        try (InputStream in = Files.newInputStream(sourceFile)) {
+            export = mapper.readValue(in, BoardExport.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not read board file " + sourceFile, e);
+        }
+        if (export == null || export.payload() == null || export.payload().board() == null) {
+            throw new IllegalArgumentException("Not a valid Personal Kanban board file");
+        }
+        String requested = export.payload().name();
+        String base = (requested == null || requested.isBlank()) ? "imported" : requested.strip();
+        String candidate = base;
+        int suffix = 2;
+        while (true) {
+            String probe = candidate; // effectively-final view for the lambda below
+            if (catalog.stream().noneMatch(descriptor -> descriptor.name().equalsIgnoreCase(probe))) {
+                break;
+            }
+            candidate = base + " (" + suffix++ + ")";
+        }
+        BoardId id = createBoard(candidate);
+        repository.save(id, export.payload().board());
+        return id;
     }
 
     // ------------------------------------------------------------------
     // Internals
     // ------------------------------------------------------------------
 
-    private <T> T execute(BoardCommand command, Supplier<T> result) {
-        BoardMemento before = BoardMemento.capture(board);
-        command.execute(board);
-        pushUndo(before);
-        finishTransaction();
+    private void applySnapshot(BoardMemento target) {
+        activeBoard.restore(target);
+        current = target;
+    }
+
+    private Board hydrate(BoardId boardId) {
+        Board board = new Board(boardId);
+        current = repository.load(boardId);
+        board.restore(current);
+        return board;
+    }
+
+    private void persist() {
+        current = BoardMemento.capture(activeBoard);
+        repository.save(activeBoard.id(), current);
+    }
+
+    private void finishTransaction(BoardMemento before) {
+        history.push(activeBoard.id(), before); // adapter enforces the capacity bound
+        redoStack.clear();
+        persist();
+        activeBoard.drainEvents();
+    }
+
+    private <T> T execute(BoardCommand command, java.util.function.Supplier<T> result) {
+        BoardMemento before = BoardMemento.capture(activeBoard);
+        command.execute(activeBoard);
+        finishTransaction(before);
         return result.get();
     }
 
     private void execute(BoardCommand command) {
-        BoardMemento before = BoardMemento.capture(board);
-        command.execute(board);
-        pushUndo(before);
-        finishTransaction();
+        BoardMemento before = BoardMemento.capture(activeBoard);
+        command.execute(activeBoard);
+        finishTransaction(before);
     }
 
-    private void pushUndo(BoardMemento before) {
-        undoStack.push(before);
-        while (undoStack.size() > UNDO_CAPACITY) {
-            undoStack.removeLast();
-        }
+    private void flushRedo() {
         redoStack.clear();
     }
 
-    private void finishTransaction() {
-        persist();
-        board.drainEvents();
+    private LocalDate currentDueDateOf(CardId cardId) {
+        return activeBoard.findCard(cardId).map(Card::dueDate).orElse(null);
     }
 
-    private void persist() {
-        repository.save(BoardMemento.capture(board));
+    private List<String> currentLabelsOf(CardId cardId) {
+        return activeBoard.findCard(cardId).map(Card::labels).orElse(List.of());
+    }
+
+    // ------------------------------------------------------------------
+    // JSON DTOs (records: Jackson maps them via their canonical constructors)
+    // ------------------------------------------------------------------
+
+    public record BoardExportPayload(String boardId, String name, BoardMemento board) {
+    }
+
+    public record BoardExport(BoardExportPayload payload) {
     }
 }

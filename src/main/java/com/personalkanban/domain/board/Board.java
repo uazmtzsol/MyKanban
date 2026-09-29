@@ -1,20 +1,41 @@
 package com.personalkanban.domain.board;
 
+import com.personalkanban.domain.exception.NotFoundException;
+
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /**
- * The aggregate root. All mutations flow through here; it keeps the column
- * ordering and collects the domain events produced during a use case.
- * Commands are intentionally coarse-grained so the application layer never
- * needs to know about intra-aggregate details (Information Expert).
+ * One board's aggregate root, identified by a {@link BoardId}. All mutations
+ * flow through here; the board keeps the column ordering and collects the
+ * domain events produced during a use case.
  */
 public final class Board {
 
+    private final BoardId id;
     private final List<BoardColumn> columns = new ArrayList<>();
     private final List<DomainEvent> events = new ArrayList<>();
+
+    /** Creates a fresh board with its own identity (GRASP Creator). */
+    public Board() {
+        this(new BoardId(java.util.UUID.randomUUID().toString()));
+    }
+
+    public Board(BoardId id) {
+        if (id == null) {
+            throw new IllegalArgumentException("Board id must not be null");
+        }
+        this.id = id;
+    }
+
+    public BoardId id() {
+        return id;
+    }
 
     // ------------------------------------------------------------------
     // Column commands
@@ -62,22 +83,33 @@ public final class Board {
     // ------------------------------------------------------------------
 
     public CardAdded addCard(ColumnId columnId, String title, String description, BoardColor color) {
-        CardAdded event = columnOrThrow(columnId).addCard(title, description, color);
+        return addCard(columnId, title, description, color, null, List.of());
+    }
+
+    public CardAdded addCard(ColumnId columnId, String title, String description, BoardColor color,
+                             LocalDate dueDate, List<String> labels) {
+        CardAdded event = columnOrThrow(columnId).addCard(title, description, color, dueDate, labels);
         events.add(event);
         return event;
     }
 
     public void editCard(CardId cardId, String newTitle, String newDescription, BoardColor newColor) {
-        Card card = findCard(cardId)
-                .orElseThrow(() -> new com.personalkanban.domain.exception.NotFoundException(cardId));
+        editCard(cardId, newTitle, newDescription, newColor, currentDueDateOf(cardId), currentLabelsOf(cardId));
+    }
+
+    public void editCard(CardId cardId, String newTitle, String newDescription, BoardColor newColor,
+                         LocalDate newDueDate, List<String> newLabels) {
+        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
         card.rename(newTitle);
         card.describe(newDescription);
         card.recolor(newColor);
+        card.schedule(newDueDate);
+        card.tag(newLabels);
     }
 
     public void removeCard(CardId cardId) {
         BoardColumn column = findColumnOf(cardId)
-                .orElseThrow(() -> new com.personalkanban.domain.exception.NotFoundException(cardId));
+                .orElseThrow(() -> new NotFoundException(cardId));
         column.removeCard(cardId);
         events.add(new CardRemoved(cardId, column.id(), Instant.now()));
     }
@@ -94,7 +126,7 @@ public final class Board {
     public CardMoved moveCard(CardId cardId, ColumnId targetColumnId, int targetIndex) {
         BoardColumn target = columnOrThrow(targetColumnId);
         BoardColumn source = findColumnOf(cardId)
-                .orElseThrow(() -> new com.personalkanban.domain.exception.NotFoundException(cardId));
+                .orElseThrow(() -> new NotFoundException(cardId));
         target.moveCardFrom(source, cardId, targetIndex);
         CardMoved event = new CardMoved(cardId, source.id(), target.id(), Instant.now());
         events.add(event);
@@ -115,7 +147,7 @@ public final class Board {
 
     public BoardColumn columnOrThrow(ColumnId columnId) {
         return columnById(columnId)
-                .orElseThrow(() -> new com.personalkanban.domain.exception.NotFoundException(columnId));
+                .orElseThrow(() -> new NotFoundException(columnId));
     }
 
     public Optional<BoardColumn> findColumnOf(CardId cardId) {
@@ -124,6 +156,19 @@ public final class Board {
 
     public Optional<Card> findCard(CardId cardId) {
         return findColumnOf(cardId).flatMap(column -> column.cardById(cardId));
+    }
+
+    /** Cards having a due date, grouped by date, ordered chronologically. */
+    public Map<LocalDate, List<Card>> cardsDueBy() {
+        Map<LocalDate, List<Card>> byDate = new TreeMap<>();
+        for (BoardColumn column : columns) {
+            for (Card card : column.cards()) {
+                if (card.dueDate() != null) {
+                    byDate.computeIfAbsent(card.dueDate(), date -> new ArrayList<>()).add(card);
+                }
+            }
+        }
+        return byDate;
     }
 
     public int columnCount() {
@@ -149,5 +194,13 @@ public final class Board {
     public void restore(BoardMemento memento) {
         columns.clear();
         memento.columns().stream().map(ColumnSnapshot::toColumn).forEach(columns::add);
+    }
+
+    private LocalDate currentDueDateOf(CardId cardId) {
+        return findCard(cardId).map(Card::dueDate).orElse(null);
+    }
+
+    private List<String> currentLabelsOf(CardId cardId) {
+        return findCard(cardId).map(Card::labels).orElse(List.of());
     }
 }

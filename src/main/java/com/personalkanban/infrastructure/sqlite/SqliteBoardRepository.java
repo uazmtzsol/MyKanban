@@ -2,6 +2,8 @@ package com.personalkanban.infrastructure.sqlite;
 
 import com.personalkanban.application.port.BoardRepository;
 import com.personalkanban.domain.board.BoardColor;
+import com.personalkanban.domain.board.BoardDescriptor;
+import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.CardSnapshot;
@@ -18,14 +20,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Adapter implementing the {@link BoardRepository} port on SQLite. Stores the
- * board as one row per column and per card; order comes from per-table
- * integer positions written from list order at save time (single writer, so
- * there is no contention). Each {@link #save} is one transaction. The load
- * path reads columns first and cards afterwards, so no two JDBC statements
- * are ever open at once (required by the SQLite driver).
+ * Adapter implementing the multi-board {@link BoardRepository} port on
+ * SQLite. One row per board in the catalog, one row per column and per card
+ * for board contents. Order comes from per-table integer positions written
+ * from list order at save time (single writer). Each {@link #save} is one
+ * transaction. No two JDBC statements are open at once (driver requirement).
  */
 public final class SqliteBoardRepository implements BoardRepository {
 
@@ -35,40 +37,89 @@ public final class SqliteBoardRepository implements BoardRepository {
         this.database = Objects.requireNonNull(database);
     }
 
+    // ------------------------------------------------------------------
+    // Catalog
+    // ------------------------------------------------------------------
+
     @Override
-    public void save(BoardMemento board) {
-        try {
-            boolean previousAutoCommit = database.connection().getAutoCommit();
-            database.connection().setAutoCommit(false);
-            try {
-                replaceAll(board);
-                database.connection().commit();
-            } catch (SQLException e) {
-                database.connection().rollback();
-                throw e;
-            } finally {
-                database.connection().setAutoCommit(previousAutoCommit);
+    public List<BoardDescriptor> listBoards() {
+        String sql = "SELECT id, name, created_at FROM board ORDER BY created_at, name";
+        List<BoardDescriptor> boards = new ArrayList<>();
+        try (PreparedStatement statement = database.connection().prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                boards.add(new BoardDescriptor(
+                        new BoardId(resultSet.getString("id")),
+                        resultSet.getString("name"),
+                        Instant.ofEpochMilli(resultSet.getLong("created_at"))));
             }
+            return boards;
         } catch (SQLException e) {
-            throw new DataAccessException("Could not save board", e);
+            throw new DataAccessException("Could not list boards", e);
         }
     }
 
     @Override
-    public BoardMemento load() {
+    public BoardDescriptor createBoard(String name) {
+        String trimmed = name == null || name.isBlank() ? "Board" : name.strip();
+        BoardId id = new BoardId(UUID.randomUUID().toString());
+        String sql = "INSERT INTO board (id, name, created_at) VALUES (?, ?, ?)";
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
+            statement.setString(1, id.value());
+            statement.setString(2, trimmed);
+            statement.setLong(3, System.currentTimeMillis());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not create board '" + trimmed + "'", e);
+        }
+        return new BoardDescriptor(id, trimmed, Instant.now());
+    }
+
+    @Override
+    public void renameBoard(BoardId boardId, String newName) {
+        String trimmed = newName == null || newName.isBlank() ? "Board" : newName.strip();
+        String sql = "UPDATE board SET name = ? WHERE id = ?";
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
+            statement.setString(1, trimmed);
+            statement.setString(2, boardId.value());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not rename board " + boardId, e);
+        }
+    }
+
+    @Override
+    public void deleteBoard(BoardId boardId) {
+        try (Statement statement = database.connection().createStatement()) {
+            statement.execute("PRAGMA foreign_keys = ON");
+            statement.execute("DELETE FROM board WHERE id = '" + boardId.value().replace("'", "''") + "'");
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not delete board " + boardId, e);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Board contents
+    // ------------------------------------------------------------------
+
+    @Override
+    public BoardMemento load(BoardId boardId) {
         List<ColumnSnapshot> columns = new ArrayList<>();
         String sql = """
                 SELECT id, title, description, color, wip_limit, created_at
                 FROM board_column
+                WHERE board_id = ?
                 ORDER BY position
                 """;
-        try (PreparedStatement statement = database.connection().prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                columns.add(readColumnRow(resultSet));
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
+            statement.setString(1, boardId.value());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    columns.add(readColumnRow(resultSet));
+                }
             }
         } catch (SQLException e) {
-            throw new DataAccessException("Could not load board", e);
+            throw new DataAccessException("Could not load board " + boardId, e);
         }
 
         // Second pass: fetch cards per column, with no open outer ResultSet.
@@ -80,25 +131,44 @@ public final class SqliteBoardRepository implements BoardRepository {
         return new BoardMemento(withCards);
     }
 
+    @Override
+    public void save(BoardId boardId, BoardMemento board) {
+        try {
+            boolean previousAutoCommit = database.connection().getAutoCommit();
+            database.connection().setAutoCommit(false);
+            try {
+                replaceAll(boardId, board);
+                database.connection().commit();
+            } catch (SQLException e) {
+                database.connection().rollback();
+                throw e;
+            } finally {
+                database.connection().setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not save board " + boardId, e);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Save internals
     // ------------------------------------------------------------------
 
-    private void replaceAll(BoardMemento board) throws SQLException {
-        deleteAll();
+    private void replaceAll(BoardId boardId, BoardMemento board) throws SQLException {
+        deleteBoardContents(boardId);
         String columnSql = """
-                INSERT INTO board_column (id, title, description, color, position, wip_limit, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO board_column (id, board_id, title, description, color, position, wip_limit, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         String cardSql = """
-                INSERT INTO card (id, column_id, title, description, color, position, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO card (id, column_id, title, description, color, position, due_date, labels, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement columnStatement = database.connection().prepareStatement(columnSql);
              PreparedStatement cardStatement = database.connection().prepareStatement(cardSql)) {
             int columnIndex = 0;
             for (ColumnSnapshot column : board.columns()) {
-                bindColumn(columnStatement, column, columnIndex++);
+                bindColumn(columnStatement, boardId, column, columnIndex++);
                 columnStatement.addBatch();
                 int cardIndex = 0;
                 for (CardSnapshot card : column.cards()) {
@@ -111,27 +181,38 @@ public final class SqliteBoardRepository implements BoardRepository {
         }
     }
 
-    private void deleteAll() throws SQLException {
-        try (Statement statement = database.connection().createStatement()) {
-            statement.execute("DELETE FROM card");
-            statement.execute("DELETE FROM board_column");
+    private void deleteBoardContents(BoardId boardId) throws SQLException {
+        // Cards of this board first (join through columns), then its columns.
+        String deleteCards = """
+                DELETE FROM card WHERE column_id IN (
+                    SELECT id FROM board_column WHERE board_id = ?
+                )
+                """;
+        try (PreparedStatement statement = database.connection().prepareStatement(deleteCards)) {
+            statement.setString(1, boardId.value());
+            statement.executeUpdate();
+        }
+        try (PreparedStatement statement =
+                     database.connection().prepareStatement("DELETE FROM board_column WHERE board_id = ?")) {
+            statement.setString(1, boardId.value());
+            statement.executeUpdate();
         }
     }
 
-    private void bindColumn(PreparedStatement statement, ColumnSnapshot column, int position)
+    private void bindColumn(PreparedStatement statement, BoardId boardId, ColumnSnapshot column, int position)
             throws SQLException {
         statement.setString(1, column.id().value());
-        statement.setString(2, column.title());
-        statement.setString(3, column.description());
-        statement.setString(4, column.color().name());
-        statement.setInt(5, position);
+        statement.setString(2, boardId.value());
+        statement.setString(3, column.title());
+        statement.setString(4, column.description());
+        statement.setString(5, column.color().name());
+        statement.setInt(6, position);
         if (column.wipLimit().asOptional().isPresent()) {
-            statement.setInt(6, column.wipLimit().asOptional().get());
+            statement.setInt(7, column.wipLimit().asOptional().get());
         } else {
-            statement.setNull(6, Types.INTEGER);
+            statement.setNull(7, Types.INTEGER);
         }
-        // Epoch millis as an integer: driver-agnostic and timezone-free.
-        statement.setLong(7, column.createdAt().toEpochMilli());
+        statement.setLong(8, column.createdAt().toEpochMilli());
     }
 
     private void bindCard(PreparedStatement statement, CardSnapshot card, ColumnId ownerId, int position)
@@ -142,7 +223,13 @@ public final class SqliteBoardRepository implements BoardRepository {
         statement.setString(4, card.description());
         statement.setString(5, card.color().name());
         statement.setInt(6, position);
-        statement.setLong(7, card.createdAt().toEpochMilli());
+        if (card.dueDate() != null) {
+            statement.setString(7, card.dueDate().toString()); // ISO-8601: 2026-12-31
+        } else {
+            statement.setNull(7, Types.VARCHAR);
+        }
+        statement.setString(8, String.join(";", card.labels()));
+        statement.setLong(9, card.createdAt().toEpochMilli());
     }
 
     // ------------------------------------------------------------------
@@ -163,7 +250,7 @@ public final class SqliteBoardRepository implements BoardRepository {
     private List<CardSnapshot> readCards(ColumnId columnId) {
         List<CardSnapshot> cards = new ArrayList<>();
         String sql = """
-                SELECT id, title, description, color, created_at
+                SELECT id, title, description, color, due_date, labels, created_at
                 FROM card
                 WHERE column_id = ?
                 ORDER BY position
@@ -177,6 +264,8 @@ public final class SqliteBoardRepository implements BoardRepository {
                             resultSet.getString("title"),
                             resultSet.getString("description"),
                             BoardColor.fromName(resultSet.getString("color")),
+                            readDueDate(resultSet),
+                            readLabels(resultSet),
                             Instant.ofEpochMilli(resultSet.getLong("created_at"))));
                 }
             }
@@ -184,6 +273,19 @@ public final class SqliteBoardRepository implements BoardRepository {
             throw new DataAccessException("Could not load cards of column " + columnId, e);
         }
         return cards;
+    }
+
+    private java.time.LocalDate readDueDate(ResultSet resultSet) throws SQLException {
+        String iso = resultSet.getString("due_date");
+        return iso == null ? null : java.time.LocalDate.parse(iso);
+    }
+
+    private List<String> readLabels(ResultSet resultSet) throws SQLException {
+        String joined = resultSet.getString("labels");
+        if (joined == null || joined.isBlank()) {
+            return List.of();
+        }
+        return List.of(joined.split(";"));
     }
 
     private WipLimit readWipLimit(ResultSet resultSet) throws SQLException {

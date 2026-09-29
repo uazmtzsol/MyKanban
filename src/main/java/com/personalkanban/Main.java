@@ -7,9 +7,16 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.stage.Stage;
 
+import java.nio.file.Path;
+
 /**
  * Composition-root entry point. Keeps Application thin: all wiring lives in
  * {@link AppContext}, all behavior in controllers.
+ *
+ * <p>Portable mode: launch with {@code -Dpk.data.dir=<folder>} to keep the
+ * SQLite database and undo history inside a chosen folder (e.g. a USB drive)
+ * instead of {@code ~/.personalkanban}. The bundled kanban.bat / kanban.sh
+ * launchers set this automatically.</p>
  */
 public class Main extends Application {
 
@@ -23,7 +30,7 @@ public class Main extends Application {
             scene.getStylesheets().add(context.themeManager().stylesheet());
             controller.bindScene(scene);
 
-            stage.setTitle("Personal Kanban");
+            stage.titleProperty().bind(controller.titleProperty());
             stage.setScene(scene);
             stage.show();
         } catch (Exception e) {
@@ -37,6 +44,14 @@ public class Main extends Application {
                 "Personal Kanban failed to start: " + e.getMessage(), ButtonType.CLOSE);
         alert.setHeaderText(null);
         alert.showAndWait();
+    }
+
+    public static Path dataDirectory() {
+        String override = System.getProperty("pk.data.dir");
+        if (override != null && !override.isBlank()) {
+            return Path.of(override);
+        }
+        return Path.of(System.getProperty("user.home"), ".personalkanban");
     }
 
     public static void main(String[] args) {

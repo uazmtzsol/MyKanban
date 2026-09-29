@@ -2,22 +2,28 @@ package com.personalkanban.ui;
 
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.WipLimit;
+import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.Alert;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.GridPane;
 import javafx.scene.shape.Rectangle;
 
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 
 /**
  * Owns every modal interaction (Pure Fabrication): the column form, the card
- * form, and confirmations. Keeps controller code free of dialog plumbing.
+ * form (with due date and labels), board name prompts, and confirmations.
+ * Keeps controller code free of dialog plumbing.
  */
 final class Dialogs {
 
@@ -25,7 +31,9 @@ final class Dialogs {
     record ColumnForm(String title, String description, BoardColor color, WipLimit wipLimit) {
     }
 
-    record CardForm(String title, String description, BoardColor color) {
+    /** Result of the card dialog. */
+    record CardForm(String title, String description, BoardColor color,
+                    LocalDate dueDate, List<String> labels) {
     }
 
     private final I18n i18n;
@@ -85,6 +93,11 @@ final class Dialogs {
         TextArea descriptionArea = new TextArea(initial == null ? "" : initial.description());
         descriptionArea.setPrefRowCount(3);
         ComboBox<BoardColor> colorBox = colorPicker(initial == null ? BoardColor.DEFAULT : initial.color());
+        DatePicker dueDatePicker = new DatePicker(initial == null ? null : initial.dueDate());
+        dueDatePicker.setPromptText(i18n.text("card.due.none"));
+        TextField labelsField = new TextField(initial == null || initial.labels().isEmpty()
+                ? "" : String.join(", ", initial.labels()));
+        labelsField.setPromptText(i18n.text("card.labels.prompt"));
 
         Dialog<CardForm> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("dialog.card.title"));
@@ -92,7 +105,14 @@ final class Dialogs {
         GridPane grid = formGrid();
         grid.add(new Label(i18n.text("dialog.title.label")), 0, 0);
         grid.add(titleField, 1, 0);
-        addDescriptionAndColorRows(grid, descriptionArea, colorBox);
+        grid.add(new Label(i18n.text("dialog.description")), 0, 1);
+        grid.add(descriptionArea, 1, 1);
+        grid.add(new Label(i18n.text("dialog.color")), 0, 2);
+        grid.add(colorBox, 1, 2);
+        grid.add(new Label(i18n.text("card.due")), 0, 3);
+        grid.add(dueDatePicker, 1, 3);
+        grid.add(new Label(i18n.text("card.labels")), 0, 4);
+        grid.add(labelsField, 1, 4);
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(button -> {
@@ -103,27 +123,51 @@ final class Dialogs {
             if (title == null || title.isBlank()) {
                 return null;
             }
-            return new CardForm(title, descriptionArea.getText(), colorBox.getValue());
+            return new CardForm(title, descriptionArea.getText(), colorBox.getValue(),
+                    dueDatePicker.getValue(), parseLabels(labelsField.getText()));
         });
 
         return dialog.showAndWait();
     }
 
-    private void addDescriptionAndColorRows(GridPane grid, TextArea descriptionArea, ComboBox<BoardColor> colorBox) {
-        grid.add(new Label(i18n.text("dialog.description")), 0, 1);
-        grid.add(descriptionArea, 1, 1);
-        grid.add(new Label(i18n.text("dialog.color")), 0, 2);
-        grid.add(colorBox, 1, 2);
+    /** Splits comma-separated labels into the normalized list the domain expects. */
+    private List<String> parseLabels(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(text.split(","))
+                .map(String::strip)
+                .filter(part -> !part.isEmpty())
+                .toList();
     }
 
     // ------------------------------------------------------------------
-    // Confirmation
+    // Prompts, confirmations, messages
     // ------------------------------------------------------------------
+
+    Optional<String> promptText(String header, String initial) {
+        TextInputDialog dialog = new TextInputDialog(initial == null ? "" : initial);
+        dialog.setHeaderText(header);
+        dialog.setContentText(i18n.text("dialog.title.label"));
+        return dialog.showAndWait();
+    }
 
     boolean confirm(String message) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION, message, ButtonType.OK, ButtonType.CANCEL);
         alert.setHeaderText(null);
         return alert.showAndWait().filter(ButtonType.OK::equals).isPresent();
+    }
+
+    void info(String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION, message, ButtonType.OK);
+        alert.setHeaderText(null);
+        alert.showAndWait();
+    }
+
+    void error(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.CLOSE);
+        alert.setHeaderText(i18n.text("error.title"));
+        alert.showAndWait();
     }
 
     // ------------------------------------------------------------------

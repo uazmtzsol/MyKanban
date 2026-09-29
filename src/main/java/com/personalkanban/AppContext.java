@@ -2,6 +2,8 @@ package com.personalkanban;
 
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.port.SettingsStore;
+import com.personalkanban.application.port.UndoHistory;
+import com.personalkanban.infrastructure.history.JsonUndoHistory;
 import com.personalkanban.infrastructure.sqlite.Database;
 import com.personalkanban.infrastructure.sqlite.SchemaMigrator;
 import com.personalkanban.infrastructure.sqlite.SqliteBoardRepository;
@@ -33,10 +35,13 @@ public final class AppContext implements AutoCloseable {
     }
 
     public static AppContext create() {
-        Database database = new Database(Path.of(System.getProperty("user.home"),
-                ".personalkanban", "kanban.db"));
+        Path dataDir = Main.dataDirectory();
+        Database database = new Database(dataDir.resolve("kanban.db"));
         new SchemaMigrator(database).migrate();
-        BoardService boardService = new BoardService(new SqliteBoardRepository(database));
+        BoardService boardService = new BoardService(
+                new SqliteBoardRepository(database),
+                new JsonUndoHistory(dataDir.resolve("history")),
+                new SqliteSettingsStore(database));
         SettingsStore settings = new SqliteSettingsStore(database);
         ThemeManager themeManager = new ThemeManager(
                 settings.get(SETTING_THEME).map(ThemeManager.Theme::valueOf).orElse(ThemeManager.Theme.LIGHT));

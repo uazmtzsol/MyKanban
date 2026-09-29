@@ -27,7 +27,9 @@ public final class SchemaMigrator {
     /** Append new migrations here, in order: "/db/migration/V2__short_description.sql", ... */
     private static final List<String> REGISTERED_SCRIPTS = List.of(
             "/db/migration/V1__init.sql",
-            "/db/migration/V2__app_settings.sql"
+            "/db/migration/V2__app_settings.sql",
+            "/db/migration/V3__card_details.sql",
+            "/db/migration/V4__boards.sql"
     );
 
     private final Database database;
