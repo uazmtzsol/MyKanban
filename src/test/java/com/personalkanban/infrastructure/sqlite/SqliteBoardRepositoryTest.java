@@ -185,6 +185,56 @@ class SqliteBoardRepositoryTest {
         assertThat(columnsLeft).isZero();
     }
 
+    @Test
+    void labelsRoundTripWithSpecialCharactersAndLegacySeparators() {
+        // A label containing ';' must survive (it used to corrupt the list).
+        ColumnSnapshot column = new ColumnSnapshot(
+                new com.personalkanban.domain.board.ColumnId("col-1"),
+                "C", "", BoardColor.BLUE, WipLimit.unlimited(), Instant.now(),
+                List.of(new CardSnapshot(
+                        new com.personalkanban.domain.board.CardId("card-1"),
+                        "tricky", "", BoardColor.GRAY, null,
+                        List.of("et;iqueta", "uaz", "UAZ"), Instant.now())));
+        repository.save(boardId, new BoardMemento(List.of(column)));
+
+        assertThat(repository.load(boardId).columns().get(0).cards())
+                .singleElement()
+                .satisfies(card -> assertThat(card.labels())
+                        .containsExactly("et;iqueta", "uaz", "UAZ"));
+
+        // Legacy row written with ';' as separator still reads correctly.
+        try (var statement = database.connection().createStatement()) {
+            statement.executeUpdate("UPDATE card SET labels = 'a;b;c' WHERE id = 'card-1'");
+        } catch (java.sql.SQLException e) {
+            throw new DataAccessException("legacy labels setup failed", e);
+        }
+        assertThat(repository.load(boardId).columns().get(0).cards())
+                .singleElement()
+                .satisfies(card -> assertThat(card.labels()).containsExactly("a", "b", "c"));
+    }
+
+    @Test
+    void saveThenLoadRoundTripsCustomColors() {
+        // Regression for "Could not save board default-board": custom
+        // (color-picker) colors used to persist as NULL and trip NOT NULL.
+        BoardColor customCard = BoardColor.fromHex("#123456");
+        BoardColor customColumn = BoardColor.fromHex("#654321");
+        ColumnSnapshot column = new ColumnSnapshot(
+                new com.personalkanban.domain.board.ColumnId("col-1"),
+                "Custom", "", customColumn, WipLimit.unlimited(), Instant.now(),
+                List.of(new CardSnapshot(
+                        new com.personalkanban.domain.board.CardId("card-1"),
+                        "painted", "", customCard, null, List.of(), Instant.now())));
+        repository.save(boardId, new BoardMemento(List.of(column)));
+
+        BoardMemento loaded = repository.load(boardId);
+        assertThat(loaded.columns()).singleElement().satisfies(loadedColumn -> {
+            assertThat(loadedColumn.color()).isEqualTo(customColumn);
+            assertThat(loadedColumn.cards()).singleElement()
+                    .satisfies(card -> assertThat(card.color()).isEqualTo(customCard));
+        });
+    }
+
     private Long queryScalar(String sql) {
         try (var statement = database.connection().createStatement();
              var resultSet = statement.executeQuery(sql)) {

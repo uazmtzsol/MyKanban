@@ -126,6 +126,21 @@ public final class BoardColumn {
         return card;
     }
 
+    /**
+     * Bulk-moves the given cards from this column into {@code target},
+     * appending them in list order (same package: only the Board aggregate
+     * orchestrates this). No WIP check here — the aggregate validates the
+     * whole batch before mutating anything, keeping the move atomic.
+     */
+    void transferCardsTo(BoardColumn target, List<CardId> cardIds) {
+        for (CardId cardId : cardIds) {
+            Card card = cardById(cardId)
+                    .orElseThrow(() -> new com.personalkanban.domain.exception.NotFoundException(cardId));
+            cards.remove(card);
+            target.cards.add(card);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Queries
     // ------------------------------------------------------------------

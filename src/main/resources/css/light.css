@@ -22,6 +22,16 @@
     -fx-padding: 0 8 0 0;
 }
 
+/* Active board name, always visible in the toolbar. */
+.board-name {
+    -fx-background-color: #eef1f6;
+    -fx-background-radius: 10;
+    -fx-padding: 2 12 2 12;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-text-fill: #1976d2;
+}
+
 .tool-button {
     -fx-background-color: transparent;
     -fx-border-color: #d7dbe2;
@@ -54,11 +64,16 @@
 
 .card {
     -fx-background-color: #fafbfc;
-    -fx-background-radius: 6;
+    -fx-background-radius: 10;
     -fx-border-color: #e2e5ea;
     -fx-border-width: 1;
-    -fx-border-radius: 6;
-    -fx-padding: 8;
+    -fx-border-radius: 10;
+    -fx-padding: 10;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.10), 4, 0.15, 0, 2);
+}
+.card:hover {
+    -fx-border-color: #b9c2d0;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.16), 8, 0.2, 0, 3);
 }
 
 .card-title { -fx-font-weight: bold; }
@@ -88,6 +103,83 @@
 .card.pk-color-pink   { -fx-border-color: #e91e63; -fx-border-width: 0 0 0 4; }
 .card.pk-color-gray   { -fx-border-color: #607d8b; -fx-border-width: 0 0 0 4; }
 
+/* Resize handle between columns (drag to change the left column's width). */
+.column-resize-handle {
+    -fx-background-color: transparent;
+    -fx-cursor: h-resize;
+}
+.column-resize-handle:hover,
+.column-resize-active {
+    -fx-background-color: #c9d2df;
+    -fx-background-radius: 2;
+}
+
+/* Collapsed column: narrow vertical strip (Trello-like). */
+.column.collapsed {
+    -fx-padding: 8 6 8 6;
+    -fx-alignment: top-center;
+}
+.column-title-vertical {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: #374151;
+}
+.pk-collapse, .pk-expand { -fx-padding: 2 6 2 6; }
+
+/* Autocomplete suggestions popup. */
+.label-suggestions {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #b9c2d0;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.25), 8, 0.2, 0, 3);
+}
+.label-suggestions .list-cell:filled:selected {
+    -fx-background-color: #e8f1fc;
+    -fx-text-fill: #1976d2;
+}
+
+/* Label chips: pill badges, deterministic color per label. */
+.card-label-chip {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 9;
+    -fx-padding: 1 8 1 8;
+}
+.chip-color-0 { -fx-background-color: #e3f2fd; -fx-text-fill: #1565c0; }
+.chip-color-1 { -fx-background-color: #e8f5e9; -fx-text-fill: #2e7d32; }
+.chip-color-2 { -fx-background-color: #ffebee; -fx-text-fill: #c62828; }
+.chip-color-3 { -fx-background-color: #fff3e0; -fx-text-fill: #ef6c00; }
+.chip-color-4 { -fx-background-color: #f3e5f5; -fx-text-fill: #7b1fa2; }
+.chip-color-5 { -fx-background-color: #e0f2f1; -fx-text-fill: #00695c; }
+.chip-color-6 { -fx-background-color: #fce4ec; -fx-text-fill: #ad1457; }
+.chip-color-7 { -fx-background-color: #eceff1; -fx-text-fill: #455a64; }
+
+/* Quick flags on cards: ★ Importante, ! Urgente. */
+.card-flag {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0 3 0 3;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+.card-flag-off { -fx-text-fill: #b6bdc9; }
+.card-flag-off:hover { -fx-text-fill: #8a93a3; }
+.card-flag-on.card-flag-important { -fx-text-fill: #f59e0b; }
+.card-flag-on.card-flag-urgent { -fx-text-fill: #dc2626; }
+
+/* Multi-selection mode: selectable/selected cards. */
+.card-selectable {
+    -fx-cursor: hand;
+    -fx-border-style: dashed;
+}
+.card-selected {
+    -fx-background-color: #e8f1fc;
+    -fx-border-color: #1976d2;
+    -fx-border-width: 2;
+}
+.selection-count { -fx-font-weight: bold; -fx-text-fill: #1976d2; }
+
 /* Drop slots between cards: invisible gap that becomes an insertion line. */
 .drop-slot {
     -fx-pref-height: 8;
@@ -109,6 +201,9 @@
     -fx-font-family: Consolas, monospace;
     -fx-font-size: 13px;
     -fx-background-color: #fafbfc;
+}
+.md-help-button {
+    -fx-font-weight: bold;
 }
 
 .color-swatch { -fx-arc-width: 4; -fx-arc-height: 4; }

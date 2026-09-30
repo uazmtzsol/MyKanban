@@ -77,6 +77,17 @@ public record BoardColor(String name, String hex) {
         return name == null;
     }
 
+    /**
+     * The value to store in SQLite/JSON: the palette name for presets, the
+     * hex code for custom colors. Never null, unlike {@link #name()}, which
+     * is only populated for palette presets — storing {@code name()} for a
+     * custom color once tripped the NOT NULL constraint ("Could not save
+     * board ..."). {@link #fromStored} reads both forms back.
+     */
+    public String stored() {
+        return isCustom() ? hex : name;
+    }
+
     /** Human-readable label: preset name or the hex itself for custom colors. */
     public String displayName() {
         return isCustom() ? hex : name;

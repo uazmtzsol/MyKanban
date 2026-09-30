@@ -31,6 +31,7 @@ public class Main extends Application {
             controller.bindScene(scene);
 
             stage.titleProperty().bind(controller.titleProperty());
+            controller.appendVersionToTitle(AppVersion.stamp());
             stage.setScene(scene);
             stage.show();
         } catch (Exception e) {

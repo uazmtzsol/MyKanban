@@ -26,10 +26,55 @@ final class ColorCss {
      * (which adapts the palette shades per theme), while a custom color has
      * no stylesheet rule and needs its hue spelled out inline. The matching
      * {@code pk-color-custom} CSS class supplies the border width.
+     *
+     * @deprecated replaced by {@link #applySurface}, which also paints the
+     *             tinted background; kept until all call sites migrate.
      */
+    @Deprecated
     static void applyAccent(javafx.scene.layout.Region region, BoardColor color) {
         if (color.isCustom()) {
             region.setStyle("-fx-border-color: " + color.hex() + ";");
+        }
+    }
+
+    /**
+     * Hex of the chosen color mixed into the surface color behind the region
+     * — a soft, always-legible tint instead of the raw (often saturated or
+     * too dark/light) picked color. The default color yields no tint: boards
+     * stay calm until the user deliberately picks a color.
+     */
+    static String backgroundTint(BoardColor color, boolean dark) {
+        if (color.equals(BoardColor.DEFAULT)) {
+            return "";
+        }
+        javafx.scene.paint.Color base = javafx.scene.paint.Color.web(color.hex());
+        javafx.scene.paint.Color surface =
+                javafx.scene.paint.Color.web(dark ? "#1f2229" : "#ffffff");
+        double alpha = dark ? 0.22 : 0.12;
+        javafx.scene.paint.Color mixed = javafx.scene.paint.Color.color(
+                base.getRed() * alpha + surface.getRed() * (1 - alpha),
+                base.getGreen() * alpha + surface.getGreen() * (1 - alpha),
+                base.getBlue() * alpha + surface.getBlue() * (1 - alpha));
+        return toHex(mixed);
+    }
+
+    /**
+     * Paints a column/card "surface": tinted background (any non-default
+     * color) plus the exact border for custom colors. Inline styles win over
+     * the stylesheet, so this composes everything one node needs in a single
+     * {@code setStyle} call.
+     */
+    static void applySurface(javafx.scene.layout.Region region, BoardColor color, boolean dark) {
+        StringBuilder style = new StringBuilder();
+        String tint = backgroundTint(color, dark);
+        if (!tint.isEmpty()) {
+            style.append("-fx-background-color: ").append(tint).append(";");
+        }
+        if (color.isCustom()) {
+            style.append("-fx-border-color: ").append(color.hex()).append(";");
+        }
+        if (style.length() > 0) {
+            region.setStyle(style.toString());
         }
     }
 

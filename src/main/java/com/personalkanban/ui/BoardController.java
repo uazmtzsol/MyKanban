@@ -2,10 +2,16 @@ package com.personalkanban.ui;
 
 import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
+import com.personalkanban.application.CardViewSettings;
+import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.BoardDescriptor;
 import com.personalkanban.domain.board.BoardId;
+import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.LabelFilter;
+import com.personalkanban.domain.board.LabelSuggester;
+import com.personalkanban.domain.board.WipLimit;
 import com.personalkanban.ui.theme.ThemeManager;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -19,6 +25,7 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
@@ -30,6 +37,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -59,12 +67,29 @@ public final class BoardController {
     private HBox columnsRow;
     private Menu boardMenu;
     private Menu databaseMenu;
+    private Label boardNameLabel;
+    private HBox toolbarReference;
 
     // Label filter state; survives language-driven rebuilds of the controls.
     private String activeFilterLabels = "";
-    private String activeFilterMode; // null (= show all), "AND" or "OR"
+    private String activeFilterMode; // null (= show each, "AND" or "OR")
     private TextField labelFilterField;
     private ComboBox<String> labelFilterMode;
+
+    // Multi-selection mode: the selected cards all live in selectionColumn.
+    private boolean selectionMode;
+    private ColumnId selectionColumn;
+    private final java.util.Set<CardId> selectedCards = new java.util.LinkedHashSet<>();
+    private HBox selectionBar;
+
+    // Collapsed columns of the active board (UI preference, per board).
+    private java.util.Set<String> collapsedColumns = java.util.Set.of();
+
+    // Per-column widths of the active board (UI preference, per board).
+    private java.util.Map<String, Integer> columnWidths = java.util.Map.of();
+
+    // Card view preferences of the active board (UI preference, per board).
+    private CardViewSettings cardViewSettings = new CardViewSettings();
 
     public BoardController(AppContext context) {
         this.context = context;
@@ -75,6 +100,7 @@ public final class BoardController {
         this.dialogs = new Dialogs(i18n);
         this.root = new VBox();
         this.root.getStyleClass().add("board-root");
+        collapsedColumns = service.collapsedColumnsOf(context.boardService().activeBoardId());
         rebuildAll();
     }
 
@@ -86,8 +112,50 @@ public final class BoardController {
         return title;
     }
 
+    /** Appends the build stamp to the window title (set once at startup). */
+    public void appendVersionToTitle(String stamp) {
+        title.set(title.get() + "  [" + stamp + "]");
+    }
+
+    // ------------------------------------------------------------------
+    // Intents: card view modes (board default + per-card overrides)
+    // ------------------------------------------------------------------
+
+    /** Live settings used by the card view builder while painting. */
+    public CardViewSettings currentCardViewSettings() {
+        return cardViewSettings;
+    }
+
+    /** Sets the BOARD default mode (toolbar menu / Ctrl+1-2-3). */
+    public void onSetBoardCardViewMode(CardViewSettings.Mode mode) {
+        cardViewSettings.setBoardDefault(mode);
+        service.setCardViewSettings(service.activeBoardId(), cardViewSettings);
+        refresh();
+    }
+
+    /** Per-card override (context menu); null clears it back to the default. */
+    public void onSetCardViewMode(com.personalkanban.domain.board.CardId cardId,
+                                  CardViewSettings.Mode mode) {
+        cardViewSettings.setOverride(cardId.value(), mode);
+        service.setCardViewSettings(service.activeBoardId(), cardViewSettings);
+        refresh();
+    }
+
+    /** Clears every per-card override (all cards follow the board default). */
+    public void onResetCardViewModes() {
+        cardViewSettings.clearOverrides();
+        service.setCardViewSettings(service.activeBoardId(), cardViewSettings);
+        refresh();
+    }
+
     public void bindScene(Scene scene) {
         undoRedo.bindScene(scene);
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+1"),
+                () -> onSetBoardCardViewMode(CardViewSettings.Mode.TITLE_ONLY));
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+2"),
+                () -> onSetBoardCardViewMode(CardViewSettings.Mode.TITLE_PREVIEW));
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+3"),
+                () -> onSetBoardCardViewMode(CardViewSettings.Mode.FULL));
     }
 
     // ------------------------------------------------------------------
@@ -95,6 +163,14 @@ public final class BoardController {
     // ------------------------------------------------------------------
 
     private void rebuildAll() {
+        // A rebuild (board/language/database switch) leaves selection mode.
+        selectionMode = false;
+        selectedCards.clear();
+        selectionColumn = null;
+        collapsedColumns = service.collapsedColumnsOf(service.activeBoardId());
+        cardViewSettings = service.cardViewSettingsOf(service.activeBoardId());
+        columnWidths = service.columnWidthsOf(service.activeBoardId());
+
         HBox toolbar = buildToolbar();
         HBox filterBar = buildFilterBar();
         MenuBar menuBar = buildMenuBar();
@@ -106,8 +182,9 @@ public final class BoardController {
         scroller.setFitToHeight(true);
         VBox.setVgrow(scroller, Priority.ALWAYS);
 
-        root.getChildren().setAll(menuBar, toolbar, filterBar, scroller);
-        title.set(i18n.text("app.title") + " \u2014 " + context.databasePath().getFileName());
+        buildSelectionBar();
+        root.getChildren().setAll(menuBar, toolbar, selectionBar, filterBar, scroller);
+        updateBoardIdentity();
         refresh();
     }
 
@@ -132,13 +209,29 @@ public final class BoardController {
         Button darkMode = toolButton("\uD83C\uDF19", "toolbar.dark.mode");
         darkMode.setOnAction(e -> onToggleDarkMode());
 
+        // Card view mode: one button, radio menu (board-wide default).
+        MenuButton cardViewMenu = new MenuButton("\u2637");
+        cardViewMenu.getStyleClass().addAll("tool-button");
+        cardViewMenu.setTooltip(new Tooltip(i18n.text("cardview.button.tip")));
+        for (CardViewSettings.Mode mode : CardViewSettings.Mode.values()) {
+            RadioMenuItem item = new RadioMenuItem(i18n.text(cardViewTextKey(mode)));
+            item.setUserData(mode);
+            item.setOnAction(e -> onSetBoardCardViewMode(mode));
+            cardViewMenu.getItems().add(item);
+        }
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox toolbar = new HBox(8, brand, addColumn, clearBoard, undoButton, redoButton, darkMode, spacer);
+        boardNameLabel = new Label();
+        boardNameLabel.getStyleClass().add("board-name");
+
+        HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, clearBoard,
+                undoButton, redoButton, darkMode, cardViewMenu, spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
         toolbar.setPadding(new Insets(10));
+        toolbarReference = toolbar;
         return toolbar;
     }
 
@@ -156,6 +249,9 @@ public final class BoardController {
             activeFilterLabels = value == null ? "" : value;
             refresh();
         });
+        // Autocomplete on the filter too: same vocabulary as the card dialog.
+        LabelAutoComplete.attach(labelFilterField, new LabelSuggester(java.util.List.of()),
+                List::of).setVocabularySupplier(this::filterVocabulary);
 
         labelFilterMode = new ComboBox<>();
         labelFilterMode.getItems().addAll("AND", "OR");
@@ -182,6 +278,213 @@ public final class BoardController {
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
         return bar;
+    }
+
+    // ------------------------------------------------------------------
+    // Multi-selection mode (bulk actions on cards of one column)
+    // ------------------------------------------------------------------
+
+    /** Hidden unless selection mode is on; rebuilt on refresh. */
+    private void buildSelectionBar() {
+        selectionBar = new HBox(8);
+        selectionBar.getStyleClass().addAll("toolbar", "selection-bar");
+        selectionBar.setPadding(new Insets(6, 10, 6, 10));
+        selectionBar.setVisible(false);
+        selectionBar.setManaged(false);
+    }
+
+    /** Toggles selection mode for a column; clears stale selections. */
+    public void onToggleSelectionMode(ColumnId columnId) {
+        boolean sameColumn = columnId.equals(selectionColumn);
+        if (selectionMode && sameColumn) {
+            exitSelectionMode();
+            return;
+        }
+        if (!sameColumn) {
+            selectedCards.clear();
+            selectionColumn = columnId;
+        }
+        selectionMode = true;
+        rebuildSelectionBar();
+        refresh();
+    }
+
+    private void exitSelectionMode() {
+        selectionMode = false;
+        selectedCards.clear();
+        rebuildSelectionBar();
+        refresh();
+    }
+
+    public void onToggleCardSelection(CardId cardId) {
+        if (selectedCards.contains(cardId)) {
+            selectedCards.remove(cardId);
+        } else {
+            selectedCards.add(cardId);
+        }
+        refresh();
+        updateSelectionBarState();
+    }
+
+    /** Package-visible query used by the view builders while painting cards. */
+    boolean isCardSelected(CardId cardId) {
+        return selectedCards.contains(cardId);
+    }
+
+    /** Rebuilds the bulk action bar (after language/selection-mode changes). */
+    private void rebuildSelectionBar() {
+        if (selectionBar == null) {
+            return; // not built yet (first refresh during construction)
+        }
+        java.util.List<Button> buttons = new java.util.ArrayList<>();
+        if (selectionMode) {
+            Button exit = toolButton("\u2715", "bulk.exit");
+            exit.setOnAction(e -> exitSelectionMode());
+            buttons.add(exit);
+
+            Button labelButton = toolButton("\uD83C\uDFF7", "bulk.labels");
+            labelButton.setOnAction(e -> onBulkLabels());
+
+            Button colorButton = toolButton("\uD83C\uDFA8", "bulk.color");
+            colorButton.setOnAction(e -> onBulkColor());
+
+            Button moveButton = toolButton("\u27A1", "bulk.move");
+            moveButton.setOnAction(e -> onBulkMove());
+
+            Button removeButton = toolButton("\uD83D\uDDD1", "bulk.remove.action");
+            removeButton.setOnAction(e -> onBulkRemove());
+
+            Label count = new Label();
+            count.getStyleClass().add("selection-count");
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            selectionBar.getChildren().setAll(
+                    exit, labelButton, colorButton, moveButton, removeButton,
+                    spacer, count);
+        } else {
+            selectionBar.getChildren().setAll();
+        }
+        boolean visible = selectionMode;
+        selectionBar.setVisible(visible);
+        selectionBar.setManaged(visible);
+        updateSelectionBarState();
+    }
+
+    /** Enables actions only when at least one card is selected. */
+    private void updateSelectionBarState() {
+        if (selectionBar == null) {
+            return;
+        }
+        Label count = (Label) selectionBar.getChildren().stream()
+                .filter(node -> node instanceof Label)
+                .findFirst().orElse(null);
+        if (count == null) {
+            return;
+        }
+        int selected = selectedCards.size();
+        count.setText(i18n.text("bulk.selected.count", selected));
+        boolean any = selected > 0;
+        selectionBar.getChildren().stream()
+                .filter(node -> node instanceof Button)
+                .map(node -> (Button) node)
+                .filter(button -> !"\u2715".equals(button.getText()))
+                .forEach(button -> button.setDisable(!any));
+    }
+
+    // ------------------------------------------------------------------
+    // Intents: bulk actions on the current selection
+    // ------------------------------------------------------------------
+
+    private void onBulkLabels() {
+        List<CardId> ids = List.copyOf(selectedCards);
+        dialogs.bulkLabelsDialog(ids.size(), service.labelVocabulary()).ifPresent(form -> {
+            if (form.labels().isEmpty()) {
+                return; // nothing typed: keep the selection active
+            }
+            guarded(() -> {
+                if (form.add()) {
+                    service.addLabelsToCards(ids, form.labels());
+                } else {
+                    service.removeLabelsFromCards(ids, form.labels());
+                }
+                exitSelectionMode();
+            });
+        });
+    }
+
+    private void onBulkColor() {
+        List<CardId> ids = List.copyOf(selectedCards);
+        dialogs.bulkColorDialog(ids.size()).ifPresent(color -> guarded(() -> {
+            service.recolorCards(ids, color);
+            exitSelectionMode();
+        }));
+    }
+
+    private void onBulkMove() {
+        List<CardId> ids = List.copyOf(selectedCards);
+        var columns = service.board().columns();
+        dialogs.bulkMoveDialog(columns, selectionColumn, ids.size()).ifPresent(target -> {
+            try {
+                service.moveCardsToColumn(ids, target);
+            } catch (com.personalkanban.domain.exception.WipLimitBulkException e) {
+                dialogs.error(i18n.text("bulk.move.wip", e.excess(), ids.size()));
+                return;
+            } catch (RuntimeException e) {
+                dialogs.error(Dialogs.describeFailure(e));
+                return;
+            }
+            dialogs.info(i18n.text("bulk.move.done", ids.size()));
+            exitSelectionMode();
+        });
+    }
+
+    private void onBulkRemove() {
+        List<CardId> ids = List.copyOf(selectedCards);
+        if (!dialogs.confirm(i18n.text("bulk.remove.confirm", ids.size()))) {
+            return;
+        }
+        guarded(() -> {
+            service.removeCards(ids);
+            exitSelectionMode();
+        });
+    }
+
+    /** Vocabulary for the filter's autocomplete: same as card dialogs. */
+    private List<String> filterVocabulary() {
+        return service.labelVocabulary();
+    }
+
+    /** Localized label of a view mode; null = "follow the board default". */
+    public String cardViewModeText(CardViewSettings.Mode mode) {
+        return i18n.text(mode == null ? "cardview.mode.board" : cardViewTextKey(mode));
+    }
+
+    /** i18n key of a view mode. */
+    private static String cardViewTextKey(CardViewSettings.Mode mode) {
+        return switch (mode) {
+            case TITLE_ONLY -> "cardview.mode.title";
+            case TITLE_PREVIEW -> "cardview.mode.preview";
+            case FULL -> "cardview.mode.full";
+        };
+    }
+
+    /** Marks the radio item matching the current board default. */
+    private void syncCardViewMenu() {
+        if (toolbarReference == null) {
+            return;
+        }
+        toolbarReference.getChildren().stream()
+                .filter(node -> node instanceof MenuButton)
+                .map(node -> (MenuButton) node)
+                .filter(menu -> "\u2637".equals(menu.getText()))
+                .findFirst()
+                .ifPresent(menu -> {
+                    for (MenuItem item : menu.getItems()) {
+                        if (item instanceof RadioMenuItem radio) {
+                            radio.setSelected(radio.getUserData() == cardViewSettings.boardDefault());
+                        }
+                    }
+                });
     }
 
     /** Builds the domain filter from the current UI state (Translator). */
@@ -332,7 +635,7 @@ public final class BoardController {
             openAction.run();
             rebind();
         } catch (RuntimeException e) {
-            dialogs.error(i18n.text("db.open.failed") + "\n" + e.getMessage());
+            dialogs.error(i18n.text("db.open.failed") + "\n" + Dialogs.describeFailure(e));
         }
     }
 
@@ -349,12 +652,69 @@ public final class BoardController {
         rebuildAll();
     }
 
+    /** Toggles a column between expanded and collapsed (persisted per board). */
+    public void onToggleColumnCollapsed(ColumnId columnId) {
+        java.util.Set<String> collapsed = new java.util.LinkedHashSet<>(collapsedColumns);
+        String id = columnId.value();
+        if (!collapsed.remove(id)) {
+            collapsed.add(id);
+        }
+        service.setCollapsedColumns(service.activeBoardId(), collapsed);
+        collapsedColumns = java.util.Set.copyOf(collapsed);
+        refresh();
+    }
+
+    /** Quick flag (★ Importante / ! Urgente) toggle on one card. */
+    public void onToggleCardLabel(com.personalkanban.domain.board.CardId cardId, String label) {
+        guarded(() -> {
+            service.toggleCardLabel(cardId, label);
+            refresh(); // without this the click "did nothing" on screen
+        });
+    }
+
+    /** Persists a column width after a drag-resize (per board). */
+    public void onColumnWidthChanged(String columnId, int width) {
+        java.util.Map<String, Integer> widths = new java.util.LinkedHashMap<>(columnWidths);
+        widths.put(columnId, width);
+        columnWidths = java.util.Map.copyOf(widths);
+        service.setColumnWidths(service.activeBoardId(), widths);
+        // No refresh: the live drag already left the column at its new width.
+    }
+
     private void onNewBoard() {
         Optional<String> name = dialogs.promptText(i18n.text("board.new"), "");
         name.flatMap(this::validatedBoardName).ifPresent(n -> {
+            Optional<Dialogs.NewBoardColumns> choice = dialogs.newBoardColumnsDialog();
+            if (choice.isEmpty()) {
+                return; // cancelled: create nothing
+            }
+            List<String> columnTitles;
+            if (choice.get() == Dialogs.NewBoardColumns.STANDARD) {
+                columnTitles = List.of(
+                        i18n.text("board.kanban.todo"),
+                        i18n.text("board.kanban.doing"),
+                        i18n.text("board.kanban.done"));
+            } else if (choice.get() == Dialogs.NewBoardColumns.CUSTOM) {
+                String columnsAnswer = dialogs.promptText(
+                        i18n.text("board.columns.header"),
+                        i18n.text("board.columns.prompt"), "").orElse("");
+                columnTitles = Dialogs.parseNewBoardColumns(
+                        columnsAnswer, index -> i18n.text("board.column.default", index));
+                if (columnTitles == null) {
+                    dialogs.info(i18n.text("board.columns.invalid",
+                            Dialogs.MAX_NEW_BOARD_COLUMNS));
+                    return; // board not created: ask again from the start
+                }
+            } else {
+                columnTitles = List.of();
+            }
             BoardId id = service.createBoard(n);
             service.openBoard(id);
+            for (String title : columnTitles) {
+                service.addColumn(title, "", BoardColor.DEFAULT, WipLimit.unlimited());
+            }
             rebuildAll();
+            dialogs.info(i18n.text("board.columns.created", columnTitles.size(), n));
         });
     }
 
@@ -377,7 +737,14 @@ public final class BoardController {
             return;
         }
         if (dialogs.confirm(i18n.text("board.delete.confirm"))) {
-            service.deleteBoard(activeId);
+            try {
+                service.deleteBoard(activeId);
+            } catch (RuntimeException e) {
+                // Never leave the user wondering: surface the root cause
+                // (e.g. a DB lock or a missing row) instead of failing silently.
+                dialogs.error(Dialogs.describeFailure(e));
+                return;
+            }
             rebuildAll();
         }
     }
@@ -394,10 +761,28 @@ public final class BoardController {
     // Intents: export / import
     // ------------------------------------------------------------------
 
+    /**
+     * Where file choosers start: the last folder used for export/import
+     * (shared memory, machine-local), or — only when it is unknown or no
+     * longer exists (e.g. an unplugged USB drive) — the user's home folder.
+     * On every OS including Windows the home folder is a real, always
+     * navigable directory (Documents lives under it), unlike "This PC",
+     * which is a virtual location without a filesystem path.
+     */
+    private java.io.File initialDirectory() {
+        Path last = context.lastTransferDirectory().orElse(null);
+        if (last != null) {
+            return last.toFile();
+        }
+        Path home = Path.of(System.getProperty("user.home", "."));
+        return Files.isDirectory(home) ? home.toFile() : null;
+    }
+
     private void onExportBoard() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(i18n.text("board.export"));
         chooser.setInitialFileName("board.json");
+        chooser.setInitialDirectory(initialDirectory());
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Personal Kanban board", "*.json"));
         java.io.File file = chooser.showSaveDialog(root.getScene() == null ? null : root.getScene().getWindow());
@@ -406,14 +791,16 @@ public final class BoardController {
         }
         try {
             service.exportBoard(file.toPath());
+            context.rememberTransferDirectory(file.getParentFile().toPath());
         } catch (RuntimeException e) {
-            dialogs.error(e.getMessage());
+            dialogs.error(Dialogs.describeFailure(e));
         }
     }
 
     private void onImportBoard() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(i18n.text("board.import"));
+        chooser.setInitialDirectory(initialDirectory());
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Personal Kanban board", "*.json"));
         java.io.File file = chooser.showOpenDialog(root.getScene() == null ? null : root.getScene().getWindow());
@@ -422,10 +809,11 @@ public final class BoardController {
         }
         try {
             BoardId imported = service.importBoard(file.toPath());
+            context.rememberTransferDirectory(file.getParentFile().toPath());
             service.openBoard(imported);
             rebuildAll();
         } catch (RuntimeException e) {
-            dialogs.error(e.getMessage());
+            dialogs.error(Dialogs.describeFailure(e));
         }
     }
 
@@ -470,7 +858,7 @@ public final class BoardController {
     }
 
     public void onAddCard(com.personalkanban.domain.board.ColumnId columnId) {
-        Optional<Dialogs.CardForm> form = dialogs.cardDialog(null);
+        Optional<Dialogs.CardForm> form = dialogs.cardDialog(null, service.labelVocabulary());
         form.ifPresent(f -> guarded(() -> {
             service.addCard(columnId, f.title(), f.description(), f.color(), f.dueDate(), f.labels());
             refresh();
@@ -480,7 +868,7 @@ public final class BoardController {
     public void onEditCard(com.personalkanban.domain.board.CardId cardId) {
         service.board().findCard(cardId).ifPresent(card ->
                 dialogs.cardDialog(new Dialogs.CardForm(card.title(), card.description(), card.color(),
-                                card.dueDate(), List.copyOf(card.labels())))
+                        card.dueDate(), List.copyOf(card.labels())), service.labelVocabulary())
                         .ifPresent(f -> guarded(() -> {
                             service.editCard(cardId, f.title(), f.description(), f.color(),
                                     f.dueDate(), f.labels());
@@ -564,12 +952,31 @@ public final class BoardController {
         });
     }
 
+    /**
+     * Makes the ACTIVE BOARD visible at all times: its name is shown in the
+     * toolbar and in the window title (next to the database file name).
+     * Called from rebuildAll — every path that changes the board (open, new,
+     * rename, delete, import, language, database switch) goes through it.
+     */
+    private void updateBoardIdentity() {
+        String name = service.boards().stream()
+                .filter(descriptor -> descriptor.id().equals(service.activeBoardId()))
+                .findFirst()
+                .map(BoardDescriptor::name)
+                .orElse("");
+        if (boardNameLabel != null) {
+            boardNameLabel.setText(name);
+        }
+        title.set(i18n.text("app.title") + " \u2014 " + name
+                + " \u2014 " + context.databasePath().getFileName());
+    }
+
     /** Runs a UI action, converting failures into an error dialog. */
     private void guarded(Runnable action) {
         try {
             action.run();
         } catch (RuntimeException e) {
-            dialogs.error(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            dialogs.error(Dialogs.describeFailure(e));
         }
     }
 
@@ -580,8 +987,12 @@ public final class BoardController {
     private void refresh() {
         LabelFilter filter = currentLabelFilter();
         columnsRow.getChildren().setAll(
-                ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter));
+                ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter,
+                        selectionMode, collapsedColumns, themeManager.isDark(), columnWidths));
         rebuildBoardMenu(); // keep the active-board marker in sync
+        syncCardViewMenu();
+        undoRedo.sync();
+        updateSelectionBarState();
     }
 
     private Button toolButton(String glyph, String textKey) {

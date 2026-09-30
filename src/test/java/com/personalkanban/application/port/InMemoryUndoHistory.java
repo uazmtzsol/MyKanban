@@ -12,6 +12,8 @@ import java.util.Optional;
 /** In-memory undo history test double; mirrors the JSON adapter's LIFO bound. */
 public final class InMemoryUndoHistory implements UndoHistory {
 
+    private static final int CAPACITY = 100;
+
     private final Map<BoardId, Deque<BoardMemento>> stacks = new HashMap<>();
 
     @Override

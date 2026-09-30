@@ -61,7 +61,7 @@ final class UndoRedoController {
         scene.getAccelerators().put(KeyCombination.valueOf("Shortcut+Shift+Z"), this::redo);
     }
 
-    private void sync() {
+    void sync() {
         canUndo.set(service.canUndo());
         canRedo.set(service.canRedo());
     }

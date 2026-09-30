@@ -168,6 +168,207 @@ class BoardServiceTest {
     }
 
     // ------------------------------------------------------------------
+    // Persistence failures: memory must stay consistent with the database
+    // ------------------------------------------------------------------
+
+    /** Repository whose save() fails while a flag is set (delegating wrapper). */
+    private static final class FailingSaveRepository implements com.personalkanban.application.port.BoardRepository {
+
+        private final com.personalkanban.application.port.InMemoryBoardRepository delegate =
+                new com.personalkanban.application.port.InMemoryBoardRepository();
+        private boolean failNextSave;
+
+        @Override
+        public java.util.List<BoardDescriptor> listBoards() {
+            return delegate.listBoards();
+        }
+
+        @Override
+        public BoardDescriptor createBoard(String name) {
+            return delegate.createBoard(name);
+        }
+
+        @Override
+        public void renameBoard(BoardId boardId, String newName) {
+            delegate.renameBoard(boardId, newName);
+        }
+
+        @Override
+        public void deleteBoard(BoardId boardId) {
+            delegate.deleteBoard(boardId);
+        }
+
+        @Override
+        public com.personalkanban.domain.board.BoardMemento load(BoardId boardId) {
+            return delegate.load(boardId);
+        }
+
+        @Override
+        public void save(BoardId boardId, com.personalkanban.domain.board.BoardMemento board) {
+            if (failNextSave) {
+                failNextSave = false;
+                throw new IllegalStateException("disk on fire");
+            }
+            delegate.save(boardId, board);
+        }
+    }
+
+    @Test
+    void failedSaveRollsBackModelAndLeavesUndoHistoryClean() {
+        FailingSaveRepository failing = new FailingSaveRepository();
+        BoardService service = new BoardService(failing, history, settings);
+        var id = service.addColumn("A", "", BoardColor.BLUE, WipLimit.unlimited());
+
+        failing.failNextSave = true;
+        assertThatThrownBy(() -> service.renameColumn(id, "B"))
+                .isInstanceOf(RuntimeException.class);
+
+        // The in-memory model shows the OLD title; nothing was persisted.
+        assertThat(service.column(id).title()).isEqualTo("A");
+        assertThat(failing.load(service.activeBoardId()).columns().get(0).title())
+                .isEqualTo("A");
+        // The failed transaction adds no undo entry (depth unchanged).
+        assertThat(history.depth(service.activeBoardId())).isEqualTo(1);
+
+        // The service keeps working once the failure is gone.
+        service.renameColumn(id, "B");
+        assertThat(service.column(id).title()).isEqualTo("B");
+    }
+
+    @Test
+    void failedUndoKeepsCurrentStateAndHistoryEntry() {
+        FailingSaveRepository failing = new FailingSaveRepository();
+        BoardService service = new BoardService(failing, history, settings);
+        var id = service.addColumn("A", "", BoardColor.BLUE, WipLimit.unlimited());
+        service.renameColumn(id, "B");
+        assertThat(service.canUndo()).isTrue();
+
+        failing.failNextSave = true;
+        assertThatThrownBy(service::undo).isInstanceOf(RuntimeException.class);
+
+        // Still showing B; the undo entry is back on the stack, retryable.
+        assertThat(service.column(id).title()).isEqualTo("B");
+        assertThat(service.canUndo()).isTrue();
+
+        failing.failNextSave = false;
+        service.undo();
+        assertThat(service.column(id).title()).isEqualTo("A");
+    }
+
+    // ------------------------------------------------------------------
+    // Delete-board repro (user report: deleting an empty board "did nothing")
+    // ------------------------------------------------------------------
+
+    @Test
+    void reproDeleteActiveEmptyBoardExactUiSequence() {
+        // Sequence: app starts with "My Board"; user creates an empty board
+        // (it becomes active), then Boards > Delete board, confirms.
+        BoardId myBoard = service.activeBoardId();
+        BoardId empty = service.createBoard("Prueba vacia");
+        service.openBoard(empty);
+
+        BoardId capturedByUi = service.activeBoardId(); // what onDeleteBoard captures
+        assertThat(service.boards().size() > 1).isTrue(); // the guard passes
+
+        service.deleteBoard(capturedByUi); // what the confirm callback runs
+        assertThat(service.boards()).extracting(BoardDescriptor::name)
+                .doesNotContain("Prueba vacia");
+        assertThat(service.activeBoardId()).isEqualTo(myBoard);
+    }
+
+    @Test
+    void reproDeleteBoardWithColumnsCardsAndUndoHistory() {
+        BoardId myBoard = service.activeBoardId();
+        BoardId full = service.createBoard("Con contenido");
+        service.openBoard(full);
+        var col = service.addColumn("C", "", BoardColor.BLUE, WipLimit.unlimited());
+        service.addCard(col, "t", "", BoardColor.BLUE);
+        service.renameColumn(col, "C2"); // undo history entry for this board
+
+        service.deleteBoard(full);
+
+        assertThat(service.boards()).hasSize(1);
+        assertThat(service.activeBoardId()).isEqualTo(myBoard);
+        // Deleted board must not resurrect via restart simulation.
+        BoardService restarted = new BoardService(repository, history, settings);
+        assertThat(restarted.boards()).extracting(BoardDescriptor::name).hasSize(1);
+    }
+
+    // ------------------------------------------------------------------
+    // Bulk (multi-selection) use cases
+    // ------------------------------------------------------------------
+
+    @Test
+    void bulkMoveIsAtomicWhenTargetWipWouldBeExceeded() {
+        var target = service.addColumn("Target", "", BoardColor.BLUE, WipLimit.of(2));
+        service.addCard(target, "t1", "", BoardColor.BLUE);
+        var source = service.addColumn("Source", "", BoardColor.GREEN, WipLimit.unlimited());
+        var c1 = service.addCard(source, "s1", "", BoardColor.BLUE);
+        var c2 = service.addCard(source, "s2", "", BoardColor.BLUE);
+
+        // 1 occupied + 2 moving > 2 → whole batch refused, memory intact.
+        assertThatThrownBy(() -> service.moveCardsToColumn(List.of(c1, c2), target))
+                .isInstanceOf(RuntimeException.class);
+        assertThat(service.board().findCard(c1)).isPresent();
+        assertThat(service.board().findCard(c2)).isPresent();
+        assertThat(service.column(target).cardCount()).isEqualTo(1);
+        // A refused transaction must not enter the undo history: the depth
+        // still equals 2 columns + 3 addCard commands, nothing more.
+        assertThat(history.depth(service.activeBoardId())).isEqualTo(5);
+    }
+
+    @Test
+    void bulkRecolorIsUndoableAsOneStep() {
+        var col = service.addColumn("A", "", BoardColor.BLUE, WipLimit.unlimited());
+        var c1 = service.addCard(col, "one", "", BoardColor.BLUE);
+        var c2 = service.addCard(col, "two", "", BoardColor.BLUE);
+
+        service.recolorCards(List.of(c1, c2), BoardColor.PINK);
+        assertThat(service.board().findCard(c1).orElseThrow().color()).isEqualTo(BoardColor.PINK);
+
+        service.undo();
+        assertThat(service.board().findCard(c1).orElseThrow().color()).isEqualTo(BoardColor.BLUE);
+        assertThat(service.board().findCard(c2).orElseThrow().color()).isEqualTo(BoardColor.BLUE);
+    }
+
+    @Test
+    void bulkAddAndRemoveLabelsRoundTrip() {
+        var col = service.addColumn("A", "", BoardColor.BLUE, WipLimit.unlimited());
+        var c1 = service.addCard(col, "one", "", BoardColor.BLUE, null, List.of("uaz"));
+        var c2 = service.addCard(col, "two", "", BoardColor.BLUE);
+
+        service.addLabelsToCards(List.of(c1, c2), List.of("uaz", "urgent"));
+        // c1 already had "uaz" (case-insensitive dedup keeps one chip).
+        assertThat(service.board().findCard(c1).orElseThrow().labels())
+                .containsExactly("uaz", "urgent");
+        assertThat(service.board().findCard(c2).orElseThrow().labels())
+                .containsExactly("uaz", "urgent");
+
+        service.removeLabelsFromCards(List.of(c1, c2), List.of("UAZ"));
+        assertThat(service.board().findCard(c1).orElseThrow().labels())
+                .containsExactly("urgent");
+        assertThat(service.board().findCard(c2).orElseThrow().labels()).containsExactly("urgent");
+    }
+
+    @Test
+    void collapsedColumnPreferencePersistsPerBoard() {
+        BoardId first = addBoard("Uno");
+        var col = service.addColumn("A", "", BoardColor.BLUE, WipLimit.unlimited());
+        BoardId second = addBoard("Dos");
+
+        assertThat(service.collapsedColumnsOf(first)).isEmpty();
+        service.setCollapsedColumns(first, java.util.Set.of(col.value(), "ghost-id"));
+
+        assertThat(service.collapsedColumnsOf(first))
+                .containsExactlyInAnyOrder(col.value(), "ghost-id");
+        assertThat(service.collapsedColumnsOf(second)).isEmpty(); // per-board isolation
+
+        // Clearing works too (empty set stored as empty string).
+        service.setCollapsedColumns(first, java.util.Set.of());
+        assertThat(service.collapsedColumnsOf(first)).isEmpty();
+    }
+
+    // ------------------------------------------------------------------
     // JSON export / import
     // ------------------------------------------------------------------
 

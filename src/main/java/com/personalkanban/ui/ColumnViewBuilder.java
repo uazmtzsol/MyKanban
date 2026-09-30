@@ -43,19 +43,76 @@ final class ColumnViewBuilder {
 
     static List<VBox> buildAll(BoardService service, I18n i18n, Dialogs dialogs,
                                BoardController board, UndoRedoController undoRedo,
-                               LabelFilter labelFilter) {
+                               LabelFilter labelFilter, boolean selectionMode,
+                               java.util.Set<String> collapsedIds, boolean dark,
+                               java.util.Map<String, Integer> columnWidths) {
         LabelFilter effective = labelFilter == null ? LabelFilter.none() : labelFilter;
         List<VBox> views = new ArrayList<>();
+        java.util.List<VBox> all = new ArrayList<>();
         for (BoardColumn column : service.board().columns()) {
-            views.add(buildOne(service, i18n, dialogs, board, undoRedo, column, effective));
+            boolean collapsed = collapsedIds.contains(column.id().value());
+            VBox view = buildOne(service, i18n, dialogs, board, undoRedo, column,
+                    effective, selectionMode, collapsed, dark);
+            Integer width = columnWidths.get(column.id().value());
+            if (width != null && !collapsed) {
+                view.setPrefWidth(Math.clamp(width, 200, 800));
+            }
+            all.add(view);
+        }
+        // Resize handles BETWEEN columns (drag the gap to change the left one's width).
+        for (int i = 0; i < all.size() - 1; i++) {
+            VBox left = all.get(i);
+            ColumnId leftId = (ColumnId) left.getUserData();
+            views.add(left);
+            views.add(resizeHandle(left, leftId.value(), board));
+        }
+        if (!all.isEmpty()) {
+            views.add(all.getLast());
         }
         return views;
     }
 
+    /**
+     * A slim gap between two columns; dragging it resizes the LEFT column
+     * live (min 120, max 800 px). Release persists the width per board.
+     */
+    private static VBox resizeHandle(VBox leftColumn, String leftColumnId, BoardController board) {
+        VBox handle = new VBox();
+        handle.getStyleClass().add("column-resize-handle");
+        handle.setPrefWidth(10);
+        handle.setMinWidth(10);
+        handle.setMaxWidth(10);
+        double[] startX = new double[1];
+        double[] startWidth = new double[1];
+        handle.setOnMousePressed(event -> {
+            startX[0] = event.getScreenX();
+            startWidth[0] = leftColumn.getWidth();
+            handle.getStyleClass().add("column-resize-active");
+            event.consume();
+        });
+        handle.setOnMouseDragged(event -> {
+            double delta = event.getScreenX() - startX[0];
+            double newWidth = Math.clamp(startWidth[0] + delta, 120, 800);
+            leftColumn.setPrefWidth(newWidth);
+            event.consume();
+        });
+        handle.setOnMouseReleased(event -> {
+            handle.getStyleClass().remove("column-resize-active");
+            board.onColumnWidthChanged(leftColumnId, (int) Math.round(leftColumn.getPrefWidth()));
+            event.consume();
+        });
+        return handle;
+    }
+
     private static VBox buildOne(BoardService service, I18n i18n, Dialogs dialogs,
                                  BoardController board, UndoRedoController undoRedo,
-                                 BoardColumn column, LabelFilter labelFilter) {
-        // --- Header: title + wip caption + menu ---
+                                 BoardColumn column, LabelFilter labelFilter, boolean selectionMode,
+                                 boolean collapsed, boolean dark) {
+        if (collapsed) {
+            return buildCollapsed(service, i18n, dialogs, board, column, dark);
+        }
+
+        // --- Header: title + wip caption + selection + collapse + menu ---
         Label title = new Label(column.title());
         title.getStyleClass().add("column-title");
 
@@ -66,17 +123,25 @@ final class ColumnViewBuilder {
         Button addCard = iconButton("\uFF0B", "pk-add-card", i18n.text("column.add.card"));
         addCard.setOnAction(e -> board.onAddCard(column.id()));
 
-        Button clearCards = iconButton("\uD83E\uDDF9", "pk-clear-cards", i18n.text("column.clear.cards"));
-        clearCards.setOnAction(e -> board.onClearColumn(column.id()));
+        Button selectCards = iconButton("\u2610", "pk-select-cards", i18n.text("column.select.cards"));
+        selectCards.setOnAction(e -> board.onToggleSelectionMode(column.id()));
+
+        Button collapse = iconButton("\u00AB", "pk-collapse", i18n.text("column.collapse"));
+        collapse.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
 
         MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
         MenuItem editItem = new MenuItem(i18n.text("column.edit"));
         editItem.setOnAction(e -> board.onEditColumn(column.id()));
+        MenuItem collapseItem = new MenuItem(i18n.text("column.collapse"));
+        collapseItem.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
         MenuItem deleteItem = new MenuItem(i18n.text("column.delete"));
         deleteItem.setOnAction(e -> board.onRemoveColumn(column.id()));
-        columnMenu.getItems().setAll(editItem, deleteItem, new SeparatorMenuItem());
+        MenuItem clearItem = new MenuItem(i18n.text("column.clear.cards"));
+        clearItem.setOnAction(e -> board.onClearColumn(column.id()));
+        columnMenu.getItems().setAll(editItem, collapseItem, deleteItem,
+                new SeparatorMenuItem(), clearItem);
 
-        HBox header = new HBox(6, title, wip, addCard, clearCards, columnMenu);
+        HBox header = new HBox(6, title, wip, addCard, selectCards, collapse, columnMenu);
         header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         header.getStyleClass().add("column-header");
 
@@ -87,7 +152,7 @@ final class ColumnViewBuilder {
 
         VBox view = new VBox(8);
         view.getStyleClass().addAll("column", ColorCss.styleClass(column.color()));
-        ColorCss.applyAccent(view, column.color());
+        ColorCss.applySurface(view, column.color(), dark);
         view.setUserData(column.id());
         view.setMinWidth(240);
         view.setPrefWidth(280);
@@ -100,7 +165,8 @@ final class ColumnViewBuilder {
         int cardIndex = 0;
         for (var card : column.cards()) {
             if (labelFilter.matches(card)) {
-                cardsBox.getChildren().add(CardViewBuilder.build(service, i18n, dialogs, board, card));
+                cardsBox.getChildren().add(CardViewBuilder.build(
+                        service, i18n, dialogs, board, card, selectionMode, dark));
                 cardsBox.getChildren().add(slotRegion(column.id(), cardIndex + 1, board));
                 cardIndex++;
             }
@@ -111,7 +177,54 @@ final class ColumnViewBuilder {
         VBox.setVgrow(cardsScroll, javafx.scene.layout.Priority.ALWAYS);
         view.getChildren().add(cardsScroll);
 
-        installCardDropTarget(cardsBox, column.id(), service, board, Integer.MAX_VALUE);
+        // Drop target = the WHOLE cards body (scroll included), so an EMPTY
+        // column is droppable too: the content box alone is zero-sized when
+        // empty, and drops over it used to be silently rejected.
+        installCardDropTarget(cardsScroll, column.id(), service, board, Integer.MAX_VALUE);
+        installColumnDragSource(view, column.id(), service, board);
+        return view;
+    }
+
+    /**
+     * Collapsed column: a narrow strip with the vertical title (Trello-like),
+     * the card count, and the expand button — enough to identify the column
+     * without letting its content distract.
+     */
+    private static VBox buildCollapsed(BoardService service, I18n i18n, Dialogs dialogs,
+                                       BoardController board, BoardColumn column, boolean dark) {
+        Button expand = iconButton("\u00BB", "pk-expand", i18n.text("column.expand"));
+        expand.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
+        expand.setTooltip(new Tooltip(i18n.text("column.expand")));
+
+        Label verticalTitle = new Label(column.title());
+        verticalTitle.getStyleClass().add("column-title-vertical");
+        verticalTitle.setRotate(-90);
+        if (!column.description().isBlank()) {
+            Tooltip.install(verticalTitle, new Tooltip(column.description()));
+        }
+        javafx.scene.Group verticalText = new javafx.scene.Group(verticalTitle);
+        VBox.setVgrow(verticalText, javafx.scene.layout.Priority.ALWAYS);
+
+        Label count = new Label(wipText(column));
+        count.getStyleClass().add("column-wip");
+        count.getStyleClass().add(column.isFull() ? "wip-full" : "wip-ok");
+
+        MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
+        MenuItem expandItem = new MenuItem(i18n.text("column.expand"));
+        expandItem.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
+        MenuItem editItem = new MenuItem(i18n.text("column.edit"));
+        editItem.setOnAction(e -> board.onEditColumn(column.id()));
+        columnMenu.getItems().setAll(expandItem, editItem);
+
+        VBox view = new VBox(6, expand, columnMenu, verticalText, count);
+        view.setAlignment(javafx.geometry.Pos.TOP_CENTER);
+        view.getStyleClass().addAll("column", "collapsed", ColorCss.styleClass(column.color()));
+        ColorCss.applySurface(view, column.color(), dark);
+        view.setUserData(column.id());
+        view.setMinWidth(52);
+        view.setPrefWidth(52);
+        view.setMaxWidth(52);
+
         installColumnDragSource(view, column.id(), service, board);
         return view;
     }
@@ -173,16 +286,16 @@ final class ColumnViewBuilder {
         });
     }
 
-    /** The whole cards area accepts drops as a fallback: append at the end. */
-    private static void installCardDropTarget(VBox cardsBox, ColumnId columnId,
+    /** The whole cards area (scroll included) accepts card drops: append at the end. */
+    private static void installCardDropTarget(javafx.scene.Node dropArea, ColumnId columnId,
                                               BoardService service, BoardController board, int slotIndex) {
-        cardsBox.setOnDragOver(event -> {
+        dropArea.setOnDragOver(event -> {
             if (event.getDragboard().hasContent(CARD_FORMAT)) {
                 event.acceptTransferModes(TransferMode.MOVE);
                 event.consume();
             }
         });
-        cardsBox.setOnDragDropped(event -> {
+        dropArea.setOnDragDropped(event -> {
             var dragboard = event.getDragboard();
             if (dragboard.hasContent(CARD_FORMAT)) {
                 CardId dragged = new CardId((String) dragboard.getContent(CARD_FORMAT));

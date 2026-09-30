@@ -1,10 +1,16 @@
 package com.personalkanban.ui;
 
 import com.personalkanban.domain.board.BoardColor;
+import com.personalkanban.domain.board.BoardColumn;
+import com.personalkanban.domain.board.ColumnId;
+import com.personalkanban.domain.board.LabelSuggester;
 import com.personalkanban.domain.board.WipLimit;
+import javafx.collections.FXCollections;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.ColorPicker;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -14,6 +20,7 @@ import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.paint.Color;
+import javafx.util.StringConverter;
 
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -34,6 +41,10 @@ final class Dialogs {
     /** Result of the card dialog. */
     record CardForm(String title, String description, BoardColor color,
                     LocalDate dueDate, List<String> labels) {
+    }
+
+    /** Result of the bulk labels dialog: which operation and which labels. */
+    record BulkLabelsForm(boolean add, List<String> labels) {
     }
 
     private final I18n i18n;
@@ -88,7 +99,7 @@ final class Dialogs {
     // Card dialog
     // ------------------------------------------------------------------
 
-    Optional<CardForm> cardDialog(CardForm initial) {
+    Optional<CardForm> cardDialog(CardForm initial, List<String> labelVocabulary) {
         TextField titleField = new TextField(initial == null ? "" : initial.title());
         TextArea descriptionArea = new TextArea(initial == null ? "" : initial.description());
         descriptionArea.setPrefRowCount(3);
@@ -98,6 +109,8 @@ final class Dialogs {
         TextField labelsField = new TextField(initial == null || initial.labels().isEmpty()
                 ? "" : String.join(", ", initial.labels()));
         labelsField.setPromptText(i18n.text("card.labels.prompt"));
+        List<String> ownLabels = initial == null ? List.of() : initial.labels();
+        LabelAutoComplete.attach(labelsField, new LabelSuggester(labelVocabulary), () -> ownLabels);
 
         Dialog<CardForm> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("dialog.card.title"));
@@ -131,6 +144,94 @@ final class Dialogs {
     }
 
     // ------------------------------------------------------------------
+    // Bulk (multi-selection) dialogs
+    // ------------------------------------------------------------------
+
+    /** Labels for N selected cards: one field, add-or-remove selector. */
+    Optional<BulkLabelsForm> bulkLabelsDialog(int selectedCount, List<String> labelVocabulary) {
+        TextField labelsField = new TextField();
+        labelsField.setPromptText(i18n.text("bulk.labels.prompt"));
+        LabelAutoComplete.attach(labelsField, new LabelSuggester(labelVocabulary), List::of);
+
+        ComboBox<String> mode = new ComboBox<>();
+        mode.getItems().addAll(i18n.text("bulk.add"), i18n.text("bulk.remove"));
+        mode.getSelectionModel().selectFirst();
+
+        Dialog<BulkLabelsForm> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("bulk.labels.title"));
+        dialog.setHeaderText(i18n.text("bulk.labels.header", selectedCount));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(mode, 0, 0);
+        grid.add(labelsField, 1, 0);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(button -> button == ButtonType.OK
+                ? new BulkLabelsForm(mode.getSelectionModel().getSelectedIndex() == 0,
+                        parseLabels(labelsField.getText()))
+                : null);
+        return dialog.showAndWait();
+    }
+
+    /** One color applied to every selected card. */
+    Optional<BoardColor> bulkColorDialog(int selectedCount) {
+        ColorPicker picker = colorPicker(BoardColor.DEFAULT);
+        picker.getCustomColors().setAll(BoardColor.palette().stream()
+                .map(color -> Color.web(color.hex()))
+                .toList());
+
+        Dialog<BoardColor> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("bulk.color.title"));
+        dialog.setHeaderText(i18n.text("bulk.color.header", selectedCount));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(new Label(i18n.text("dialog.color")), 0, 0);
+        grid.add(picker, 1, 0);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(button ->
+                button == ButtonType.OK ? selectedColor(picker) : null);
+        return dialog.showAndWait();
+    }
+
+    /** Target column chooser for a bulk move; defaults to the first other column. */
+    Optional<ColumnId> bulkMoveDialog(List<BoardColumn> columns, ColumnId sourceColumnId,
+                                      int selectedCount) {
+        ComboBox<BoardColumn> combo = new ComboBox<>(
+                FXCollections.observableArrayList(columns));
+        combo.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(BoardColumn column) {
+                return column == null ? "" : column.title();
+            }
+
+            @Override
+            public BoardColumn fromString(String string) {
+                return null;
+            }
+        });
+        columns.stream()
+                .filter(column -> !column.id().equals(sourceColumnId))
+                .findFirst()
+                .ifPresent(column -> combo.getSelectionModel().select(column));
+
+        Dialog<ColumnId> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("bulk.move.title"));
+        dialog.setHeaderText(i18n.text("bulk.move.header", selectedCount));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(new Label(i18n.text("bulk.move.target")), 0, 0);
+        grid.add(combo, 1, 0);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(button ->
+                button == ButtonType.OK && combo.getValue() != null
+                        ? combo.getValue().id()
+                        : null);
+        return dialog.showAndWait();
+    }
+
+    // ------------------------------------------------------------------
     // Color selection: named palette + free custom color in one control
     // ------------------------------------------------------------------
 
@@ -160,9 +261,14 @@ final class Dialogs {
     // ------------------------------------------------------------------
 
     Optional<String> promptText(String header, String initial) {
+        return promptText(header, i18n.text("dialog.title.label"), initial);
+    }
+
+    /** Free-text prompt with a custom content label. */
+    Optional<String> promptText(String header, String contentText, String initial) {
         TextInputDialog dialog = new TextInputDialog(initial == null ? "" : initial);
         dialog.setHeaderText(header);
-        dialog.setContentText(i18n.text("dialog.title.label"));
+        dialog.setContentText(contentText);
         return dialog.showAndWait();
     }
 
@@ -184,6 +290,28 @@ final class Dialogs {
         alert.showAndWait();
     }
 
+    /**
+     * A single-line failure summary for error dialogs. Plain messages often
+     * hide the real cause (e.g. a generic save failure wrapping a SQLite
+     * constraint violation), so the deepest root cause is appended — that is
+     * usually the actionable part.
+     */
+    static String describeFailure(RuntimeException failure) {
+        String top = failure.getMessage() == null || failure.getMessage().isBlank()
+                ? failure.getClass().getSimpleName()
+                : failure.getMessage();
+        Throwable cause = failure.getCause();
+        while (cause != null && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        if (cause != null && cause.getMessage() != null
+                && !cause.getMessage().isBlank()
+                && !cause.getMessage().equals(top)) {
+            return top + "\n\n" + cause.getMessage();
+        }
+        return top;
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
@@ -195,14 +323,88 @@ final class Dialogs {
         return grid;
     }
 
-    /** Splits comma-separated labels into the normalized list the domain expects. */
+    /**
+     * Splits labels separated by commas OR whitespace, in any mix and
+     * amount: {@code "et1 et2 et3"}, {@code "et1,et2,et3"} and
+     * {@code "et1,   et2  et3"} all yield [et1, et2, et3]. Used by the card
+     * dialog, the bulk dialogs and the board filter.
+     */
     static List<String> parseLabels(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
         }
-        return Arrays.stream(text.split(","))
+        return Arrays.stream(text.split("[,\\s\uFF0C]+"))
                 .map(String::strip)
                 .filter(part -> !part.isEmpty())
+                .toList();
+    }
+
+    // ------------------------------------------------------------------
+    // New-board column seeding
+    // ------------------------------------------------------------------
+
+    /** How the columns of a new board are chosen. */
+    enum NewBoardColumns { STANDARD, CUSTOM, EMPTY }
+
+    /**
+     * Asks how to seed the columns of a new board. The standard Kanban
+     * template (three columns) is preselected because it is the most common
+     * choice; the labels are localized and the answer is mapped back by
+     * label, not by enum name.
+     */
+    Optional<NewBoardColumns> newBoardColumnsDialog() {
+        String standard = i18n.text("board.columns.choice.standard");
+        String custom = i18n.text("board.columns.choice.custom");
+        String empty = i18n.text("board.columns.choice.empty");
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(standard,
+                List.of(standard, custom, empty));
+        dialog.setTitle(i18n.text("board.new"));
+        dialog.setHeaderText(i18n.text("board.columns.choice.header"));
+        dialog.setContentText(i18n.text("board.columns.choice.label"));
+        return dialog.showAndWait().map(answer -> {
+            if (answer.equals(custom)) {
+                return NewBoardColumns.CUSTOM;
+            }
+            if (answer.equals(empty)) {
+                return NewBoardColumns.EMPTY;
+            }
+            return NewBoardColumns.STANDARD;
+        });
+    }
+
+    /** Upper bound of columns a new board can be seeded with. */
+    static final int MAX_NEW_BOARD_COLUMNS = 12;
+
+    /**
+     * Parses the "new board columns" answer, accepting both forms the user
+     * was offered: a plain number ({@code "4"}) yields that many
+     * default-named columns ({@code defaultName} localizes "Columna 1"...),
+     * otherwise the text is comma-separated column titles ({@code "Por
+     * hacer, Haciendo, Hecho"}). Comma-only splitting on purpose: column
+     * titles may contain spaces.
+     *
+     * @return the column titles; {@code List.of()} for blank input; {@code
+     *         null} when the input is a number outside 1..{link
+     *         #MAX_NEW_BOARD_COLUMNS} (caller shows a validation message).
+     */
+    static List<String> parseNewBoardColumns(String raw,
+                                             java.util.function.IntFunction<String> defaultName) {
+        String text = raw == null ? "" : raw.strip();
+        if (text.isEmpty()) {
+            return List.of();
+        }
+        if (text.matches("\\d{1,3}")) {
+            int count = Integer.parseInt(text);
+            if (count < 1 || count > MAX_NEW_BOARD_COLUMNS) {
+                return null;
+            }
+            return java.util.stream.IntStream.rangeClosed(1, count)
+                    .mapToObj(defaultName)
+                    .toList();
+        }
+        return Arrays.stream(text.split(","))
+                .map(String::strip)
+                .filter(title -> !title.isEmpty())
                 .toList();
     }
 

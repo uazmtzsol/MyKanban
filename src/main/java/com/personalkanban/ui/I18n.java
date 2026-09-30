@@ -15,10 +15,9 @@ final class I18n {
 
     static final String BUNDLE_NAME = "i18n.messages";
 
-    /** The 8 languages of the original app. */
+    /** The maintained languages: English, French, Spanish, German. */
     static final List<Locale> SUPPORTED = List.of(
-            Locale.of("en"), Locale.of("fr"), Locale.of("es"), Locale.of("de"),
-            Locale.of("ru"), Locale.of("hi"), Locale.of("zh"), Locale.of("ja"));
+            Locale.of("en"), Locale.of("fr"), Locale.of("es"), Locale.of("de"));
 
     private ResourceBundle bundle;
 

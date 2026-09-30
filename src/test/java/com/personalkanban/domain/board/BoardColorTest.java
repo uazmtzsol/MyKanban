@@ -30,6 +30,19 @@ class BoardColorTest {
     }
 
     @Test
+    void storedValueIsNeverNullForPaletteAndCustomColors() {
+        // Regression: persisting color.name() for a custom color returned null
+        // and tripped the NOT NULL constraint ("Could not save board ...").
+        for (BoardColor preset : BoardColor.palette()) {
+            assertThat(preset.stored()).isNotBlank();
+            assertThat(BoardColor.fromStored(preset.stored())).isEqualTo(preset);
+        }
+        BoardColor custom = BoardColor.fromHex("#123abc");
+        assertThat(custom.stored()).isEqualTo("#123abc");
+        assertThat(BoardColor.fromStored(custom.stored())).isEqualTo(custom);
+    }
+
+    @Test
     void legacyNamesStillParse() {
         assertThat(BoardColor.fromStored("pink")).isEqualTo(BoardColor.PINK);
         assertThat(BoardColor.fromStored("PINK")).isEqualTo(BoardColor.PINK);

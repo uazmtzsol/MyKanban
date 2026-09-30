@@ -16,6 +16,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
@@ -67,8 +68,14 @@ final class CardDetailWindow {
         save.setOnAction(e -> onSave());
         Button cancel = new Button(i18n.text("dialog.cancel"));
         cancel.setOnAction(e -> stage.close());
+        Button help = new Button("?");
+        help.getStyleClass().add("md-help-button");
+        help.setTooltip(new Tooltip(i18n.text("card.md.help.tip")));
+        help.setOnAction(e -> openCheatSheet());
+        Region helpGap = new Region();
+        helpGap.setMinWidth(14);
         ButtonBar buttons = new ButtonBar();
-        buttons.getButtons().addAll(save, cancel);
+        buttons.getButtons().addAll(help, helpGap, save, cancel);
         buttons.setPadding(new Insets(8));
 
         BorderPane layout = new BorderPane();
@@ -121,5 +128,43 @@ final class CardDetailWindow {
         String markdown = editor.getText();
         board.onDescriptionSaved(cardId, markdown);
         stage.close();
+    }
+
+    /**
+     * Quick syntax reference in a separate, resizable window: literal syntax
+     * next to its live rendering. Stays open while the user keeps editing —
+     * non-modal by design, like the detail window itself.
+     */
+    private void openCheatSheet() {
+        boolean dark = themeManager.isDark();
+        Stage sheet = new Stage();
+        sheet.initOwner(stage);
+        sheet.setTitle(i18n.text("card.md.help.title"));
+
+        Label caption = new Label(i18n.text("card.md.help.caption"));
+        caption.getStyleClass().add("detail-title");
+        caption.setWrapText(true);
+        BorderPane.setMargin(caption, new Insets(10, 10, 0, 10));
+
+        WebView content = new WebView();
+        content.getEngine().setJavaScriptEnabled(false);
+        content.getEngine().loadContent(Markdown.cheatsheetDocument(
+                i18n.text("card.md.help.write"),
+                i18n.text("card.md.help.see"),
+                i18n.text("card.md.editor.tip"),
+                i18n.text("card.md.help.sample"),
+                dark ? "#e5e7eb" : "#1f2937",
+                dark ? "#16181d" : "#ffffff",
+                dark ? "#262a33" : "#f0f2f5",
+                dark ? "#343947" : "#d7dbe2",
+                dark ? "#42a5f5" : "#1976d2"));
+
+        BorderPane sheetLayout = new BorderPane(content);
+        sheetLayout.setTop(caption);
+        sheetLayout.getStyleClass().add("detail-window");
+        Scene sheetScene = new Scene(sheetLayout, 640, 560);
+        sheetScene.getStylesheets().add(themeManager.stylesheet());
+        sheet.setScene(sheetScene);
+        sheet.show();
     }
 }

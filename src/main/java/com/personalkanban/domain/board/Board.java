@@ -1,12 +1,16 @@
 package com.personalkanban.domain.board;
 
 import com.personalkanban.domain.exception.NotFoundException;
+import com.personalkanban.domain.exception.WipLimitBulkException;
+import com.personalkanban.domain.exception.WipLimitExceededException;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 
@@ -112,6 +116,115 @@ public final class Board {
                 .orElseThrow(() -> new NotFoundException(cardId));
         column.removeCard(cardId);
         events.add(new CardRemoved(cardId, column.id(), Instant.now()));
+    }
+
+    /**
+     * Bulk: adds labels to the given cards (dedup is case-insensitive, so an
+     * existing "uaz" plus "UAZ" stays a single label).
+     */
+    public void addLabels(List<CardId> cardIds, List<String> labels) {
+        if (labels.isEmpty() || cardIds.isEmpty()) {
+            return;
+        }
+        for (CardId cardId : cardIds) {
+            Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+            List<String> merged = new ArrayList<>(card.labels());
+            for (String label : labels) {
+                boolean exists = merged.stream().anyMatch(existing ->
+                        existing.equalsIgnoreCase(label.strip()));
+                if (!exists) {
+                    merged.add(label.strip());
+                }
+            }
+            card.tag(merged);
+        }
+    }
+
+    /** Bulk: removes the given labels (case-insensitive) from the given cards. */
+    public void removeLabels(List<CardId> cardIds, List<String> labels) {
+        if (labels.isEmpty() || cardIds.isEmpty()) {
+            return;
+        }
+        for (CardId cardId : cardIds) {
+            Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+            List<String> remaining = card.labels().stream()
+                    .filter(existing -> labels.stream().noneMatch(l -> l.strip().equalsIgnoreCase(existing)))
+                    .toList();
+            card.tag(remaining);
+        }
+    }
+
+    /** Bulk: recolors all the given cards. */
+    public void recolorCards(List<CardId> cardIds, BoardColor color) {
+        Objects.requireNonNull(color, "color");
+        for (CardId cardId : cardIds) {
+            findCard(cardId).orElseThrow(() -> new NotFoundException(cardId)).recolor(color);
+        }
+    }
+
+    /**
+     * Bulk: removes several cards, wherever they live. Unknown ids throw.
+     */
+    public void removeCards(List<CardId> cardIds) {
+        for (CardId cardId : cardIds) {
+            BoardColumn column = findColumnOf(cardId)
+                    .orElseThrow(() -> new NotFoundException(cardId));
+            column.removeCard(cardId);
+            events.add(new CardRemoved(cardId, column.id(), Instant.now()));
+        }
+    }
+
+    /**
+     * Toggles one label on one card (system flags like Urgente/Importante).
+     * Adding respects the label cap; removing is case-insensitive. Returns
+     * the new state so the UI can reflect it immediately.
+     */
+    public boolean toggleLabel(CardId cardId, String label) {
+        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+        if (card.hasLabelIgnoreCase(label)) {
+            card.tag(card.labels().stream()
+                    .filter(existing -> !existing.equalsIgnoreCase(label))
+                    .toList());
+            return false;
+        }
+        List<String> merged = new ArrayList<>(card.labels());
+        merged.add(label);
+        card.tag(merged);
+        return true;
+    }
+
+    /**
+     * Bulk: moves the given cards into the target column, appending them in
+     * list order. Atomic: if the move would push the target past its WIP
+     * limit, nothing changes and a {@link WipLimitExceededException} carrying
+     * the required extra capacity is thrown.
+     */
+    public void moveCardsToColumn(List<CardId> cardIds, ColumnId targetColumnId) {
+        BoardColumn target = columnOrThrow(targetColumnId);
+        // Validation pass: unknown ids throw before any mutation, and the
+        // whole batch must fit the target's WIP limit (all-or-nothing).
+        int moving = 0;
+        for (CardId cardId : cardIds) {
+            BoardColumn source = findColumnOf(cardId)
+                    .orElseThrow(() -> new NotFoundException(cardId));
+            if (!source.id().equals(target.id())) {
+                moving++;
+            }
+        }
+        if (moving > 0 && target.wipLimit().isExceededBy(target.cardCount() + moving)) {
+            int limit = target.wipLimit().asOptional().orElseThrow();
+            throw new WipLimitBulkException(target.id(), limit,
+                    moving - (limit - target.cardCount()));
+        }
+        // Transfer pass: preserves the caller's selection order. Cards already
+        // in the target stay where they are.
+        for (CardId cardId : cardIds) {
+            BoardColumn source = findColumnOf(cardId)
+                    .orElseThrow(() -> new NotFoundException(cardId));
+            if (!source.id().equals(target.id())) {
+                source.transferCardsTo(target, List.of(cardId));
+            }
+        }
     }
 
     public void removeAllCards(ColumnId columnId) {

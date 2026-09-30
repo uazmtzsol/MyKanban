@@ -22,6 +22,16 @@
     -fx-padding: 0 8 0 0;
 }
 
+/* Active board name, always visible in the toolbar. */
+.board-name {
+    -fx-background-color: #2b2f38;
+    -fx-background-radius: 10;
+    -fx-padding: 2 12 2 12;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-text-fill: #42a5f5;
+}
+
 .tool-button {
     -fx-background-color: transparent;
     -fx-border-color: #3a3f4b;
@@ -55,11 +65,16 @@
 
 .card {
     -fx-background-color: #262a33;
-    -fx-background-radius: 6;
+    -fx-background-radius: 10;
     -fx-border-color: #343947;
     -fx-border-width: 1;
-    -fx-border-radius: 6;
-    -fx-padding: 8;
+    -fx-border-radius: 10;
+    -fx-padding: 10;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 4, 0.15, 0, 2);
+}
+.card:hover {
+    -fx-border-color: #4c5568;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 8, 0.2, 0, 3);
 }
 
 .card-title { -fx-font-weight: bold; }
@@ -87,6 +102,85 @@
 .card.pk-color-pink   { -fx-border-color: #ec407a; -fx-border-width: 0 0 0 4; }
 .card.pk-color-gray   { -fx-border-color: #78909c; -fx-border-width: 0 0 0 4; }
 
+/* Resize handle between columns (drag to change the left column's width). */
+.column-resize-handle {
+    -fx-background-color: transparent;
+    -fx-cursor: h-resize;
+}
+.column-resize-handle:hover,
+.column-resize-active {
+    -fx-background-color: #3d4656;
+    -fx-background-radius: 2;
+}
+
+/* Collapsed column: narrow vertical strip (Trello-like). */
+.column.collapsed {
+    -fx-padding: 8 6 8 6;
+    -fx-alignment: top-center;
+}
+.column-title-vertical {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: #d1d5db;
+}
+.pk-collapse, .pk-expand { -fx-padding: 2 6 2 6; }
+
+/* Autocomplete suggestions popup. */
+.label-suggestions {
+    -fx-background-color: #262a33;
+    -fx-border-color: #4c5568;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.6), 8, 0.2, 0, 3);
+}
+.label-suggestions .list-cell:filled,
+.label-suggestions .list-cell { -fx-background-color: transparent; -fx-text-fill: #e5e7eb; }
+.label-suggestions .list-cell:filled:selected {
+    -fx-background-color: #1c2b3f;
+    -fx-text-fill: #42a5f5;
+}
+
+/* Label chips: pill badges, deterministic color per label. */
+.card-label-chip {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 9;
+    -fx-padding: 1 8 1 8;
+}
+.chip-color-0 { -fx-background-color: #1a3350; -fx-text-fill: #90caf9; }
+.chip-color-1 { -fx-background-color: #1d3a24; -fx-text-fill: #a5d6a7; }
+.chip-color-2 { -fx-background-color: #46201f; -fx-text-fill: #ef9a9a; }
+.chip-color-3 { -fx-background-color: #443019; -fx-text-fill: #ffcc80; }
+.chip-color-4 { -fx-background-color: #3a2340; -fx-text-fill: #ce93d8; }
+.chip-color-5 { -fx-background-color: #143c38; -fx-text-fill: #80cbc4; }
+.chip-color-6 { -fx-background-color: #40202e; -fx-text-fill: #f48fb1; }
+.chip-color-7 { -fx-background-color: #2c333d; -fx-text-fill: #b0bec5; }
+
+/* Quick flags on cards: ★ Importante, ! Urgente. */
+.card-flag {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0 3 0 3;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+.card-flag-off { -fx-text-fill: #4c5568; }
+.card-flag-off:hover { -fx-text-fill: #6b768c; }
+.card-flag-on.card-flag-important { -fx-text-fill: #fbbf24; }
+.card-flag-on.card-flag-urgent { -fx-text-fill: #f87171; }
+
+/* Multi-selection mode: selectable/selected cards. */
+.card-selectable {
+    -fx-cursor: hand;
+    -fx-border-style: dashed;
+}
+.card-selected {
+    -fx-background-color: #1c2b3f;
+    -fx-border-color: #42a5f5;
+    -fx-border-width: 2;
+}
+.selection-count { -fx-font-weight: bold; -fx-text-fill: #42a5f5; }
+
 /* Drop slots between cards: invisible gap that becomes an insertion line. */
 .drop-slot {
     -fx-pref-height: 8;
@@ -108,6 +202,9 @@
     -fx-font-family: Consolas, monospace;
     -fx-font-size: 13px;
     -fx-background-color: #262a33;
+}
+.md-help-button {
+    -fx-font-weight: bold;
 }
 
 .color-swatch { -fx-arc-width: 4; -fx-arc-height: 4; }

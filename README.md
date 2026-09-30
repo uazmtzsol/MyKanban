@@ -29,7 +29,7 @@ leaves your machine.
 - WIP limits with a visible `count/limit` badge (red when full)
 - 8-color palette for columns and cards
 - Dark mode toggle (persisted)
-- 8 languages: EN, FR, ES, DE, RU, HI, ZH, JA (persisted, applied instantly)
+- 4 languages: EN, FR, ES, DE (persisted, applied instantly)
 - **Undo / redo** (`Ctrl+Z` / `Ctrl+Shift+Z`) — persistent, survives restarts
 - Persistence: SQLite (WAL, foreign keys) with versioned schema migrations
 

@@ -35,6 +35,7 @@ public final class AppContext implements AutoCloseable {
     private static final String SETTING_THEME = "ui.theme";
     private static final String CONFIG_DB_PATH = "db.path";
     private static final String CONFIG_RECENT_PREFIX = "db.recent.";
+    private static final String CONFIG_LAST_DIR = "io.lastdir";
     private static final int RECENT_LIMIT = 5;
 
     private final Path configFile;
@@ -91,6 +92,62 @@ public final class AppContext implements AutoCloseable {
     /** Most recently opened databases, most recent first (for the menu). */
     public List<Path> recentDatabases() {
         return List.copyOf(recentDatabases);
+    }
+
+    /**
+     * The directory last used for export/import (machine-local memory so the
+     * file chooser opens where the user last worked). Shared by export and
+     * import on purpose: both are "where do my board files live".
+     * {@code empty} when never set, when the memory is unreadable, or — per
+     * the requirement — when the remembered folder no longer exists (e.g. a
+     * removed USB drive): the chooser then falls back to its system default.
+     */
+    public java.util.Optional<Path> lastTransferDirectory() {
+        Properties properties = new Properties();
+        if (!Files.isRegularFile(configFile)) {
+            return java.util.Optional.empty();
+        }
+        try (InputStream in = Files.newInputStream(configFile)) {
+            properties.load(in);
+        } catch (IOException e) {
+            return java.util.Optional.empty();
+        }
+        String value = properties.getProperty(CONFIG_LAST_DIR);
+        if (value == null || value.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        Path dir = Path.of(value);
+        return Files.isDirectory(dir) ? java.util.Optional.of(dir) : java.util.Optional.empty();
+    }
+
+    /**
+     * Remember {@code dir} as the last export/import folder. Only directories
+     * that exist at this moment are stored; the read side re-validates on
+     * every use, so a folder that vanishes later (USB unplugged) degrades to
+     * the system default chooser location.
+     */
+    public void rememberTransferDirectory(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        Path directory = dir.toAbsolutePath().normalize();
+        if (!Files.isDirectory(directory)) {
+            return; // never remember a non-existent folder
+        }
+        Properties properties = new Properties();
+        if (Files.isRegularFile(configFile)) {
+            try (InputStream in = Files.newInputStream(configFile)) {
+                properties.load(in);
+            } catch (IOException ignored) {
+                // start from scratch rather than fail the transfer
+            }
+        }
+        properties.setProperty(CONFIG_LAST_DIR, directory.toString());
+        try (OutputStream out = Files.newOutputStream(configFile)) {
+            properties.store(out, "Personal Kanban launcher config");
+        } catch (IOException e) {
+            // best-effort memory; the transfer itself is unaffected
+        }
     }
 
     /** Moves the target to the front of the recents list, capping the size. */
@@ -160,6 +217,18 @@ public final class AppContext implements AutoCloseable {
         for (int i = 0; i < recentDatabases.size(); i++) {
             properties.setProperty(CONFIG_RECENT_PREFIX + i, recentDatabases.get(i).toString());
         }
+        Properties previous = new Properties();
+        if (Files.isRegularFile(configFile)) {
+            try (InputStream in = Files.newInputStream(configFile)) {
+                previous.load(in);
+            } catch (IOException ignored) {
+                // unreadable old config: rewrite from scratch
+            }
+        }
+        String lastDir = previous.getProperty(CONFIG_LAST_DIR);
+        if (lastDir != null && !lastDir.isBlank()) {
+            properties.setProperty(CONFIG_LAST_DIR, lastDir);
+            }
         try {
             Files.createDirectories(configFile.getParent());
             try (OutputStream out = Files.newOutputStream(configFile)) {

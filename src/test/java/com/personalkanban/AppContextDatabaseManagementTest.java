@@ -1,6 +1,8 @@
 package com.personalkanban;
 
+import com.personalkanban.application.BoardService;
 import com.personalkanban.domain.board.BoardColor;
+import com.personalkanban.domain.board.BoardDescriptor;
 import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.WipLimit;
 import org.junit.jupiter.api.Test;
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -116,6 +119,55 @@ class AppContextDatabaseManagementTest {
         Path defaultDb = tempDir.resolve("fallback.db");
         try (AppContext context = AppContext.createWith(configFile(), defaultDb)) {
             assertThat(context.databasePath()).isEqualTo(defaultDb.toAbsolutePath().normalize());
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Delete-board repro with the REAL stack (SQLite + JSON undo history):
+    // the user reported "deleting a board did nothing" from the portable app.
+    // ------------------------------------------------------------------
+
+    @Test
+    void deleteActiveEmptyBoardWithRealSqliteStack() {
+        try (AppContext context = AppContext.openAt(
+                tempDir.resolve("kanban.db"), configFile())) {
+            BoardService service = context.boardService();
+            BoardId original = service.activeBoardId();
+
+            BoardId empty = service.createBoard("Prueba vacia");
+            service.openBoard(empty); // it is now the active board
+
+            // Exactly what onDeleteBoard does after the confirmation:
+            service.deleteBoard(service.activeBoardId());
+
+            assertThat(service.boards()).extracting(BoardDescriptor::name)
+                    .doesNotContain("Prueba vacia");
+            assertThat(service.activeBoardId()).isEqualTo(original);
+        }
+    }
+
+    @Test
+    void deleteActiveFullBoardWithRealSqliteStackAndHistory() {
+        try (AppContext context = AppContext.openAt(
+                tempDir.resolve("kanban.db"), configFile())) {
+            BoardService service = context.boardService();
+            BoardId original = service.activeBoardId();
+
+            BoardId full = service.createBoard("Con todo");
+            service.openBoard(full);
+            var col = service.addColumn("C1", "", BoardColor.BLUE, WipLimit.unlimited());
+            service.addCard(col, "t1", "", BoardColor.BLUE);
+            service.addCard(col, "t2", "", BoardColor.BLUE, null, List.of("Urgente"));
+
+            // Undo history exists for this board before deletion.
+            assertThat(service.canUndo()).isTrue();
+
+            service.deleteBoard(service.activeBoardId());
+
+            assertThat(service.boards()).extracting(BoardDescriptor::name)
+                    .doesNotContain("Con todo");
+            assertThat(service.activeBoardId()).isEqualTo(original);
+            assertThat(service.canUndo()).isFalse(); // deleted board's history gone
         }
     }
 }

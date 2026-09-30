@@ -43,7 +43,10 @@ public final class SqliteBoardRepository implements BoardRepository {
 
     @Override
     public List<BoardDescriptor> listBoards() {
-        String sql = "SELECT id, name, created_at FROM board ORDER BY created_at, name";
+        // Deterministic order: creation time first, then id as the tie-breaker
+        // (two boards created in the same millisecond must keep creation order;
+        // ordering by name alone would silently sort alphabetically).
+        String sql = "SELECT id, name, created_at FROM board ORDER BY created_at, id";
         List<BoardDescriptor> boards = new ArrayList<>();
         try (PreparedStatement statement = database.connection().prepareStatement(sql);
              ResultSet resultSet = statement.executeQuery()) {
@@ -205,7 +208,7 @@ public final class SqliteBoardRepository implements BoardRepository {
         statement.setString(2, boardId.value());
         statement.setString(3, column.title());
         statement.setString(4, column.description());
-        statement.setString(5, column.color().name());
+        statement.setString(5, column.color().stored());
         statement.setInt(6, position);
         if (column.wipLimit().asOptional().isPresent()) {
             statement.setInt(7, column.wipLimit().asOptional().get());
@@ -221,14 +224,16 @@ public final class SqliteBoardRepository implements BoardRepository {
         statement.setString(2, ownerId.value());
         statement.setString(3, card.title());
         statement.setString(4, card.description());
-        statement.setString(5, card.color().name());
+        statement.setString(5, card.color().stored());
         statement.setInt(6, position);
         if (card.dueDate() != null) {
             statement.setString(7, card.dueDate().toString()); // ISO-8601: 2026-12-31
         } else {
             statement.setNull(7, Types.VARCHAR);
         }
-        statement.setString(8, String.join(";", card.labels()));
+        // Unit separator: a label containing ';' (or a comma/space, now valid
+        // separators in the UI) can no longer corrupt the stored list.
+        statement.setString(8, String.join("\u001F", card.labels()));
         statement.setLong(9, card.createdAt().toEpochMilli());
     }
 
@@ -285,7 +290,11 @@ public final class SqliteBoardRepository implements BoardRepository {
         if (joined == null || joined.isBlank()) {
             return List.of();
         }
-        return List.of(joined.split(";"));
+        // Backward compatible: rows written before the \u001F switch used ';'.
+        String[] parts = joined.contains("\u001F")
+                ? joined.split("\u001F")
+                : joined.split(";");
+        return List.of(parts);
     }
 
     private WipLimit readWipLimit(ResultSet resultSet) throws SQLException {

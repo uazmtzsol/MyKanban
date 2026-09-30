@@ -18,6 +18,16 @@ public final class Card {
     private static final int MAX_LABELS = 8;
     private static final int MAX_LABEL_LENGTH = 40;
 
+    /**
+     * System labels with one-click affordances (star = important, bang =
+     * urgent). Deliberately plain strings — they are ordinary labels in the
+     * set (they join any bulk operation, filter, and future chip coloring);
+     * only the UI gives them dedicated buttons. Case-insensitive matching
+     * keeps "Urgente" and "urgente" the same label.
+     */
+    public static final String LABEL_IMPORTANT = "Importante";
+    public static final String LABEL_URGENT = "Urgente";
+
     private final CardId id;
     private final ColumnId columnId;
     private String title;
@@ -148,5 +158,10 @@ public final class Card {
 
     public boolean isOverdueOn(LocalDate today) {
         return dueDate != null && dueDate.isBefore(today);
+    }
+
+    /** True when this card carries the given label, ignoring case. */
+    public boolean hasLabelIgnoreCase(String label) {
+        return labels.stream().anyMatch(existing -> existing.equalsIgnoreCase(label));
     }
 }

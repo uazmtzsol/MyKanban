@@ -10,9 +10,15 @@ import com.personalkanban.application.command.ClearBoardCommand;
 import com.personalkanban.application.command.ClearColumnCommand;
 import com.personalkanban.application.command.EditCardCommand;
 import com.personalkanban.application.command.EditColumnCommand;
+import com.personalkanban.application.command.AddLabelsCommand;
 import com.personalkanban.application.command.MoveCardCommand;
 import com.personalkanban.application.command.MoveCardToSlotCommand;
 import com.personalkanban.application.command.MoveColumnCommand;
+import com.personalkanban.application.command.MoveCardsCommand;
+import com.personalkanban.application.command.RecolorCardsCommand;
+import com.personalkanban.application.command.ToggleLabelCommand;
+import com.personalkanban.application.command.RemoveCardsCommand;
+import com.personalkanban.application.command.RemoveLabelsCommand;
 import com.personalkanban.application.command.RemoveCardCommand;
 import com.personalkanban.application.command.RemoveColumnCommand;
 import com.personalkanban.application.command.RenameColumnCommand;
@@ -54,6 +60,8 @@ import java.util.Optional;
 public final class BoardService {
 
     private static final String LAST_BOARD_KEY = "board.last";
+    private static final String COLUMN_STATE_PREFIX = "ui.columnstate.";
+    private static final String CARD_VIEW_PREFIX = "ui.cardview.";
 
     private final BoardRepository repository;
     private final UndoHistory history;
@@ -205,6 +213,133 @@ public final class BoardService {
         execute(new RemoveCardCommand(cardId));
     }
 
+    // ------------------------------------------------------------------
+    // Bulk card use cases (multi-selection)
+    // ------------------------------------------------------------------
+
+    public void addLabelsToCards(List<CardId> cardIds, List<String> labels) {
+        execute(new AddLabelsCommand(cardIds, labels));
+    }
+
+    public void removeLabelsFromCards(List<CardId> cardIds, List<String> labels) {
+        execute(new RemoveLabelsCommand(cardIds, labels));
+    }
+
+    public void recolorCards(List<CardId> cardIds, BoardColor color) {
+        execute(new RecolorCardsCommand(cardIds, color));
+    }
+
+    public void removeCards(List<CardId> cardIds) {
+        execute(new RemoveCardsCommand(cardIds));
+    }
+
+    public void moveCardsToColumn(List<CardId> cardIds, ColumnId targetColumnId) {
+        execute(new MoveCardsCommand(cardIds, targetColumnId));
+    }
+
+    /** Toggles a quick flag (e.g. Urgente/Importante) on one card, undoable. */
+    public void toggleCardLabel(CardId cardId, String label) {
+        execute(new ToggleLabelCommand(cardId, label));
+    }
+
+    /**
+     * Autocomplete vocabulary for label fields: the system flags first, then
+     * every label in use on the active board (first-seen spelling, stable
+     * order). Pure read — no persistence involved.
+     */
+    public List<String> labelVocabulary() {
+        List<String> vocabulary = new ArrayList<>();
+        vocabulary.add(Card.LABEL_IMPORTANT);
+        vocabulary.add(Card.LABEL_URGENT);
+        for (BoardColumn column : activeBoard.columns()) {
+            for (Card card : column.cards()) {
+                for (String label : card.labels()) {
+                    boolean duplicate = vocabulary.stream().anyMatch(label::equalsIgnoreCase);
+                    if (!duplicate) {
+                        vocabulary.add(label);
+                    }
+                }
+            }
+        }
+        return vocabulary;
+    }
+
+    /** Reads per-column widths of the given board ("ui.colwidths.<boardId>"). */
+    public java.util.Map<String, Integer> columnWidthsOf(BoardId boardId) {
+        return settings.get("ui.colwidths." + boardId.value())
+                .map(BoardService::parseWidthMap)
+                .orElse(java.util.Map.of());
+    }
+
+    /** Persists per-column widths of the given board (UI-only preference). */
+    public void setColumnWidths(BoardId boardId, java.util.Map<String, Integer> widths) {
+        StringBuilder stored = new StringBuilder();
+        widths.forEach((id, width) -> {
+            if (stored.length() > 0) {
+                stored.append(';');
+            }
+            stored.append(id).append('=').append(width);
+        });
+        settings.put("ui.colwidths." + boardId.value(), stored.toString());
+    }
+
+    private static java.util.Map<String, Integer> parseWidthMap(String stored) {
+        java.util.Map<String, Integer> widths = new java.util.LinkedHashMap<>();
+        if (stored == null || stored.isBlank()) {
+            return widths;
+        }
+        for (String entry : stored.split(";")) {
+            int equals = entry.indexOf('=');
+            if (equals > 0) {
+                try {
+                    widths.put(entry.substring(0, equals).strip(),
+                            Integer.parseInt(entry.substring(equals + 1).strip()));
+                } catch (NumberFormatException ignored) {
+                    // skip malformed entries; the column falls back to default width
+                }
+            }
+        }
+        return widths;
+    }
+
+    /** Reads the collapsed-columns set of the given board ("ui.columnstate.<boardId>"). */
+    public java.util.Set<String> collapsedColumnsOf(BoardId boardId) {
+        return settings.get(COLUMN_STATE_PREFIX + boardId.value())
+                .map(BoardService::parseIdSet)
+                .orElse(java.util.Set.of());
+    }
+
+    /** Reads the card view preferences of the given board (defaults if none). */
+    public CardViewSettings cardViewSettingsOf(BoardId boardId) {
+        return CardViewSettings.fromJson(
+                settings.get(CARD_VIEW_PREFIX + boardId.value()).orElse(null));
+    }
+
+    /** Persists the card view preferences of the given board. */
+    public void setCardViewSettings(BoardId boardId, CardViewSettings cardViewSettings) {
+        settings.put(CARD_VIEW_PREFIX + boardId.value(), cardViewSettings.toJson());
+    }
+
+    /** Persists the collapsed-columns set of the given board (UI-only preference). */
+    public void setCollapsedColumns(BoardId boardId, java.util.Set<String> collapsed) {
+        String key = COLUMN_STATE_PREFIX + boardId.value();
+        if (collapsed.isEmpty()) {
+            settings.put(key, "");
+        } else {
+            settings.put(key, String.join(";", collapsed));
+        }
+    }
+
+    private static java.util.Set<String> parseIdSet(String stored) {
+        java.util.Set<String> ids = new java.util.LinkedHashSet<>();
+        for (String part : stored.split(";")) {
+            if (!part.isBlank()) {
+                ids.add(part.strip());
+                }
+        }
+        return ids;
+    }
+
     public void clearColumn(ColumnId columnId) {
         execute(new ClearColumnCommand(columnId));
     }
@@ -251,13 +386,20 @@ public final class BoardService {
     }
 
     public void undo() {
-        Optional<BoardMemento> target = history.pop(activeBoard.id());
-        if (target.isEmpty()) {
+        BoardMemento target = history.peek(activeBoard.id()).orElse(null);
+        if (target == null) {
             return;
         }
-        redoStack.push(BoardMemento.capture(activeBoard));
-        applySnapshot(target.get());
-        persist();
+        BoardMemento undone = BoardMemento.capture(activeBoard);
+        applySnapshot(target);
+        try {
+            persist();
+        } catch (RuntimeException failure) {
+            applySnapshot(undone); // keep memory consistent with the database
+            throw failure;         // history entry untouched (peek did not pop)
+        }
+        history.pop(activeBoard.id());
+        redoStack.push(undone);
         activeBoard.drainEvents();
     }
 
@@ -266,9 +408,15 @@ public final class BoardService {
             return;
         }
         BoardMemento target = redoStack.pop();
-        history.push(activeBoard.id(), BoardMemento.capture(activeBoard));
+        BoardMemento redone = BoardMemento.capture(activeBoard);
         applySnapshot(target);
-        persist();
+        try {
+            persist();
+        } catch (RuntimeException failure) {
+            applySnapshot(redone); // keep memory consistent with the database
+            throw failure;
+        }
+        history.push(activeBoard.id(), redone);
         activeBoard.drainEvents();
     }
 
@@ -341,10 +489,21 @@ public final class BoardService {
         repository.save(activeBoard.id(), current);
     }
 
+    /**
+     * Persists the post-command state and only then records the undo entry.
+     * If persistence fails, the aggregate is rolled back to {@code before} so
+     * memory never diverges from the database, and the history stays clean.
+     */
     private void finishTransaction(BoardMemento before) {
+        try {
+            persist();
+        } catch (RuntimeException failure) {
+            activeBoard.restore(before);
+            current = before;
+            throw failure;
+        }
         history.push(activeBoard.id(), before); // adapter enforces the capacity bound
         redoStack.clear();
-        persist();
         activeBoard.drainEvents();
     }
 
