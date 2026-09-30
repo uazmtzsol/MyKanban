@@ -41,6 +41,7 @@
     -fx-cursor: hand;
 }
 .tool-button:hover { -fx-background-color: #eef1f6; }
+.filter-flag:selected { -fx-background-color: #fde68a; -fx-border-color: #f59e0b; -fx-text-fill: #92400e; }
 
 .column {
     -fx-background-color: #ffffff;

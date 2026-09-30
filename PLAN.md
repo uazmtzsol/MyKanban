@@ -24,9 +24,13 @@ UI pedidas por el usuario (ver checklist abajo).*
   (`CardDetailWindow`): botón ⧉ junto al **?**, copia `editor.getText()` al
   portapapeles del sistema; deshabilitado cuando el editor está vacío.
   i18n `card.md.copy.tip` en los 4 bundles. 130/130 tests OK.
-- [ ] **3.4 — Toggles ★ Importante / ! Urgente en la barra de filtro:**
-  filtran tarjetas por esas etiquetas; con ambos activos exige las dos
-  (AND), combinado con el filtro de texto existente.
+- [x] **3.4 — Toggles ★ Importante / ! Urgente en la barra de filtro:**
+  `ToggleButton` en `buildFilterBar()`; estado `quickFlagFilters` en
+  `BoardController`, combinado con el filtro de texto en
+  `ColumnViewBuilder.buildOne` (`labelFilter.matches(card) &&
+  quickFilter.matches(card)`); con ambos activos exige las dos (Mode.ALL).
+  i18n `filter.flag.important`/`filter.flag.urgent` (4 bundles) + CSS
+  `.filter-flag:selected` en ambos temas. 130/130 tests OK.
 - [ ] **3.5 — Exportar el tablero visible a PDF:** snapshot visual paginado
   (Apache PDFBox), accesible desde botón de toolbar y menú Board.
 

@@ -75,6 +75,8 @@ public final class BoardController {
     private String activeFilterMode; // null (= show each, "AND" or "OR")
     private TextField labelFilterField;
     private ComboBox<String> labelFilterMode;
+    // Quick flag filters (★ Importante / ! Urgente); both active = AND (must carry both).
+    private final java.util.Set<String> quickFlagFilters = new java.util.LinkedHashSet<>();
 
     // Multi-selection mode: the selected cards all live in selectionColumn.
     private boolean selectionMode;
@@ -270,11 +272,35 @@ public final class BoardController {
             refresh();
         });
 
-        HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter);
+        javafx.scene.control.ToggleButton importantFilter = quickFlagFilterButton(
+                "\u2605", com.personalkanban.domain.board.Card.LABEL_IMPORTANT, "filter.flag.important");
+        javafx.scene.control.ToggleButton urgentFilter = quickFlagFilterButton(
+                "!", com.personalkanban.domain.board.Card.LABEL_URGENT, "filter.flag.urgent");
+
+        HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
+                importantFilter, urgentFilter);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
         return bar;
+    }
+
+    /** One toggle in the quick-flag filter row; both active together = AND. */
+    private javafx.scene.control.ToggleButton quickFlagFilterButton(String glyph, String label, String tipKey) {
+        javafx.scene.control.ToggleButton button = new javafx.scene.control.ToggleButton(glyph);
+        button.getStyleClass().addAll("tool-button", "filter-flag");
+        button.setSelected(quickFlagFilters.contains(label));
+        button.setTooltip(new Tooltip(i18n.text(tipKey)));
+        button.setFocusTraversable(false);
+        button.setOnAction(e -> {
+            if (button.isSelected()) {
+                quickFlagFilters.add(label);
+            } else {
+                quickFlagFilters.remove(label);
+            }
+            refresh();
+        });
+        return button;
     }
 
     // ------------------------------------------------------------------
@@ -494,6 +520,13 @@ public final class BoardController {
                 ? LabelFilter.Mode.ANY
                 : LabelFilter.Mode.ALL;
         return new LabelFilter(labels, mode);
+    }
+
+    /** Quick-flag filter (★/!): ALL mode so both active together require both. */
+    private LabelFilter currentQuickFlagFilter() {
+        return quickFlagFilters.isEmpty()
+                ? LabelFilter.none()
+                : new LabelFilter(List.copyOf(quickFlagFilters), LabelFilter.Mode.ALL);
     }
 
     private MenuBar buildMenuBar() {
@@ -974,8 +1007,9 @@ public final class BoardController {
 
     private void refresh() {
         LabelFilter filter = currentLabelFilter();
+        LabelFilter quickFilter = currentQuickFlagFilter();
         columnsRow.getChildren().setAll(
-                ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter,
+                ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter, quickFilter,
                         selectionMode, collapsedColumns, themeManager.isDark(), columnWidths));
         rebuildBoardMenu(); // keep the active-board marker in sync
         syncCardViewMenu();

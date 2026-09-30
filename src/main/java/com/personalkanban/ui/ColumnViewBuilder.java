@@ -43,16 +43,17 @@ final class ColumnViewBuilder {
 
     static List<VBox> buildAll(BoardService service, I18n i18n, Dialogs dialogs,
                                BoardController board, UndoRedoController undoRedo,
-                               LabelFilter labelFilter, boolean selectionMode,
+                               LabelFilter labelFilter, LabelFilter quickFilter, boolean selectionMode,
                                java.util.Set<String> collapsedIds, boolean dark,
                                java.util.Map<String, Integer> columnWidths) {
         LabelFilter effective = labelFilter == null ? LabelFilter.none() : labelFilter;
+        LabelFilter effectiveQuick = quickFilter == null ? LabelFilter.none() : quickFilter;
         List<VBox> views = new ArrayList<>();
         java.util.List<VBox> all = new ArrayList<>();
         for (BoardColumn column : service.board().columns()) {
             boolean collapsed = collapsedIds.contains(column.id().value());
             VBox view = buildOne(service, i18n, dialogs, board, undoRedo, column,
-                    effective, selectionMode, collapsed, dark);
+                    effective, effectiveQuick, selectionMode, collapsed, dark);
             Integer width = columnWidths.get(column.id().value());
             if (width != null && !collapsed) {
                 view.setPrefWidth(Math.clamp(width, 200, 800));
@@ -110,8 +111,8 @@ final class ColumnViewBuilder {
 
     private static VBox buildOne(BoardService service, I18n i18n, Dialogs dialogs,
                                  BoardController board, UndoRedoController undoRedo,
-                                 BoardColumn column, LabelFilter labelFilter, boolean selectionMode,
-                                 boolean collapsed, boolean dark) {
+                                 BoardColumn column, LabelFilter labelFilter, LabelFilter quickFilter,
+                                 boolean selectionMode, boolean collapsed, boolean dark) {
         if (collapsed) {
             return buildCollapsed(service, i18n, dialogs, board, column, dark);
         }
@@ -168,7 +169,7 @@ final class ColumnViewBuilder {
         VBox cardsBox = new VBox(0);
         int cardIndex = 0;
         for (var card : column.cards()) {
-            if (labelFilter.matches(card)) {
+            if (labelFilter.matches(card) && quickFilter.matches(card)) {
                 cardsBox.getChildren().add(CardViewBuilder.build(
                         service, i18n, dialogs, board, card, selectionMode, dark));
                 cardsBox.getChildren().add(slotRegion(column.id(), cardIndex + 1, board));

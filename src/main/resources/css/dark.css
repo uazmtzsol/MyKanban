@@ -42,6 +42,7 @@
     -fx-text-fill: #e5e7eb;
 }
 .tool-button:hover { -fx-background-color: #262a33; }
+.filter-flag:selected { -fx-background-color: #4b3a12; -fx-border-color: #fbbf24; -fx-text-fill: #fbbf24; }
 
 .column {
     -fx-background-color: #1f2229;
