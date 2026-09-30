@@ -20,6 +20,7 @@
     <sqlite.version>3.53.4.0</sqlite.version>
     <jackson.version>2.18.2</jackson.version>
     <commonmark.version>0.24.0</commonmark.version>
+    <pdfbox.version>3.0.3</pdfbox.version>
     <shade.version>3.6.0</shade.version>
     <junit.version>5.12.2</junit.version>
     <assertj.version>3.27.3</assertj.version>
@@ -58,6 +59,12 @@
       <groupId>org.commonmark</groupId>
       <artifactId>commonmark-ext-gfm-strikethrough</artifactId>
       <version>${commonmark.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>${pdfbox.version}</version>
     </dependency>
 
     <dependency>

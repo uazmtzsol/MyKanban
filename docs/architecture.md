@@ -96,6 +96,7 @@ before/after: cada comando bulk = 1 entrada de undo.
 | `LabelAutoComplete` | Popup de sugerencias (ListView) sobre un TextField: ↑↓ navegan, Enter/Tab aplican, Esc cierra, clic aplica; debounce 120ms; `vocabularySupplier` dinámico para el filtro; nunca bloquea escribir | `attach(field, suggester, excludeSupplier)`; usa `LabelSuggester` |
 | `ColorCss` | Puente BoardColor→CSS: `styleClass()` = `pk-color-<name|custom>`; `applySurface(region,color,dark)` = tinte de FONDO (12% claro/22% oscuro mezclado sobre superficie) + borde exacto para customs — reemplaza al deprecado `applyAccent`; `backgroundTint` devuelve "" para el color DEFAULT (sin tinte) | |
 | `UndoRedoController` | Aceleradores Ctrl+Z/Ctrl+Shift+Z + propiedades canUndo/canRedo | |
+| `pdf/BoardPdfExporter` | Exporta un `Node` (el `columnsRow` del tablero visible) a PDF: snapshot de píxeles vía `Node.snapshot`, convertido a `BufferedImage` a mano (sin `javafx-swing`), paginado tipo póster con Apache PDFBox a 150 DPI (páginas A4 landscape, pie de página "R/C" cuando hay más de una) | `export(Node, Path)`; sin dependencia de dominio/infraestructura |
 | `AppContext` (raíz) | Composition root: crea/intercambia Database+servicios al abrir BD; recents en `config.properties` | |
 
 ## 3. Esquema SQLite (V1..V4, al día)

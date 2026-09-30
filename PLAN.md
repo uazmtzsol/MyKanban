@@ -31,8 +31,21 @@ UI pedidas por el usuario (ver checklist abajo).*
   quickFilter.matches(card)`); con ambos activos exige las dos (Mode.ALL).
   i18n `filter.flag.important`/`filter.flag.urgent` (4 bundles) + CSS
   `.filter-flag:selected` en ambos temas. 130/130 tests OK.
-- [ ] **3.5 — Exportar el tablero visible a PDF:** snapshot visual paginado
-  (Apache PDFBox), accesible desde botón de toolbar y menú Board.
+- [x] **3.5 — Exportar el tablero visible a PDF:** nueva clase
+  `ui/pdf/BoardPdfExporter` (Apache PDFBox, dependencia nueva en `pom.xml`):
+  snapshot de `columnsRow` completo (todas las columnas, no solo el
+  viewport) → `BufferedImage` (conversión manual de píxeles, sin depender
+  de `javafx-swing`) → páginas A4 horizontales a 150 DPI, en mosaico tipo
+  póster si no cabe en una sola página (pie "R/C" de página cuando hay
+  más de una). Accesible desde botón de toolbar (📄) y desde el menú
+  Board (`board.export.pdf`), junto a "Exportar (JSON)". i18n
+  `toolbar.export.pdf`/`board.export.pdf` en los 4 bundles. 130/130 tests
+  OK (incluye `ArchitectureTest`: PDFBox no viola las reglas de capas).
+
+Con esto, las 5 correcciones/mejoras de la Sesión 3 quedan completas.
+Pendiente: prueba manual del usuario (correr `mvn javafx:run`, verificar
+cada punto visualmente, en particular la exportación PDF con un tablero
+grande para confirmar la paginación).
 
 ---
 

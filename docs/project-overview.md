@@ -23,6 +23,7 @@ de escritorio JavaFX, **no** web.
 | Persistencia | SQLite vía JDBC (xerial) | 3.53.4.0 |
 | JSON (export/import + undo history) | Jackson databind + jsr310 | 2.18.2 |
 | Markdown | commonmark-java + ext GFM tables/strikethrough | 0.24.0 |
+| Exportar a PDF | Apache PDFBox (snapshot del tablero paginado) | 3.0.3 |
 | Build | Maven | 3.9+ |
 | Tests | JUnit 5, AssertJ, ArchUnit (reglas de arquitectura) | — |
 

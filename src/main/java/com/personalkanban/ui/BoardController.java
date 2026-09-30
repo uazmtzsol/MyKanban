@@ -208,6 +208,9 @@ public final class BoardController {
         Button darkMode = toolButton("\uD83C\uDF19", "toolbar.dark.mode");
         darkMode.setOnAction(e -> onToggleDarkMode());
 
+        Button exportPdf = toolButton("\uD83D\uDCC4", "toolbar.export.pdf");
+        exportPdf.setOnAction(e -> onExportBoardPdf());
+
         // Card view mode: one button, radio menu (board-wide default).
         MenuButton cardViewMenu = new MenuButton("\u2637");
         cardViewMenu.getStyleClass().addAll("tool-button");
@@ -226,7 +229,7 @@ public final class BoardController {
         boardNameLabel.getStyleClass().add("board-name");
 
         HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn,
-                undoButton, redoButton, darkMode, cardViewMenu, spacer);
+                undoButton, redoButton, darkMode, exportPdf, cardViewMenu, spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
         toolbar.setPadding(new Insets(10));
@@ -592,6 +595,7 @@ public final class BoardController {
                 itemOf("board.delete", this::onDeleteBoard),
                 new SeparatorMenuItem(),
                 itemOf("board.export", this::onExportBoard),
+                itemOf("board.export.pdf", this::onExportBoardPdf),
                 itemOf("board.import", this::onImportBoard));
     }
 
@@ -842,6 +846,27 @@ public final class BoardController {
             context.rememberTransferDirectory(file.getParentFile().toPath());
             service.openBoard(imported);
             rebuildAll();
+        } catch (RuntimeException e) {
+            dialogs.error(Dialogs.describeFailure(e));
+        }
+    }
+
+    /** Exports the currently visible board (all columns) as a paginated PDF snapshot. */
+    private void onExportBoardPdf() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(i18n.text("board.export.pdf"));
+        chooser.setInitialFileName("board.pdf");
+        chooser.setInitialDirectory(initialDirectory());
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF", "*.pdf"));
+        java.io.File file = chooser.showSaveDialog(window());
+        if (file == null) {
+            return;
+        }
+        try {
+            com.personalkanban.ui.pdf.BoardPdfExporter.export(columnsRow, file.toPath());
+            context.rememberTransferDirectory(file.getParentFile().toPath());
+        } catch (java.io.IOException e) {
+            dialogs.error(Dialogs.describeFailure(new RuntimeException(e.getMessage(), e)));
         } catch (RuntimeException e) {
             dialogs.error(Dialogs.describeFailure(e));
         }
