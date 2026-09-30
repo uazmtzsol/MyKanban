@@ -72,10 +72,15 @@ final class CardDetailWindow {
         help.getStyleClass().add("md-help-button");
         help.setTooltip(new Tooltip(i18n.text("card.md.help.tip")));
         help.setOnAction(e -> openCheatSheet());
+        Button copyAll = new Button("\u29C9");
+        copyAll.getStyleClass().add("md-copy-button");
+        copyAll.setTooltip(new Tooltip(i18n.text("card.md.copy.tip")));
+        copyAll.setOnAction(e -> copyDescriptionToClipboard());
+        copyAll.disableProperty().bind(editor.textProperty().isEmpty());
         Region helpGap = new Region();
         helpGap.setMinWidth(14);
         ButtonBar buttons = new ButtonBar();
-        buttons.getButtons().addAll(help, helpGap, save, cancel);
+        buttons.getButtons().addAll(help, copyAll, helpGap, save, cancel);
         buttons.setPadding(new Insets(8));
 
         BorderPane layout = new BorderPane();
@@ -128,6 +133,13 @@ final class CardDetailWindow {
         String markdown = editor.getText();
         board.onDescriptionSaved(cardId, markdown);
         stage.close();
+    }
+
+    /** Copies the raw markdown text of the editor to the system clipboard. */
+    private void copyDescriptionToClipboard() {
+        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+        content.putString(editor.getText());
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
     }
 
     /**

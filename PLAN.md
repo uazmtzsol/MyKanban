@@ -20,8 +20,10 @@ UI pedidas por el usuario (ver checklist abajo).*
   `toolbar.clear.board`/`confirm.clear.board` (4 bundles). El test de
   independencia export/import que usaba `clearBoard()` como mutación de
   prueba ahora usa `removeCard`. 130/130 tests OK.
-- [ ] **3.3 — Botón "copiar todo" en el editor markdown** de comentarios
-  (`CardDetailWindow`): copia el contenido del editor al portapapeles.
+- [x] **3.3 — Botón "copiar todo" en el editor markdown** de comentarios
+  (`CardDetailWindow`): botón ⧉ junto al **?**, copia `editor.getText()` al
+  portapapeles del sistema; deshabilitado cuando el editor está vacío.
+  i18n `card.md.copy.tip` en los 4 bundles. 130/130 tests OK.
 - [ ] **3.4 — Toggles ★ Importante / ! Urgente en la barra de filtro:**
   filtran tarjetas por esas etiquetas; con ambos activos exige las dos
   (AND), combinado con el filtro de texto existente.
