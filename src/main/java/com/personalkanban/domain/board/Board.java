@@ -71,10 +71,6 @@ public final class Board {
         columns.removeIf(column -> column.id().equals(columnId));
     }
 
-    public void clearColumns() {
-        columns.clear();
-    }
-
     /** Reorders a column so that it lands at {@code targetIndex} (clamped). */
     public void moveColumn(ColumnId columnId, int targetIndex) {
         BoardColumn column = columnOrThrow(columnId);

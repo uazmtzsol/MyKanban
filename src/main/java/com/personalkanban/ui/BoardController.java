@@ -195,9 +195,6 @@ public final class BoardController {
         Button addColumn = toolButton("\u2795", "toolbar.add.column");
         addColumn.setOnAction(e -> onAddColumn());
 
-        Button clearBoard = toolButton("\uD83D\uDDD1", "toolbar.clear.board");
-        clearBoard.setOnAction(e -> onClearBoard());
-
         Button undoButton = toolButton("\u21B6", "toolbar.undo");
         undoButton.disableProperty().bind(undoRedo.canUndoProperty().not());
         undoButton.setOnAction(e -> undoRedo.undo());
@@ -226,7 +223,7 @@ public final class BoardController {
         boardNameLabel = new Label();
         boardNameLabel.getStyleClass().add("board-name");
 
-        HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, clearBoard,
+        HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn,
                 undoButton, redoButton, darkMode, cardViewMenu, spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
@@ -846,15 +843,6 @@ public final class BoardController {
             service.addColumn(f.title(), f.description(), f.color(), f.wipLimit());
             refresh();
         }));
-    }
-
-    private void onClearBoard() {
-        if (dialogs.confirm(i18n.text("confirm.clear.board"))) {
-            guarded(() -> {
-                service.clearBoard();
-                refresh();
-            });
-        }
     }
 
     public void onAddCard(com.personalkanban.domain.board.ColumnId columnId) {

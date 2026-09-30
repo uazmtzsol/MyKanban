@@ -14,11 +14,12 @@ UI pedidas por el usuario (ver checklist abajo).*
 - [x] **3.1 — Asa de resize en la última columna.** `ColumnViewBuilder.buildAll`
   ahora añade un handle también DESPUÉS de la última columna (antes solo
   había entre columnas), simétrico al existente.
-- [ ] **3.2 — Quitar botón "Vaciar tablero"** de la toolbar (🗑, entre añadir
-  columna y deshacer): eliminar botón + handler + `BoardService.clearBoard()`
-  + `ClearBoardCommand` + test asociado + i18n `toolbar.clear.board`/
-  `confirm.clear.board` (4 bundles). Confirmado sin otro uso: "Eliminar
-  tablero" del menú usa `deleteBoard()`, un método distinto.
+- [x] **3.2 — Quitar botón "Vaciar tablero"** de la toolbar (🗑, entre añadir
+  columna y deshacer): eliminado botón + handler + `BoardService.clearBoard()`
+  + `ClearBoardCommand` + `Board.clearColumns()` (sin otro uso) + i18n
+  `toolbar.clear.board`/`confirm.clear.board` (4 bundles). El test de
+  independencia export/import que usaba `clearBoard()` como mutación de
+  prueba ahora usa `removeCard`. 130/130 tests OK.
 - [ ] **3.3 — Botón "copiar todo" en el editor markdown** de comentarios
   (`CardDetailWindow`): copia el contenido del editor al portapapeles.
 - [ ] **3.4 — Toggles ★ Importante / ! Urgente en la barra de filtro:**

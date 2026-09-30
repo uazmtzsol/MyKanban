@@ -392,7 +392,7 @@ class BoardServiceTest {
         assertThat(card.labels()).containsExactly("x");
 
         // Independence: mutating the copy must not change the original.
-        service.clearBoard();
+        service.removeCard(card.id());
         service.openBoard(service.boards().get(0).id());
         assertThat(service.board().cardCount()).isEqualTo(1);
     }

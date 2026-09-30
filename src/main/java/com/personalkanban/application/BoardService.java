@@ -6,7 +6,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.personalkanban.application.command.AddCardCommand;
 import com.personalkanban.application.command.AddColumnCommand;
 import com.personalkanban.application.command.BoardCommand;
-import com.personalkanban.application.command.ClearBoardCommand;
 import com.personalkanban.application.command.ClearColumnCommand;
 import com.personalkanban.application.command.EditCardCommand;
 import com.personalkanban.application.command.EditColumnCommand;
@@ -351,14 +350,6 @@ public final class BoardService {
     /** Moves a card into the visual slot between two neighbors (drop indicator). */
     public void moveCardToSlot(CardId cardId, ColumnId targetColumnId, int slotIndex) {
         execute(new MoveCardToSlotCommand(cardId, targetColumnId, slotIndex));
-    }
-
-    // ------------------------------------------------------------------
-    // Whole-board use cases
-    // ------------------------------------------------------------------
-
-    public void clearBoard() {
-        execute(new ClearBoardCommand());
     }
 
     // ------------------------------------------------------------------

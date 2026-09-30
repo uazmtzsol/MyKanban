@@ -48,7 +48,7 @@ testeables; la UI solo pinta.
 | Clase | Rol |
 |---|---|
 | `BoardService` | **Fachada única para la UI**. Catálogo multi-tablero, `execute(command)` con memento: captura *before* → ejecuta comando → `history.push(before)` → `persist()` → `drainEvents()`. También undo/redo, export/import JSON (Jackson), `selectInitialBoard` al arrancar, preferencias UI por tablero (`collapsedColumnsOf/setCollapsedColumns`, `cardViewSettingsOf/setCardViewSettings`) y vocabulario de etiquetas (`labelVocabulary`) |
-| `command/*Command` | Un comando por mutación (`AddCardCommand`, `EditCardCommand`, `MoveCardToSlotCommand`, `ClearBoardCommand`…) — patrón Command |
+| `command/*Command` | Un comando por mutación (`AddCardCommand`, `EditCardCommand`, `MoveCardToSlotCommand`…) — patrón Command |
 | `port/BoardRepository` | `listBoards/createBoard/renameBoard/deleteBoard/load/save` |
 | `port/SettingsStore` | `get/put` clave→valor (tabla `app_setting`) — usar para preferencias nuevas (modos de vista P2, etc.) sin migraciones |
 | `port/UndoHistory` | `push/pop/clear/depth` por tablero |
@@ -76,7 +76,7 @@ la causa raíz visible (`Dialogs.describeFailure`).
 `AddColumnCommand, RenameColumnCommand, EditColumnCommand, MoveColumnCommand,
 RemoveColumnCommand, AddCardCommand (expone createdCardId),
 EditCardCommand, MoveCardCommand, MoveCardToSlotCommand, RemoveCardCommand,
-ClearColumnCommand, ClearBoardCommand` + **bulk (P1.5):**
+ClearColumnCommand` + **bulk (P1.5):**
 `AddLabelsCommand, RemoveLabelsCommand, RecolorCardsCommand,
 RemoveCardsCommand, MoveCardsCommand`. El servicio captura memento
 before/after: cada comando bulk = 1 entrada de undo.
