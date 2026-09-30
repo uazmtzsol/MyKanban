@@ -85,7 +85,9 @@ public final class MarkdownSummary {
             } else if (child instanceof org.commonmark.node.Text textNode) {
                 out.add(styled(textNode.getLiteral(), style));
             } else if (child instanceof SoftLineBreak) {
-                out.add(new Text(" "));
+                // Session 4 request: the card front must SHOW the line breaks
+                // the user typed (a plain newline inside a Text wraps visually).
+                out.add(new Text("\n"));
             } else if (child instanceof HardLineBreak) {
                 out.add(new Text("\n"));
             } else {

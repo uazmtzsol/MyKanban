@@ -29,4 +29,11 @@ public record ColumnSnapshot(ColumnId id, String title, String description, Boar
         cards.forEach(snapshot -> column.adoptForMemento(snapshot.toCard(id())));
         return column;
     }
+
+    /** Re-adopts card objects with a different column owner (memento support). */
+    BoardColumn withCardsOwnedBy(ColumnId ownerId) {
+        BoardColumn column = BoardColumn.restore(id(), title(), description(), color(), wipLimit(), createdAt());
+        cards.forEach(snapshot -> column.adoptForMemento(snapshot.toCard(ownerId)));
+        return column;
+    }
 }

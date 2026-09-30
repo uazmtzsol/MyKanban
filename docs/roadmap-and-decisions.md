@@ -1,6 +1,7 @@
 # Roadmap, hallazgos y decisiones
 
-*Última actualización: 2026-09-29 · Sesión 2 (Fase P0 implementada + i18n reducido a 4 idiomas)*
+*Última actualización: 2026-09-30 · Sesión 4 (las 8 características: fases
+4.1–4.6 implementadas; 161/161 tests)*
 
 Este documento concentra: (1) lo que el usuario pidió, (2) hallazgos
 técnicos verificados, (3) decisiones de diseño vigentes con su porqué,
@@ -63,6 +64,18 @@ técnicos verificados, (3) decisiones de diseño vigentes con su porqué,
    prueba manual por fase. El USUARIO elige la fase; no avanzar por cuenta
    propia a otra fase.
 
+10. **Las 8 características de la Sesión 4** (con sus decisiones previas):
+    ① WBS → **checklist por tarjeta plana** ("no quiero que llegue a ser
+    jerárquica por lo pronto... las tareas individuales posteriormente
+    puedan ser convertidas en otras tarjetas") · ② precedencias "tipo
+    Gantt" (solo previas/posteriores) preparando **Procesos** ("conjunto
+    de tarjetas relacionadas para un fin... se podrá filtrar por
+    'proceso'") · ③ **notas por tarjeta** (texto plano, separadas de la
+    descripción markdown) · ④ **atajos fijos + ayuda F1** · ⑤ saltos de
+    línea visibles en la tarjeta · ⑥ icono real en la barra de tareas ·
+    ⑦ personalización (imagen de fondo) · ⑧ menú "Base de datos" →
+    **Archivo** + **Salir**. Todo implementado en fases 4.1–4.6.
+
 ## 2. Hallazgos técnicos (✔️ = verificado empíricamente)
 
 ### 2.1 ✔️ Causa raíz del "Could not save board default-board"
@@ -123,6 +136,46 @@ causa del bug de guardado es la del §2.1.
 - La app reconstruye TODO el grafo UI al cambiar idioma/tema/tablero/BD —
   decisión consciente y documentada en `BoardController` (grafo pequeño).
   No "arreglar" sin necesidad.
+
+### 3.19 ✔️ Hallazgos de la Sesión 4
+- **FK inmediatas en SQLite:** `replaceAll` debe insertar **procesos antes
+  que tarjetas** aunque todo esté en una transacción (`card.process_id` FK
+  valida al ejecutar el batch, no al commit). Pillado por el round-trip
+  test, no por lectura de código.
+- **Jackson y mapas con claves tipadas:** serializaría `CardId[value=…]` y
+  no podría leerlo de vuelta → los enlaces viajan en snapshots como lista
+  plana de records `CardLink(from, to)`, nunca como `Map<CardId, …>`.
+- **`ChecklistItem` como record:** mutable con id estable rompería
+  (de)serialización Jackson del historial undo/export; inmutable con
+  `withText`/`withDone` es seguro y respeta el patrón de los snapshots.
+- **`BoardMemento.restore` REEMPLAZA** procesos y enlaces: un test que
+  "añade" un enlace vía restore debe incluir los existentes en el memento.
+- **Atenuado de imagen de fondo:** se compone UNA vez (BufferedImage +
+  data-URI PNG) en vez de una capa JavaFX por frame; el WebView no está
+  involucrado y el coste es solo al cambiar la preferencia.
+
+### 3.20 Diseño Sesión 4 (decisiones con porqué)
+- **Checklist plana y no jerárquica** (decisión explícita del usuario);
+  los ítems llevan id estable para poder **convertirse en tarjetas**
+  (misma columna, ítem eliminado del checklist, 1 transacción deshacible).
+- **Notas ≠ descripción:** la descripción es markdown con vista previa;
+  las notas son texto plano (pestaña propia + botón Guardar). 📝 en el
+  frente con extracto en tooltip.
+- **Procesos no son contenedores:** tabla propia + `card.process_id`
+  (ON DELETE SET NULL): borrar proceso no borra tarjetas. Chip ⚬ en el
+  frente y filtro por proceso en la barra (combinable con etiquetas).
+- **Precedencias = enlaces dirigidos acíclicos** ("from precede a to");
+  el guardián rechaza ciclos directos y transitivos; el "orden sugerido"
+  es topológico y reporta el ciclo si lo hay (no lo rompe silenciosamente).
+- **Atajos fijos + F1** (decisión del usuario): F1 ayuda, Ctrl+N/F/D/Q
+  nuevos; documentados en una sola ventana compartida.
+- **Fondo por tablero vs global:** se eligió GLOBAL (`ui.background` en
+  app_setting) para la v1 — la imagen es del entorno de trabajo, no del
+  dato; `boardBackgroundOf/setBoardBackground` quedaron en el servicio si
+  algún día se quiere por-tablero. Archivo inexistente ⇒ sin fondo, sin
+  error (misma tolerancia que `io.lastdir`).
+- **Icono de app:** PNGs generados por script desechable (tile azul + 3
+  columnas) en `/icons`; `AppIcons.all()` tolera recursos ausentes.
 
 ## 3. Decisiones de diseño vigentes (con porqué)
 
@@ -323,6 +376,23 @@ un aviso.
   Evaluar cuando el usuario pida P3-impresión.
 - **Limpieza menor**: parametrizar `deleteBoard`, import duplicado en
   `ColumnViewBuilder`, aviso por límite de etiquetas (ver §2.4).
+
+## 4-bis. Registro de la Sesión 4 (qué quedó dónde)
+
+- **Migraciones:** `V5__card_notes.sql`, `V6__card_checklist.sql`,
+  `V7__dependencies_and_processes.sql` (registradas en
+  `SchemaMigrator.REGISTERED_SCRIPTS`). BDs existentes migran solas al abrir.
+- **Dominio nuevo:** `ChecklistItem`, `Process`, `ProcessId`, `CardLink`,
+  `ProcessSnapshot`, `DependencyGuard`, `CyclicDependencyException`.
+- **UI nueva:** menús Archivo/Procesos/Ayuda, `ShortcutsHelpWindow`,
+  `PreferencesDialog`, `AppIcons`, pestañas en `CardDetailWindow`, filtro
+  por proceso, chip de proceso + ☑ progreso + 📝 + ←n →n en el frente.
+- **Export/import:** el JSON de tablero ahora incluye notas, checklist,
+  procesos y enlaces (viajan en el memento). El undo persistente
+  (`history/*.json`) también: los mementos viejos se leen bien porque los
+  campos nuevos son opcionales en Jackson.
+- **Tests:** 161/161 (`DependencyGuardTest`, `CardExtrasTest`,
+  `SessionFourServiceTest`, `SqliteSessionFourRoundTripTest` nuevos).
 
 ## 5. Preferencias y contexto del usuario
 

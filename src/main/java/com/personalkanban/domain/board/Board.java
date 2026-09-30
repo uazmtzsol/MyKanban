@@ -8,22 +8,37 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * One board's aggregate root, identified by a {@link BoardId}. All mutations
  * flow through here; the board keeps the column ordering and collects the
  * domain events produced during a use case.
+ *
+ * <p>Session 4 additions: processes (named card groups), precedence links
+ * between cards (validated acyclic by {@link DependencyGuard}), and card
+ * checklist orchestration. Process and link state participates in the
+ * memento, so undo/redo and persistence cover them too.</p>
  */
 public final class Board {
 
     private final BoardId id;
     private final List<BoardColumn> columns = new ArrayList<>();
     private final List<DomainEvent> events = new ArrayList<>();
+
+    /** Processes of this board (insertion ordered). */
+    private final SequencedMap<ProcessId, Process> processes = new LinkedHashMap<>();
+
+    /** Precedence links: key precedes each value ("key → successor"). */
+    private final SequencedMap<CardId, SequencedSet<CardId>> links = new LinkedHashMap<>();
 
     /** Creates a fresh board with its own identity (GRASP Creator). */
     public Board() {
@@ -88,7 +103,32 @@ public final class Board {
 
     public CardAdded addCard(ColumnId columnId, String title, String description, BoardColor color,
                              LocalDate dueDate, List<String> labels) {
-        CardAdded event = columnOrThrow(columnId).addCard(title, description, color, dueDate, labels);
+        return addCard(columnId, title, description, color, dueDate, labels, null, null, null);
+    }
+
+    /**
+     * Full card creation (session 4): plain notes, initial checklist items
+     * and an optional process assignment ride along in one undoable step.
+     * Null-safe extras keep the simpler overloads intact.
+     */
+    public CardAdded addCard(ColumnId columnId, String title, String description, BoardColor color,
+                             LocalDate dueDate, List<String> labels,
+                             String notes, List<ChecklistItem> checklist, ProcessId processId) {
+        if (processId != null) {
+            processOrThrow(processId); // validate BEFORE any mutation
+        }
+        CardAdded event = columnOrThrow(columnId).addCard(Ids.newCardId(), title, description,
+                color, dueDate, labels);
+        Card card = findCard(event.cardId()).orElseThrow();
+        if (notes != null && !notes.isBlank()) {
+            card.annotate(notes);
+        }
+        if (checklist != null) {
+            checklist.forEach(card::adoptChecklistItem);
+        }
+        if (processId != null) {
+            card.assignTo(processId);
+        }
         events.add(event);
         return event;
     }
@@ -107,10 +147,55 @@ public final class Board {
         card.tag(newLabels);
     }
 
+    /** Sets the plain-text notes of one card (session 4.4). */
+    public void annotateCard(CardId cardId, String notes) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId)).annotate(notes);
+    }
+
+    /** Adds a checklist item to one card; returns the created item. */
+    public ChecklistItem addChecklistItem(CardId cardId, String text) {
+        return findCard(cardId).orElseThrow(() -> new NotFoundException(cardId)).addChecklistItem(text);
+    }
+
+    /** Renames one checklist item of one card. */
+    public void renameChecklistItem(CardId cardId, String itemId, String newText) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .renameChecklistItem(itemId, newText);
+    }
+
+    /** Marks or unmarks one checklist item of one card. */
+    public void setChecklistItemDone(CardId cardId, String itemId, boolean done) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .setChecklistItemDone(itemId, done);
+    }
+
+    /** Removes one checklist item from one card. */
+    public void removeChecklistItem(CardId cardId, String itemId) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .removeChecklistItem(itemId);
+    }
+
+    /**
+     * Converts a checklist item into its own card (user requirement: flat
+     * checklist, items promotable to cards). The new card lands at the end
+     * of the SAME column as the source card, and the item is removed from
+     * the source checklist. Returns the created card's id.
+     */
+    public CardAdded convertChecklistItemToCard(CardId cardId, String itemId) {
+        Card source = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+        ChecklistItem item = source.checklistItem(itemId);
+        BoardColumn column = columnOrThrow(source.columnId());
+        CardAdded event = column.addCard(item.text(), "", column.defaultCardColor(), null, List.of());
+        source.removeChecklistItem(itemId);
+        events.add(event);
+        return event;
+    }
+
     public void removeCard(CardId cardId) {
         BoardColumn column = findColumnOf(cardId)
                 .orElseThrow(() -> new NotFoundException(cardId));
         column.removeCard(cardId);
+        detachCard(cardId); // dangling links are garbage, not invariant breaks
         events.add(new CardRemoved(cardId, column.id(), Instant.now()));
     }
 
@@ -166,6 +251,7 @@ public final class Board {
             BoardColumn column = findColumnOf(cardId)
                     .orElseThrow(() -> new NotFoundException(cardId));
             column.removeCard(cardId);
+            detachCard(cardId);
             events.add(new CardRemoved(cardId, column.id(), Instant.now()));
         }
     }
@@ -228,6 +314,64 @@ public final class Board {
     }
 
     /**
+     * Reorders ONE column by the quick flags, nothing else moves (user
+     * request): (★+!) first, then (!), then (★); every card without those
+     * labels keeps its current relative order right after them. Stable
+     * partition — no other criterion, no reflow of untouched columns.
+     */
+    public void sortColumnByPriority(ColumnId columnId) {
+        BoardColumn column = columnOrThrow(columnId);
+        List<Card> current = column.cards();
+        List<Card> sorted = new ArrayList<>(current.size());
+        current.stream().filter(Card::isUrgentAndImportantCard).forEach(sorted::add);
+        current.stream().filter(Card::isUrgentOnlyCard).forEach(sorted::add);
+        current.stream().filter(Card::isImportantOnlyCard).forEach(sorted::add);
+        current.stream().filter(card -> !card.isUrgentAndImportantCard()
+                && !card.isUrgentOnlyCard() && !card.isImportantOnlyCard()).forEach(sorted::add);
+        column.replaceCards(sorted);
+    }
+
+    /**
+     * Rebuilds a card's checklist from plain lines (dialog advanced form):
+     * "[x] text" = done, "[ ] text" or plain "text" = pending. Existing
+     * items are matched BY TEXT so their identity (and conversion ability)
+     * survives; lines removed from the input remove their items; new lines
+     * append new items.
+     */
+    public void setChecklistFromLines(CardId cardId, List<String> lines) {
+        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+        List<ChecklistItem> rebuilt = new ArrayList<>();
+        for (String line : lines) {
+            String raw = line == null ? "" : line.strip();
+            String lower = raw.toLowerCase(java.util.Locale.ROOT);
+            // Single assignment per branch keeps done/text effectively final
+            // for the lambdas below.
+            final boolean done;
+            final String text;
+            if (lower.startsWith("[x]")) {
+                done = true;
+                text = raw.substring(3).strip();
+            } else if (lower.startsWith("[ ]")) {
+                done = false;
+                text = raw.substring(3).strip();
+            } else {
+                done = false;
+                text = raw;
+            }
+            if (text.isEmpty()) {
+                continue;
+            }
+            ChecklistItem existing = card.checklist().stream()
+                    .filter(item -> item.text().equalsIgnoreCase(text))
+                    .findFirst()
+                    .map(item -> item.withDone(done))
+                    .orElseGet(() -> ChecklistItem.newItem(text).withDone(done));
+            rebuilt.add(existing);
+        }
+        card.replaceChecklist(rebuilt);
+    }
+
+    /**
      * Moves a card within its column or across columns. Positions are clamped,
      * WIP limits are enforced by the target column, and a {@link CardMoved}
      * event is emitted.
@@ -253,6 +397,152 @@ public final class Board {
      */
     public CardMoved moveCardToSlot(CardId cardId, ColumnId targetColumnId, int slotIndex) {
         return moveCard(cardId, targetColumnId, slotIndex);
+    }
+
+    // ------------------------------------------------------------------
+    // Processes (session 4.6): named groups of related cards
+    // ------------------------------------------------------------------
+
+    /** Creates a process and returns it. */
+    public Process addProcess(String name) {
+        Process process = new Process(name);
+        processes.put(process.id(), process);
+        return process;
+    }
+
+    public void renameProcess(ProcessId processId, String newName) {
+        processOrThrow(processId).rename(newName);
+    }
+
+    /** Deletes a process; member cards simply become unassigned. */
+    public void removeProcess(ProcessId processId) {
+        processOrThrow(processId);
+        processes.remove(processId);
+        for (BoardColumn column : columns) {
+            for (Card card : column.cards()) {
+                if (processId.equals(card.processId())) {
+                    card.assignTo(null);
+                }
+            }
+        }
+    }
+
+    /** Assigns one card to a process; null clears the assignment. */
+    public void assignCardToProcess(CardId cardId, ProcessId processId) {
+        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+        if (processId != null) {
+            processOrThrow(processId); // must exist
+        }
+        card.assignTo(processId);
+    }
+
+    public Process processOrThrow(ProcessId processId) {
+        Process process = processes.get(processId);
+        if (process == null) {
+            throw new NotFoundException(processId);
+        }
+        return process;
+    }
+
+    /** Processes in insertion order. */
+    public List<Process> processList() {
+        return List.copyOf(processes.values());
+    }
+
+    public boolean hasProcesses() {
+        return !processes.isEmpty();
+    }
+
+    /** Cards whose {@code processId} matches, in board order. */
+    public List<Card> cardsOfProcess(ProcessId processId) {
+        List<Card> members = new ArrayList<>();
+        for (BoardColumn column : columns) {
+            for (Card card : column.cards()) {
+                if (processId.equals(card.processId())) {
+                    members.add(card);
+                }
+            }
+        }
+        return members;
+    }
+
+    // ------------------------------------------------------------------
+    // Precedence links (session 4.6): "from precedes to"
+    // ------------------------------------------------------------------
+
+    /** Links {@code from → to} ("from precedes to"); acyclicity enforced. */
+    public void linkCards(CardId from, CardId to) {
+        DependencyGuard.requireLinkable(this, from, to);
+        if (outgoingSuccessorsOf(from).contains(to)) {
+            return; // idempotent duplicate
+        }
+        links.computeIfAbsent(from, key -> new LinkedHashSet<>()).add(to);
+    }
+
+    /** Removes an existing link; unknown links are silently ignored. */
+    public void unlinkCards(CardId from, CardId to) {
+        SequencedSet<CardId> successors = links.get(from);
+        if (successors != null) {
+            successors.remove(to);
+            if (successors.isEmpty()) {
+                links.remove(from);
+            }
+        }
+    }
+
+    /** Direct successors of a card ("what comes after it"). */
+    public SequencedSet<CardId> outgoingSuccessorsOf(CardId cardId) {
+        return links.getOrDefault(cardId, new LinkedHashSet<>());
+    }
+
+    /** Direct predecessors of a card ("what comes before it"). */
+    public SequencedSet<CardId> incomingPredecessorsOf(CardId cardId) {
+        SequencedSet<CardId> predecessors = new LinkedHashSet<>();
+        links.forEach((predecessor, successors) -> {
+            if (successors.contains(cardId)) {
+                predecessors.add(predecessor);
+            }
+        });
+        return predecessors;
+    }
+
+    /** Live (unmodifiable) view of the whole link map, for snapshots. */
+    SequencedMap<CardId, SequencedSet<CardId>> linksView() {
+        return links;
+    }
+
+    /** Flat, order-stable view of every link, for tests and tooling. */
+    public List<CardLink> linkList() {
+        List<CardLink> all = new ArrayList<>();
+        links.forEach((from, successors) ->
+                successors.forEach(to -> all.add(new CardLink(from, to))));
+        return all;
+    }
+
+    /** Cards of this board, in board order (streaming helper). */
+    public List<Card> allCards() {
+        List<Card> cards = new ArrayList<>();
+        for (BoardColumn column : columns) {
+            cards.addAll(column.cards());
+        }
+        return cards;
+    }
+
+    /** Titles of the given cards, in the given order (UI lookup helper). */
+    public String titleOf(CardId cardId) {
+        return findCard(cardId).map(Card::title)
+                .orElse("?" + cardId.value());
+    }
+
+    /** Set of card ids present on the board (link integrity helper). */
+    public java.util.Set<CardId> cardIds() {
+        return allCards().stream().map(Card::id).collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Removes every link touching the given card (used on card removal). */
+    private void detachCard(CardId cardId) {
+        links.remove(cardId);
+        links.values().forEach(successors -> successors.remove(cardId));
     }
 
     // ------------------------------------------------------------------
@@ -315,7 +605,18 @@ public final class Board {
     /** Replaces the whole state with the snapshot's state (undo/redo, startup load). */
     public void restore(BoardMemento memento) {
         columns.clear();
-        memento.columns().stream().map(ColumnSnapshot::toColumn).forEach(columns::add);
+        memento.columns().stream()
+                .map(snapshot -> snapshot.withCardsOwnedBy(snapshot.id()))
+                .forEach(columns::add);
+        processes.clear();
+        memento.processes().forEach(snapshot -> {
+            Process process = snapshot.toProcess();
+            processes.put(process.id(), process);
+        });
+        links.clear();
+        for (CardLink link : memento.links()) {
+            links.computeIfAbsent(link.from(), key -> new LinkedHashSet<>()).add(link.to());
+        }
     }
 
     private LocalDate currentDueDateOf(CardId cardId) {

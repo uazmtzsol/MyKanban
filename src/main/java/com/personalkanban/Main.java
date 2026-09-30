@@ -1,7 +1,9 @@
 package com.personalkanban;
 
+import com.personalkanban.ui.AppIcons;
 import com.personalkanban.ui.BoardController;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
@@ -32,7 +34,18 @@ public class Main extends Application {
 
             stage.titleProperty().bind(controller.titleProperty());
             controller.appendVersionToTitle(AppVersion.stamp());
+            // Session 4: a real app icon instead of the default Java cup —
+            // this drives the taskbar/window icon on Windows too.
+            stage.getIcons().addAll(AppIcons.all());
             stage.setScene(scene);
+            // Session 5 (user request): closing the window persists cleanly —
+            // the connection close folds the WAL into kanban.db and removes
+            // the -wal/-shm leftovers. Every mutation was already committed
+            // instantly; this is the final tidy-up, never a data save.
+            stage.setOnCloseRequest(event -> {
+                controller.shutdown();
+                Platform.exit();
+            });
             stage.show();
         } catch (Exception e) {
             showFatalError(e);

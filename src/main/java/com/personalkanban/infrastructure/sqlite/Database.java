@@ -60,6 +60,26 @@ public final class Database implements AutoCloseable {
         return new Database(Path.of(":memory:"));
     }
 
+    /**
+     * Folds the WAL journal into the main database file (user request:
+     * "persistir los cambios" periodically). SQLite already guarantees
+     * durability of every committed transaction — the WAL is part of the
+     * database — but a TRUNCATE checkpoint keeps {@code kanban.db} itself
+     * up to date and shrinks the {@code -wal} file to zero bytes, so a
+     * periodic checkpoint is cheap reassurance. Best-effort: a busy
+     * checkpoint just returns false and the next one will succeed.
+     */
+    public boolean checkpoint() {
+        try (var statement = connection.createStatement()) {
+            statement.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+            return true;
+        } catch (SQLException e) {
+            // Never break the app for an optimization: the data is safe
+            // in the WAL regardless of this result.
+            return false;
+        }
+    }
+
     private static void configure(Connection connection) throws SQLException {
         try (var statement = connection.createStatement()) {
             statement.execute("PRAGMA journal_mode = WAL");

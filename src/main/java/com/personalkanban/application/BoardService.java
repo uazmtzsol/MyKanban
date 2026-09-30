@@ -5,22 +5,36 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.personalkanban.application.command.AddCardCommand;
 import com.personalkanban.application.command.AddColumnCommand;
+import com.personalkanban.application.command.AddProcessCommand;
+import com.personalkanban.application.command.AssignProcessCommand;
 import com.personalkanban.application.command.BoardCommand;
 import com.personalkanban.application.command.ClearColumnCommand;
+import com.personalkanban.application.command.ConvertChecklistItemCommand;
 import com.personalkanban.application.command.EditCardCommand;
 import com.personalkanban.application.command.EditColumnCommand;
+import com.personalkanban.application.command.AddChecklistItemCommand;
 import com.personalkanban.application.command.AddLabelsCommand;
+import com.personalkanban.application.command.LinkCardsCommand;
 import com.personalkanban.application.command.MoveCardCommand;
 import com.personalkanban.application.command.MoveCardToSlotCommand;
 import com.personalkanban.application.command.MoveColumnCommand;
 import com.personalkanban.application.command.MoveCardsCommand;
+import com.personalkanban.application.command.NoteCardCommand;
 import com.personalkanban.application.command.RecolorCardsCommand;
+import com.personalkanban.application.command.RemoveChecklistItemCommand;
+import com.personalkanban.application.command.ToggleChecklistItemCommand;
+import com.personalkanban.application.command.RenameChecklistItemCommand;
+import com.personalkanban.application.command.RemoveProcessCommand;
 import com.personalkanban.application.command.ToggleLabelCommand;
 import com.personalkanban.application.command.RemoveCardsCommand;
 import com.personalkanban.application.command.RemoveLabelsCommand;
 import com.personalkanban.application.command.RemoveCardCommand;
 import com.personalkanban.application.command.RemoveColumnCommand;
 import com.personalkanban.application.command.RenameColumnCommand;
+import com.personalkanban.application.command.RenameProcessCommand;
+import com.personalkanban.application.command.SetChecklistFromLinesCommand;
+import com.personalkanban.application.command.SortColumnByPriorityCommand;
+import com.personalkanban.application.command.UnlinkCardsCommand;
 import com.personalkanban.application.port.BoardRepository;
 import com.personalkanban.application.port.SettingsStore;
 import com.personalkanban.application.port.UndoHistory;
@@ -32,7 +46,11 @@ import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
+import com.personalkanban.domain.board.DependencyGuard;
+import com.personalkanban.domain.board.Process;
+import com.personalkanban.domain.board.ProcessId;
 import com.personalkanban.domain.board.WipLimit;
 
 import java.io.IOException;
@@ -61,6 +79,8 @@ public final class BoardService {
     private static final String LAST_BOARD_KEY = "board.last";
     private static final String COLUMN_STATE_PREFIX = "ui.columnstate.";
     private static final String CARD_VIEW_PREFIX = "ui.cardview.";
+    private static final String BACKGROUND_KEY = "ui.background"; // "path|opacity"
+    private static final String UI_BACKGROUND_PREFIX = "ui.background.";
 
     private final BoardRepository repository;
     private final UndoHistory history;
@@ -198,6 +218,15 @@ public final class BoardService {
         return execute(command, command::createdCardId);
     }
 
+    /** Full card creation (session 4): notes, checklist and process in one step. */
+    public CardId addCard(ColumnId columnId, String title, String description, BoardColor color,
+                          LocalDate dueDate, List<String> labels,
+                          String notes, List<ChecklistItem> checklist, ProcessId processId) {
+        AddCardCommand command = new AddCardCommand(columnId, title, description, color,
+                dueDate, labels, notes, checklist, processId);
+        return execute(command, command::createdCardId);
+    }
+
     public void editCard(CardId cardId, String title, String description, BoardColor color) {
         editCard(cardId, title, description, color,
                 currentDueDateOf(cardId), currentLabelsOf(cardId));
@@ -210,6 +239,119 @@ public final class BoardService {
 
     public void removeCard(CardId cardId) {
         execute(new RemoveCardCommand(cardId));
+    }
+
+    // ------------------------------------------------------------------
+    // Card notes (session 4.4)
+    // ------------------------------------------------------------------
+
+    /** Sets the plain-text notes of one card, undoable. */
+    public void setCardNotes(CardId cardId, String notes) {
+        execute(new NoteCardCommand(cardId, notes));
+    }
+
+    // ------------------------------------------------------------------
+    // Card checklist (session 4.5)
+    // ------------------------------------------------------------------
+
+    /** Adds a checklist item to one card; returns the created item's id. */
+    public String addChecklistItem(CardId cardId, String text) {
+        AddChecklistItemCommand command = new AddChecklistItemCommand(cardId, text);
+        return execute(command, command::createdItemId);
+    }
+
+    /** Marks or unmarks one checklist item, undoable. */
+    public void setChecklistItemDone(CardId cardId, String itemId, boolean done) {
+        execute(new ToggleChecklistItemCommand(cardId, itemId, done));
+    }
+
+    /** Renames one checklist item, undoable. */
+    public void renameChecklistItem(CardId cardId, String itemId, String newText) {
+        execute(new RenameChecklistItemCommand(cardId, itemId, newText));
+    }
+
+    /** Removes one checklist item, undoable. */
+    public void removeChecklistItem(CardId cardId, String itemId) {
+        execute(new RemoveChecklistItemCommand(cardId, itemId));
+    }
+
+    /**
+     * Converts a checklist item into its own card (same column); returns the
+     * created card's id. One undoable step: undo removes the card and
+     * restores the item on the source checklist.
+     */
+    public CardId convertChecklistItemToCard(CardId cardId, String itemId) {
+        ConvertChecklistItemCommand command = new ConvertChecklistItemCommand(cardId, itemId);
+        return execute(command, command::createdCardId);
+    }
+
+    /**
+     * Rebuilds a card's checklist from plain lines (dialog advanced form),
+     * one undoable step. "[x] t" = done, "[ ] t"/"t" = pending; matching
+     * by text keeps existing item identities.
+     */
+    public void setChecklistFromLines(CardId cardId, List<String> lines) {
+        execute(new SetChecklistFromLinesCommand(cardId, lines));
+    }
+
+    /**
+     * Stable priority sort of ONE column: (★+!) first, then (!), then (★);
+     * the rest keeps its relative order. One undoable step.
+     */
+    public void sortColumnByPriority(ColumnId columnId) {
+        execute(new SortColumnByPriorityCommand(columnId));
+    }
+
+    // ------------------------------------------------------------------
+    // Processes (session 4.6)
+    // ------------------------------------------------------------------
+
+    /** Creates a process and returns its id. */
+    public ProcessId addProcess(String name) {
+        AddProcessCommand command = new AddProcessCommand(name);
+        return execute(command, () -> command.createdProcess().id());
+    }
+
+    /** Renames a process. */
+    public void renameProcess(ProcessId processId, String newName) {
+        execute(new RenameProcessCommand(processId, newName));
+    }
+
+    /** Deletes a process; member cards become unassigned. */
+    public void removeProcess(ProcessId processId) {
+        execute(new RemoveProcessCommand(processId));
+    }
+
+    /** Processes of the active board, in creation order. */
+    public List<Process> processes() {
+        return activeBoard.processList();
+    }
+
+    /** Assigns one card to a process (null = unassign). */
+    public void assignCardToProcess(CardId cardId, ProcessId processId) {
+        execute(new AssignProcessCommand(cardId, processId));
+    }
+
+    // ------------------------------------------------------------------
+    // Precedence links (session 4.6)
+    // ------------------------------------------------------------------
+
+    /** Links {@code from → to} ("from precedes to"); rejects cycles. */
+    public void linkCards(CardId from, CardId to) {
+        execute(new LinkCardsCommand(from, to));
+    }
+
+    /** Removes the {@code from → to} precedence link. */
+    public void unlinkCards(CardId from, CardId to) {
+        execute(new UnlinkCardsCommand(from, to));
+    }
+
+    /**
+     * Suggested execution order of the given cards under the precedence
+     * links (pure domain logic, delegated for testability).
+     */
+    public DependencyGuard.Result suggestedOrder(List<CardId> cards) {
+        return DependencyGuard.topologicalOrder(activeBoard, cards);
     }
 
     // ------------------------------------------------------------------
@@ -317,6 +459,28 @@ public final class BoardService {
     /** Persists the card view preferences of the given board. */
     public void setCardViewSettings(BoardId boardId, CardViewSettings cardViewSettings) {
         settings.put(CARD_VIEW_PREFIX + boardId.value(), cardViewSettings.toJson());
+    }
+
+    /** Reads the background preference of the given board (null = none). */
+    public String boardBackgroundOf(BoardId boardId) {
+        return settings.get(UI_BACKGROUND_PREFIX + boardId.value()).orElse(null);
+    }
+
+    /** Persists the background preference of the given board (null clears it). */
+    public void setBoardBackground(BoardId boardId, String stored) {
+        settings.put(UI_BACKGROUND_PREFIX + boardId.value(), stored == null ? "" : stored);
+    }
+
+    /** Global background (any board); format "path|opacity" or null. */
+    public String background() {
+        return settings.get(BACKGROUND_KEY)
+                .filter(value -> !value.isBlank())
+                .orElse(null);
+    }
+
+    /** Sets the global background; format "path|opacity", null clears it. */
+    public void setBackground(String stored) {
+        settings.put(BACKGROUND_KEY, stored == null ? "" : stored);
     }
 
     /** Persists the collapsed-columns set of the given board (UI-only preference). */

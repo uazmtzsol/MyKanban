@@ -80,6 +80,28 @@
 
 .card-title { -fx-font-weight: bold; }
 .card-description { -fx-text-fill: #9ca3af; -fx-font-size: 12px; }
+/* MarkdownSummary renders Text nodes: their fill defaults to black, which
+   is unreadable on the dark card surface — the .text child selector is the
+   reliable way to recolor them (Text has no .card-description styling of
+   its own beyond what the theme gives). */
+.card-description .text { -fx-fill: #9ca3af; }
+
+/* Quick-flag card highlight (user request): (i), (u) and (iu) must stand
+   out from the rest. (iu) = strongest: warm surface + red border;
+   (u) = red left edge; (i) = amber left edge. */
+.card-priority-urgent {
+    -fx-border-color: #f87171;
+    -fx-border-width: 1;
+}
+.card-priority-important {
+    -fx-border-color: #fbbf24;
+    -fx-border-width: 1;
+}
+.card-priority-urgent-important {
+    -fx-border-color: #fb7185;
+    -fx-border-width: 2;
+    -fx-background-color: #332226;
+}
 
 .column.pk-color-blue   { -fx-border-color: #42a5f5; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
 .column.pk-color-green  { -fx-border-color: #66bb6a; -fx-border-width: 3 0 0 0; -fx-background-radius: 8; }
@@ -195,6 +217,19 @@
     -fx-background-insets: 0 2;
 }
 
+/* Top drop edge of a card: the upper part lights up as "drop ABOVE me". */
+.drop-top-active {
+    -fx-border-color: #42a5f5;
+    -fx-border-width: 2 2 0 2;
+    -fx-border-radius: 10 10 0 0;
+}
+/* Bottom edge: "drop BELOW me". */
+.drop-bottom-active {
+    -fx-border-color: #42a5f5;
+    -fx-border-width: 0 2 2 2;
+    -fx-border-radius: 0 0 10 10;
+}
+
 /* Card detail window (markdown) */
 .detail-window { -fx-background-color: #1f2229; }
 .detail-title { -fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 0 0 8 0; }
@@ -206,6 +241,41 @@
 }
 .md-help-button {
     -fx-font-weight: bold;
+}
+
+/* Session 4: checklists, notes, processes and relations on card fronts */
+.card-checklist {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+}
+.card-checklist-done {
+    -fx-font-size: 11px;
+    -fx-text-fill: #4ade80;
+    -fx-font-weight: bold;
+}
+.card-notes-indicator {
+    -fx-font-size: 11px;
+}
+.card-process-chip {
+    -fx-font-size: 11px;
+    -fx-text-fill: #93c5fd;
+    -fx-background-color: rgba(96, 165, 250, 0.20);
+    -fx-background-radius: 8;
+    -fx-padding: 1 6 1 6;
+}
+.card-relations {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+}
+.checklist-item .check-box {
+    -fx-wrap-text: true;
+}
+.shortcut-keys { -fx-font-size: 13px; }
+.shortcut-action { -fx-font-size: 13px; -fx-text-fill: #d1d5db; }
+.prefs-file-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+    -fx-max-width: 320;
 }
 
 .color-swatch { -fx-arc-width: 4; -fx-arc-height: 4; }

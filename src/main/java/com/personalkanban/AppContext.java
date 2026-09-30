@@ -47,6 +47,14 @@ public final class AppContext implements AutoCloseable {
     private ThemeManager themeManager;
     private Path databasePath;
 
+    /**
+     * Periodic checkpoint timer (user request: persist to the main file
+     * every N minutes). One daemon scheduler per context, ticking against
+     * whichever database is CURRENTLY open — safe across database switches.
+     * Daemon on purpose: a forgotten scheduler must never block JVM exit.
+     */
+    private java.util.concurrent.ScheduledExecutorService checkpointScheduler;
+
     private AppContext(Path configFile) {
         this.configFile = configFile;
         this.recentDatabases.addAll(readRecentDatabases(configFile));
@@ -183,6 +191,7 @@ public final class AppContext implements AutoCloseable {
             databasePath = dbFile;
             rememberRecent(dbFile);
             writeConfiguredDatabase(dbFile);
+            startPeriodicCheckpoint();
         } catch (RuntimeException failure) {
             try {
                 newDatabase.close();
@@ -288,8 +297,47 @@ public final class AppContext implements AutoCloseable {
         settings.put(SETTING_THEME, theme.name());
     }
 
+    // ------------------------------------------------------------------
+    // Persistence hygiene: periodic WAL checkpoint + clean shutdown
+    // ------------------------------------------------------------------
+
+    /** How often the WAL is folded into the main file (user asked ~5 min). */
+    private static final int CHECKPOINT_PERIOD_MINUTES = 5;
+
+    private void startPeriodicCheckpoint() {
+        if (checkpointScheduler == null) {
+            checkpointScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "pk-checkpoint");
+                thread.setDaemon(true);
+                return thread;
+            });
+            checkpointScheduler.scheduleWithFixedDelay(
+                    this::checkpointQuietly,
+                    CHECKPOINT_PERIOD_MINUTES, CHECKPOINT_PERIOD_MINUTES,
+                    java.util.concurrent.TimeUnit.MINUTES);
+        }
+    }
+
+    /** Checkpoint whatever database is open; never throws. */
+    public void checkpointQuietly() {
+        if (database != null) {
+            database.checkpoint();
+        }
+    }
+
+    /** Ctrl+S / "Guardar": checkpoint that reports success to the UI. */
+    public boolean saveCheckpoint() {
+        return database != null && database.checkpoint();
+    }
+
     @Override
     public void close() {
+        if (checkpointScheduler != null) {
+            checkpointScheduler.shutdownNow();
+            checkpointScheduler = null;
+        }
+        // A clean connection close is itself the final checkpoint: SQLite
+        // folds the WAL into the file and deletes the -wal / -shm leftovers.
         if (database != null) {
             database.close();
         }

@@ -128,6 +128,11 @@ final class ColumnViewBuilder {
         Button addCard = iconButton("\uFF0B", "pk-add-card", i18n.text("column.add.card"));
         addCard.setOnAction(e -> board.onAddCard(column.id()));
 
+        // Priority sort (user request): (★+!) to the top, then (!), then (★);
+        // everything else keeps its order. One undoable step.
+        Button sortPriority = iconButton("\u2193\u2605", "pk-sort-priority", i18n.text("column.sort.priority"));
+        sortPriority.setOnAction(e -> board.onSortColumnByPriority(column.id()));
+
         Button selectCards = iconButton("\u2610", "pk-select-cards", i18n.text("column.select.cards"));
         selectCards.setOnAction(e -> board.onToggleSelectionMode(column.id()));
 
@@ -146,7 +151,7 @@ final class ColumnViewBuilder {
         columnMenu.getItems().setAll(editItem, collapseItem, deleteItem,
                 new SeparatorMenuItem(), clearItem);
 
-        HBox header = new HBox(6, title, wip, addCard, selectCards, collapse, columnMenu);
+        HBox header = new HBox(6, title, wip, addCard, sortPriority, selectCards, collapse, columnMenu);
         header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         header.getStyleClass().add("column-header");
 
@@ -163,15 +168,21 @@ final class ColumnViewBuilder {
         view.setPrefWidth(280);
         view.getChildren().add(header);
 
-        // --- Cards (label-filtered; WIP badge keeps counting everything).
-        //     Every card is followed by a drop slot, so a drop can land exactly
-        //     where the indicator showed at drag time (slot = card index + 1). ---
+        // --- Cards (label/flag/process-filtered; WIP badge keeps counting
+        //     everything). Every card carries its own TOP drop edge (splits
+        //     the card: above = its index, below = index+1), plus a trailing
+        //     slot after the last card, so a drop can land exactly where the
+        //     indicator showed — including "above the first card" (user
+        //     request: the top of the column must be droppable). ---
         VBox cardsBox = new VBox(0);
         int cardIndex = 0;
         for (var card : column.cards()) {
-            if (labelFilter.matches(card) && quickFilter.matches(card)) {
-                cardsBox.getChildren().add(CardViewBuilder.build(
-                        service, i18n, dialogs, board, card, selectionMode, dark));
+            if (labelFilter.matches(card) && quickFilter.matches(card)
+                    && board.matchesProcessFilter(card)) {
+                VBox cardView = CardViewBuilder.build(
+                        service, i18n, dialogs, board, card, selectionMode, dark);
+                installTopDropEdge(cardView, column.id(), cardIndex, board);
+                cardsBox.getChildren().add(cardView);
                 cardsBox.getChildren().add(slotRegion(column.id(), cardIndex + 1, board));
                 cardIndex++;
             }
@@ -305,6 +316,45 @@ final class ColumnViewBuilder {
             if (dragboard.hasContent(CARD_FORMAT)) {
                 CardId dragged = new CardId((String) dragboard.getContent(CARD_FORMAT));
                 board.onMoveCard(dragged, columnId, slotIndex);
+                event.setDropCompleted(true);
+                event.consume();
+            }
+        });
+    }
+
+    /**
+     * Whole-card drop zones (user request "soltar ARRIBA"): the upper ~40%
+     * of a card drops ABOVE it (index N) and the rest drops BELOW it
+     * (index N+1) — exactly what the tiny slots did, but now the whole
+     * card gives feedback with a top or bottom insertion line. The
+     * trailing slot after the last card still handles append-at-end.
+     */
+    private static void installTopDropEdge(javafx.scene.Node cardView, ColumnId columnId,
+                                           int cardIndex, BoardController board) {
+        cardView.setOnDragOver(event -> {
+            if (event.getDragboard().hasContent(CARD_FORMAT)) {
+                boolean above = event.getY() <= cardView.getBoundsInLocal().getHeight() * 0.4;
+                String activeClass = above ? "drop-top-active" : "drop-bottom-active";
+                if (!cardView.getStyleClass().contains(activeClass)) {
+                    cardView.getStyleClass().removeAll("drop-top-active", "drop-bottom-active");
+                    cardView.getStyleClass().add(activeClass);
+                }
+                event.acceptTransferModes(TransferMode.MOVE);
+                event.consume();
+            }
+        });
+        cardView.setOnDragExited(event -> {
+            cardView.getStyleClass().removeAll("drop-top-active", "drop-bottom-active");
+            event.consume();
+        });
+        cardView.setOnDragDropped(event -> {
+            cardView.getStyleClass().removeAll("drop-top-active", "drop-bottom-active");
+            var dragboard = event.getDragboard();
+            if (dragboard.hasContent(CARD_FORMAT)) {
+                boolean above = event.getY() <= cardView.getBoundsInLocal().getHeight() * 0.4;
+                int slot = above ? cardIndex : cardIndex + 1;
+                CardId dragged = new CardId((String) dragboard.getContent(CARD_FORMAT));
+                board.onMoveCardToSlot(dragged, columnId, slot);
                 event.setDropCompleted(true);
                 event.consume();
             }

@@ -2,6 +2,7 @@ package com.personalkanban.ui;
 
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.ui.markdown.Markdown;
 import com.personalkanban.ui.theme.ThemeManager;
 import javafx.application.Platform;
@@ -10,22 +11,30 @@ import javafx.geometry.Orientation;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
 
 /**
- * Non-modal card detail window (Pure Fabrication): a markdown editor with a
- * live HTML preview side by side. The description itself remains plain text
- * in the domain — rendering is a pure UI concern. The preview WebView runs
- * with JavaScript disabled, so note content can never execute scripts.
+ * Non-modal card detail window (Pure Fabrication): three tabs — the markdown
+ * editor with live preview, the plain-text notes (session 4.4), and the flat
+ * checklist (session 4.5, items convertible into cards via their context
+ * menu). The preview WebView runs with JavaScript disabled, so note content
+ * can never execute scripts.
  */
 final class CardDetailWindow {
 
@@ -38,7 +47,9 @@ final class CardDetailWindow {
 
     private final Stage stage = new Stage();
     private final TextArea editor = new TextArea();
+    private final TextArea notesArea = new TextArea();
     private final WebView preview = new WebView();
+    private final VBox checklistBox = new VBox(6);
 
     private CardDetailWindow(Card card, BoardController board, I18n i18n, ThemeManager themeManager) {
         this.cardId = card.id();
@@ -52,6 +63,12 @@ final class CardDetailWindow {
         editor.textProperty().addListener((obs, old, value) -> renderPreview(value));
         editor.setTooltip(new Tooltip(i18n.text("card.md.editor.tip")));
 
+        notesArea.setText(card.notes());
+        notesArea.getStyleClass().add("md-editor");
+        notesArea.setWrapText(true);
+        notesArea.setPromptText(i18n.text("card.notes.prompt"));
+        notesArea.setTooltip(new Tooltip(i18n.text("card.notes.tip")));
+
         preview.getEngine().setJavaScriptEnabled(false);
         preview.setPrefHeight(300);
 
@@ -59,10 +76,17 @@ final class CardDetailWindow {
         titleLabel.getStyleClass().add("detail-title");
         titleLabel.setWrapText(true);
 
-        var split = new javafx.scene.control.SplitPane(wrapEditor(), preview);
+        SplitPane split = new SplitPane(wrapEditor(), preview);
         split.setOrientation(Orientation.HORIZONTAL);
         split.setDividerPositions(SPLIT_RATIO);
         VBox.setVgrow(split, Priority.ALWAYS);
+
+        Tab descriptionTab = new Tab(i18n.text("card.tab.description"), split);
+        Tab notesTab = new Tab(i18n.text("card.tab.notes"), buildNotesPane());
+        Tab checklistTab = new Tab(i18n.text("card.tab.checklist"), buildChecklistPane());
+        TabPane tabs = new TabPane(descriptionTab, notesTab, checklistTab);
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        VBox.setVgrow(tabs, Priority.ALWAYS);
 
         Button save = new Button(i18n.text("dialog.ok"));
         save.setOnAction(e -> onSave());
@@ -77,7 +101,7 @@ final class CardDetailWindow {
         copyAll.setTooltip(new Tooltip(i18n.text("card.md.copy.tip")));
         copyAll.setOnAction(e -> copyDescriptionToClipboard());
         copyAll.disableProperty().bind(editor.textProperty().isEmpty());
-        Region helpGap = new Region();
+        javafx.scene.layout.Region helpGap = new javafx.scene.layout.Region();
         helpGap.setMinWidth(14);
         ButtonBar buttons = new ButtonBar();
         buttons.getButtons().addAll(help, copyAll, helpGap, save, cancel);
@@ -85,17 +109,18 @@ final class CardDetailWindow {
 
         BorderPane layout = new BorderPane();
         layout.setTop(titleLabel);
-        layout.setCenter(split);
+        layout.setCenter(tabs);
         layout.setBottom(buttons);
         layout.getStyleClass().add("detail-window");
         layout.setPadding(new Insets(10));
 
-        Scene scene = new Scene(layout, 900, 560);
+        Scene scene = new Scene(layout, 920, 600);
         scene.getStylesheets().add(themeManager.stylesheet());
         stage.setScene(scene);
         stage.setTitle(i18n.text("card.detail.title") + " \u2014 " + card.title());
 
         renderPreview(editor.getText());
+        refreshChecklist();
     }
 
     /** Opens (or focuses) a detail window for the given card. */
@@ -107,7 +132,7 @@ final class CardDetailWindow {
     }
 
     // ------------------------------------------------------------------
-    // Internals
+    // Tabs
     // ------------------------------------------------------------------
 
     private VBox wrapEditor() {
@@ -117,6 +142,105 @@ final class CardDetailWindow {
         VBox.setVgrow(editor, Priority.ALWAYS);
         return editorBox;
     }
+
+    /** Notes tab: plain text + explicit save (kept separate from markdown). */
+    private VBox buildNotesPane() {
+        Label caption = new Label(i18n.text("card.notes.caption"));
+        caption.getStyleClass().add("detail-caption");
+        Button saveNotes = new Button(i18n.text("card.notes.save"));
+        saveNotes.getStyleClass().add("tool-button");
+        saveNotes.setOnAction(e -> board.onNotesSaved(cardId, notesArea.getText()));
+        HBox header = new HBox(8, caption, saveNotes);
+        header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        VBox pane = new VBox(4, header, notesArea);
+        VBox.setVgrow(notesArea, Priority.ALWAYS);
+        return pane;
+    }
+
+    /** Checklist tab: one add row plus one checkbox per item (flat list). */
+    private VBox buildChecklistPane() {
+        TextField newItem = new TextField();
+        newItem.setPromptText(i18n.text("checklist.new.prompt"));
+        newItem.setOnAction(e -> addChecklistItem(newItem));
+        Button add = new Button(i18n.text("checklist.add"));
+        add.getStyleClass().add("tool-button");
+        add.setOnAction(e -> addChecklistItem(newItem));
+        HBox addRow = new HBox(8, newItem, add);
+        addRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        HBox.setHgrow(newItem, Priority.ALWAYS);
+
+        VBox pane = new VBox(6, addRow, checklistBox);
+        VBox.setVgrow(checklistBox, Priority.ALWAYS);
+        return pane;
+    }
+
+    private void addChecklistItem(TextField newItem) {
+        String text = newItem.getText();
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        board.onChecklistAdd(cardId, text);
+        newItem.clear();
+        refreshChecklist();
+    }
+
+    /** Re-renders the checklist from the card's current state. */
+    private void refreshChecklist() {
+        checklistBox.getChildren().clear();
+        board.cardById(cardId).ifPresent(current -> {
+            for (ChecklistItem item : current.checklist()) {
+                CheckBox done = new CheckBox(item.text());
+                done.setSelected(item.done());
+                done.getStyleClass().add("checklist-item");
+                done.setWrapText(true);
+                done.setOnAction(e -> {
+                    board.onChecklistToggle(cardId, item.id(), done.isSelected());
+                    refreshChecklist();
+                });
+                ContextMenu menu = new ContextMenu(
+                        menuItem(i18n.text("checklist.rename"), () -> renameItem(item)),
+                        menuItem(i18n.text("checklist.convert"), () -> convertItem(item)),
+                        menuItem(i18n.text("checklist.remove"), () -> removeItem(item)));
+                done.setOnContextMenuRequested(e -> {
+                    menu.show(done, e.getScreenX(), e.getScreenY());
+                    e.consume();
+                });
+                checklistBox.getChildren().add(done);
+            }
+        });
+    }
+
+    private MenuItem menuItem(String text, Runnable action) {
+        MenuItem item = new MenuItem(text);
+        item.setOnAction(e -> action.run());
+        return item;
+    }
+
+    private void renameItem(ChecklistItem item) {
+        TextInputDialog dialog = new TextInputDialog(item.text());
+        dialog.setHeaderText(i18n.text("checklist.rename"));
+        dialog.setContentText(i18n.text("dialog.title.label"));
+        dialog.showAndWait().ifPresent(text -> {
+            if (text != null && !text.isBlank()) {
+                board.onChecklistRename(cardId, item.id(), text);
+                refreshChecklist();
+            }
+        });
+    }
+
+    private void convertItem(ChecklistItem item) {
+        board.onChecklistConvert(cardId, item.id());
+        refreshChecklist();
+    }
+
+    private void removeItem(ChecklistItem item) {
+        board.onChecklistRemove(cardId, item.id());
+        refreshChecklist();
+    }
+
+    // ------------------------------------------------------------------
+    // Description tab internals (unchanged from session 3)
+    // ------------------------------------------------------------------
 
     private void renderPreview(String markdown) {
         boolean dark = themeManager.isDark();

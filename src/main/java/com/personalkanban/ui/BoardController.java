@@ -67,6 +67,8 @@ public final class BoardController {
     private HBox columnsRow;
     private Menu boardMenu;
     private Menu databaseMenu;
+    private Menu processMenu;
+    private Menu helpMenu;
     private Label boardNameLabel;
     private HBox toolbarReference;
 
@@ -92,6 +94,14 @@ public final class BoardController {
 
     // Card view preferences of the active board (UI preference, per board).
     private CardViewSettings cardViewSettings = new CardViewSettings();
+
+    // Process filter of the active board: null = show all cards.
+    private com.personalkanban.domain.board.ProcessId activeProcessFilter;
+
+    // Background customization (session 4): "path|dim" or null = none.
+    private String backgroundSpec;
+
+    // Which database menus were built (the File menu must re-run its builder).
 
     public BoardController(AppContext context) {
         this.context = context;
@@ -158,6 +168,27 @@ public final class BoardController {
                 () -> onSetBoardCardViewMode(CardViewSettings.Mode.TITLE_PREVIEW));
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+3"),
                 () -> onSetBoardCardViewMode(CardViewSettings.Mode.FULL));
+        // Session 4 (fixed shortcuts + F1 help, user decision).
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("F1"),
+                this::onShowShortcutsHelp);
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+N"),
+                this::onNewBoard);
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+F"),
+                this::onFocusFilter);
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+D"),
+                this::onToggleDarkMode);
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+Q"),
+                this::onExit);
+        // Session 5 (user question: "¿Ctrl+S?"): yes — a manual "save now"
+        // is cheap reassurance even though every change is already committed.
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+S"),
+                this::onSaveNow);
+    }
+
+    private void onFocusFilter() {
+        if (labelFilterField != null) {
+            labelFilterField.requestFocus();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -172,6 +203,8 @@ public final class BoardController {
         collapsedColumns = service.collapsedColumnsOf(service.activeBoardId());
         cardViewSettings = service.cardViewSettingsOf(service.activeBoardId());
         columnWidths = service.columnWidthsOf(service.activeBoardId());
+        backgroundSpec = service.background();
+        applyBoardBackground();
 
         HBox toolbar = buildToolbar();
         HBox filterBar = buildFilterBar();
@@ -211,6 +244,11 @@ public final class BoardController {
         Button exportPdf = toolButton("\uD83D\uDCC4", "toolbar.export.pdf");
         exportPdf.setOnAction(e -> onExportBoardPdf());
 
+        // "Guardar" (session 5, user request): folds the WAL into the file
+        // right now; everything was already committed, this is reassurance.
+        Button save = toolButton("\uD83D\uDCBE", "toolbar.save");
+        save.setOnAction(e -> onSaveNow());
+
         // Card view mode: one button, radio menu (board-wide default).
         MenuButton cardViewMenu = new MenuButton("\u2637");
         cardViewMenu.getStyleClass().addAll("tool-button");
@@ -229,7 +267,7 @@ public final class BoardController {
         boardNameLabel.getStyleClass().add("board-name");
 
         HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn,
-                undoButton, redoButton, darkMode, exportPdf, cardViewMenu, spacer);
+                undoButton, redoButton, save, darkMode, exportPdf, cardViewMenu, spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
         toolbar.setPadding(new Insets(10));
@@ -280,8 +318,39 @@ public final class BoardController {
         javafx.scene.control.ToggleButton urgentFilter = quickFlagFilterButton(
                 "!", com.personalkanban.domain.board.Card.LABEL_URGENT, "filter.flag.urgent");
 
+        // Process filter (session 4.6): shows only the cards of one process.
+        // Note: only cards assigned to the chosen process remain visible.
+        ComboBox<String> processFilter = new ComboBox<>();
+        processFilter.setPromptText(i18n.text("filter.process.all"));
+        processFilter.setPrefWidth(150);
+        processFilter.setTooltip(new Tooltip(i18n.text("filter.process.tooltip")));
+        var processes = service.processes();
+        // A filter chosen on another board must not linger invisibly here.
+        if (activeProcessFilter != null && processes.stream()
+                .noneMatch(process -> process.id().equals(activeProcessFilter))) {
+            activeProcessFilter = null;
+        }
+        for (var process : processes) {
+            processFilter.getItems().add(process.name());
+        }
+        if (activeProcessFilter != null) {
+            processes.stream()
+                    .filter(process -> process.id().equals(activeProcessFilter))
+                    .findFirst()
+                    .ifPresent(process -> processFilter.setValue(process.name()));
+        }
+        processFilter.setOnAction(e -> {
+            String selected = processFilter.getValue();
+            activeProcessFilter = selected == null ? null : processes.stream()
+                    .filter(process -> process.name().equals(selected))
+                    .findFirst()
+                    .map(p -> p.id())
+                    .orElse(null);
+            refresh();
+        });
+
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
-                importantFilter, urgentFilter);
+                importantFilter, urgentFilter, processFilter);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
@@ -546,7 +615,14 @@ public final class BoardController {
             item.setOnAction(e -> onSwitchLanguage(locale));
             languageMenu.getItems().add(item);
         }
-        return new MenuBar(databaseMenu, boardMenu, languageMenu);
+        // Session 4: File (renamed from "Base de datos"), Boards, Processes,
+        // Language, Help — Preferences and the shortcuts help live in their
+        // natural menus.
+        processMenu = new Menu(i18n.text("menu.processes"));
+        rebuildProcessMenu();
+        helpMenu = new Menu(i18n.text("menu.help"));
+        rebuildHelpMenu();
+        return new MenuBar(databaseMenu, boardMenu, processMenu, languageMenu, helpMenu);
     }
 
     private void rebuildDatabaseMenu() {
@@ -557,6 +633,9 @@ public final class BoardController {
                 + context.databasePath());
         currentFile.setDisable(true);
         databaseMenu.getItems().setAll(
+                itemOf("file.save", this::onSaveNow),
+                itemOf("prefs.title", this::onShowPreferences),
+                new SeparatorMenuItem(),
                 itemOf("db.new", this::onNewDatabase),
                 itemOf("db.open", this::onOpenDatabase),
                 new SeparatorMenuItem());
@@ -572,7 +651,8 @@ public final class BoardController {
             databaseMenu.getItems().add(recentItem);
         }
 
-        databaseMenu.getItems().addAll(new SeparatorMenuItem(), currentFile);
+        databaseMenu.getItems().addAll(new SeparatorMenuItem(), currentFile,
+                new SeparatorMenuItem(), itemOf("file.exit", this::onExit));
     }
 
     private void rebuildBoardMenu() {
@@ -597,6 +677,29 @@ public final class BoardController {
                 itemOf("board.export", this::onExportBoard),
                 itemOf("board.export.pdf", this::onExportBoardPdf),
                 itemOf("board.import", this::onImportBoard));
+    }
+
+    /** Rebuilds the process management menu (creation order, like boards). */
+    private void rebuildProcessMenu() {
+        if (processMenu == null) {
+            return;
+        }
+        processMenu.getItems().setAll(
+                itemOf("process.new", this::onNewProcess));
+        for (com.personalkanban.domain.board.Process process : service.processes()) {
+            MenuItem rename = itemOf("process.rename", () -> onRenameProcess(process.id()));
+            MenuItem delete = itemOf("process.delete", () -> onDeleteProcess(process.id()));
+            processMenu.getItems().addAll(new SeparatorMenuItem(),
+                    new MenuItem("\u25CF " + process.name()), rename, delete);
+        }
+    }
+
+    /** Rebuilds the help menu contents (shortcuts reference lives here). */
+    private void rebuildHelpMenu() {
+        if (helpMenu == null) {
+            return;
+        }
+        helpMenu.getItems().setAll(itemOf("help.shortcuts", this::onShowShortcutsHelp));
     }
 
     private MenuItem itemOf(String textKey, Runnable action) {
@@ -892,6 +995,299 @@ public final class BoardController {
     }
 
     // ------------------------------------------------------------------
+    // Intents: shortcuts help, exit, preferences (session 4)
+    // ------------------------------------------------------------------
+
+    /** Opens (or focuses) the fixed-shortcuts reference window (F1). */
+    private void onShowShortcutsHelp() {
+        ShortcutsHelpWindow.show(i18n, themeManager.stylesheet());
+    }
+
+    /** Closes the app cleanly (File → Exit / Ctrl+Q / window X). */
+    private void onExit() {
+        shutdown();
+        javafx.application.Platform.exit();
+    }
+
+    /**
+     * Persistence hygiene (user request): every mutation already commits
+     * instantly; this performs the final WAL checkpoint and closes the
+     * database so the -wal/-shm files are folded away and removed. Also
+     * wired to the window close (X) via {@code Main}.
+     */
+    public void shutdown() {
+        try {
+            context.checkpointQuietly();
+        } catch (RuntimeException ignored) {
+            // Best-effort: closing below is the real guarantee.
+        }
+        context.close();
+    }
+
+    /** Ctrl+S / menu "Guardar": folds the WAL into the file right now. */
+    public void onSaveNow() {
+        boolean folded = context.saveCheckpoint();
+        if (folded) {
+            dialogs.info(i18n.text("file.save.confirm"));
+        } else {
+            dialogs.info(i18n.text("file.save.busy"));
+        }
+    }
+
+    /** Preferences: board background image + legibility dim. */
+    private void onShowPreferences() {
+        java.io.File seed = initialDirectory();
+        var choice = new PreferencesDialog(i18n).show(seed, backgroundSpec);
+        choice.ifPresent(selected -> {
+            String stored = selected.path() == null
+                    ? null
+                    : selected.path() + "|" + String.format(java.util.Locale.ROOT, "%.2f", selected.dim());
+            backgroundSpec = stored;
+            service.setBackground(stored);
+            applyBoardBackground();
+        });
+    }
+
+    /**
+     * Paints the customized background (session 4): image over the whole
+     * board, pre-dimmed once at load time so cards/columns stay readable.
+     * A missing or unreadable file silently falls back to no background
+     * (cosmetic preference; it must never block the app).
+     */
+    private void applyBoardBackground() {
+        if (backgroundSpec == null || backgroundSpec.isBlank()) {
+            root.setBackground(null);
+            return;
+        }
+        String[] parts = backgroundSpec.split("\\|", 2);
+        String path = parts[0];
+        double dim = 0.45;
+        if (parts.length == 2) {
+            try {
+                dim = Math.clamp(Double.parseDouble(parts[1]), 0.0, 0.8);
+            } catch (NumberFormatException ignored) {
+                // keep default dim
+            }
+        }
+        java.io.File file = new java.io.File(path);
+        if (!file.isFile()) {
+            root.setBackground(null);
+            return;
+        }
+        try {
+            javafx.scene.image.Image image = new javafx.scene.image.Image(
+                    dimmedImageUri(file, dim), true);
+            root.setBackground(new javafx.scene.layout.Background(
+                    new javafx.scene.layout.BackgroundImage(
+                            image,
+                            javafx.scene.layout.BackgroundRepeat.NO_REPEAT,
+                            javafx.scene.layout.BackgroundRepeat.NO_REPEAT,
+                            javafx.scene.layout.BackgroundPosition.CENTER,
+                            new javafx.scene.layout.BackgroundSize(
+                                    javafx.scene.layout.BackgroundSize.AUTO,
+                                    javafx.scene.layout.BackgroundSize.AUTO,
+                                    false, false, true, true)))); // cover
+        } catch (RuntimeException e) {
+            // A bad image file is a cosmetic problem only.
+            root.setBackground(null);
+        }
+    }
+
+    /**
+     * Returns a data URI of the image with a black overlay of the given
+     * opacity composited once (BufferedImage, same trick as the PDF
+     * exporter), so the UI never pays per-frame dimming.
+     */
+    private static String dimmedImageUri(java.io.File file, double dim) {
+        try {
+            java.awt.image.BufferedImage source = javax.imageio.ImageIO.read(file);
+            if (source == null) {
+                return file.toURI().toString(); // undimmable format: use as is
+            }
+            java.awt.image.BufferedImage dimmed = new java.awt.image.BufferedImage(
+                    source.getWidth(), source.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D graphics = dimmed.createGraphics();
+            graphics.drawImage(source, 0, 0, null);
+            graphics.setColor(new java.awt.Color(0, 0, 0, (int) Math.round(dim * 255)));
+            graphics.fillRect(0, 0, dimmed.getWidth(), dimmed.getHeight());
+            graphics.dispose();
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(dimmed, "png", out);
+            return "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(out.toByteArray());
+        } catch (java.io.IOException e) {
+            return file.toURI().toString(); // fall back to the raw image
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Intents: processes (session 4.6, menu + filter)
+    // ------------------------------------------------------------------
+
+    private void onNewProcess() {
+        dialogs.promptText(i18n.text("process.new"), "").ifPresent(name ->
+                guarded(() -> {
+                    if (name == null || name.isBlank()) {
+                        dialogs.info(i18n.text("process.name.required"));
+                        return;
+                    }
+                    service.addProcess(name);
+                    refresh(); // rebuilds the process menu too
+                }));
+    }
+
+    private void onRenameProcess(com.personalkanban.domain.board.ProcessId processId) {
+        var process = service.processes().stream()
+                .filter(p -> p.id().equals(processId))
+                .findFirst();
+        if (process.isEmpty()) {
+            return;
+        }
+        dialogs.promptText(i18n.text("process.rename"), process.get().name()).ifPresent(name ->
+                guarded(() -> {
+                    service.renameProcess(processId, name);
+                    refresh();
+                }));
+    }
+
+    private void onDeleteProcess(com.personalkanban.domain.board.ProcessId processId) {
+        if (dialogs.confirm(i18n.text("process.delete.confirm"))) {
+            if (activeProcessFilter != null && activeProcessFilter.equals(processId)) {
+                activeProcessFilter = null; // filter would dangle
+            }
+            guarded(() -> {
+                service.removeProcess(processId);
+                refresh();
+            });
+        }
+    }
+
+    /** Package-visible lookup for the card dialog's process combo. */
+    List<com.personalkanban.domain.board.Process> currentProcesses() {
+        return service.processes();
+    }
+
+    /** The process the cards are currently filtered by (null = all). */
+    com.personalkanban.domain.board.ProcessId activeProcessFilter() {
+        return activeProcessFilter;
+    }
+
+    /** True when the card passes the active process filter (null = all pass). */
+    boolean matchesProcessFilter(com.personalkanban.domain.board.Card card) {
+        return activeProcessFilter == null
+                || activeProcessFilter.equals(card.processId());
+    }
+
+    /** Direct predecessors of a card, for the card-front badges. */
+    int predecessorCountOf(com.personalkanban.domain.board.CardId cardId) {
+        return service.board().incomingPredecessorsOf(cardId).size();
+    }
+
+    /** Direct successors of a card, for the card-front badges. */
+    int successorCountOf(com.personalkanban.domain.board.CardId cardId) {
+        return service.board().outgoingSuccessorsOf(cardId).size();
+    }
+
+    // ------------------------------------------------------------------
+    // Intents: checklist, notes and card relations (session 4)
+    // ------------------------------------------------------------------
+
+    /** Package-visible card lookup for the non-modal detail window. */
+    java.util.Optional<com.personalkanban.domain.board.Card> cardById(
+            com.personalkanban.domain.board.CardId cardId) {
+        return service.board().findCard(cardId);
+    }
+
+    public void onChecklistAdd(com.personalkanban.domain.board.CardId cardId, String text) {
+        guarded(() -> {
+            service.addChecklistItem(cardId, text);
+            refresh();
+        });
+    }
+
+    public void onChecklistRename(com.personalkanban.domain.board.CardId cardId,
+                                  String itemId, String newText) {
+        guarded(() -> {
+            service.renameChecklistItem(cardId, itemId, newText);
+            refresh();
+        });
+    }
+
+    public void onChecklistToggle(com.personalkanban.domain.board.CardId cardId,
+                                  String itemId, boolean done) {
+        guarded(() -> {
+            service.setChecklistItemDone(cardId, itemId, done);
+            refresh();
+        });
+    }
+
+    public void onChecklistRemove(com.personalkanban.domain.board.CardId cardId, String itemId) {
+        guarded(() -> {
+            service.removeChecklistItem(cardId, itemId);
+            refresh();
+        });
+    }
+
+    /** Converts a checklist item into a card; reports where it landed. */
+    public void onChecklistConvert(com.personalkanban.domain.board.CardId cardId, String itemId) {
+        guarded(() -> {
+            com.personalkanban.domain.board.CardId created =
+                    service.convertChecklistItemToCard(cardId, itemId);
+            refresh();
+            dialogs.info(i18n.text("checklist.converted",
+                    service.board().findCard(created).map(c -> c.title()).orElse("")));
+        });
+    }
+
+    public void onNotesSaved(com.personalkanban.domain.board.CardId cardId, String notes) {
+        guarded(() -> {
+            service.setCardNotes(cardId, notes);
+            refresh();
+        });
+    }
+
+    public void onLinkCards(com.personalkanban.domain.board.CardId from,
+                            com.personalkanban.domain.board.CardId to) {
+        guarded(() -> {
+            service.linkCards(from, to);
+            refresh();
+        });
+    }
+
+    public void onUnlinkCards(com.personalkanban.domain.board.CardId from,
+                              com.personalkanban.domain.board.CardId to) {
+        guarded(() -> {
+            service.unlinkCards(from, to);
+            refresh();
+        });
+    }
+
+    /** Suggested order of a process: dialog with the topological order. */
+    public void onShowSuggestedOrder(com.personalkanban.domain.board.ProcessId processId) {
+        var board = service.board();
+        var members = board.cardsOfProcess(processId);
+        if (members.isEmpty()) {
+            dialogs.info(i18n.text("process.order.empty"));
+            return;
+        }
+        List<com.personalkanban.domain.board.CardId> ids =
+                members.stream().map(com.personalkanban.domain.board.Card::id).toList();
+        var result = service.suggestedOrder(ids);
+        if (!result.cycleRemaining().isEmpty()) {
+            dialogs.info(i18n.text("process.order.cycle",
+                    result.cycleRemaining().size(),
+                    result.cycleRemaining().stream()
+                            .map(board::titleOf).collect(java.util.stream.Collectors.joining(", "))));
+        }
+        StringBuilder text = new StringBuilder();
+        int position = 1;
+        for (com.personalkanban.domain.board.CardId cardId : result.ordered()) {
+            text.append(position++).append("). ")
+                    .append(board.titleOf(cardId)).append('\n');
+        }
+        dialogs.info(i18n.text("process.order.title") + "\n\n" + text.toString().strip());
+    }
+
+    // ------------------------------------------------------------------
     // Intents: columns & cards (invoked by the view builders)
     // ------------------------------------------------------------------
 
@@ -904,22 +1300,86 @@ public final class BoardController {
     }
 
     public void onAddCard(com.personalkanban.domain.board.ColumnId columnId) {
-        Optional<Dialogs.CardForm> form = dialogs.cardDialog(null, service.labelVocabulary());
+        Optional<Dialogs.CardForm> form = dialogs.cardDialog(
+                null, service.labelVocabulary(), service.processes(),
+                service.board().allCards(), List.of(), List.of());
         form.ifPresent(f -> guarded(() -> {
-            service.addCard(columnId, f.title(), f.description(), f.color(), f.dueDate(), f.labels());
+            var created = service.addCard(columnId, f.title(), f.description(), f.color(),
+                    f.dueDate(), f.labels(), f.notes(), null, f.processId());
+            if (!f.checklistLines().isEmpty()) {
+                service.setChecklistFromLines(created, f.checklistLines());
+            }
+            for (var predecessor : f.predecessors()) {
+                service.linkCards(predecessor, created);
+            }
+            for (var successor : f.successors()) {
+                service.linkCards(created, successor);
+            }
             refresh();
         }));
     }
 
     public void onEditCard(com.personalkanban.domain.board.CardId cardId) {
-        service.board().findCard(cardId).ifPresent(card ->
-                dialogs.cardDialog(new Dialogs.CardForm(card.title(), card.description(), card.color(),
-                        card.dueDate(), List.copyOf(card.labels())), service.labelVocabulary())
-                        .ifPresent(f -> guarded(() -> {
-                            service.editCard(cardId, f.title(), f.description(), f.color(),
-                                    f.dueDate(), f.labels());
-                            refresh();
-                        })));
+        service.board().findCard(cardId).ifPresent(card -> {
+            List<String> checklistLines = card.checklist().stream()
+                    .map(item -> item.done() ? "[x] " + item.text() : item.text())
+                    .toList();
+            String oldNotes = card.notes();
+            List<String> oldLines = List.copyOf(checklistLines);
+            var oldProcessId = card.processId();
+            var oldPredecessors = List.copyOf(service.board().incomingPredecessorsOf(cardId));
+            var oldSuccessors = List.copyOf(service.board().outgoingSuccessorsOf(cardId));
+            var otherCards = service.board().allCards().stream()
+                    .filter(other -> !other.id().equals(cardId)).toList();
+            var initial = new Dialogs.CardForm(card.title(), card.description(), card.color(),
+                    card.dueDate(), List.copyOf(card.labels()), card.notes(),
+                    checklistLines, card.processId());
+            dialogs.cardDialog(initial, service.labelVocabulary(), service.processes(),
+                    otherCards, oldPredecessors, oldSuccessors)
+                    .ifPresent(f -> guarded(() -> {
+                        service.editCard(cardId, f.title(), f.description(), f.color(),
+                                f.dueDate(), f.labels());
+                        // Advanced fields apply only when actually changed, so
+                        // undo stays meaningful (one transaction per change).
+                        if (!f.notes().equals(oldNotes)) {
+                            service.setCardNotes(cardId, f.notes());
+                        }
+                        if (!f.checklistLines().equals(oldLines)) {
+                            service.setChecklistFromLines(cardId, f.checklistLines());
+                        }
+                        if (!java.util.Objects.equals(f.processId(), oldProcessId)) {
+                            service.assignCardToProcess(cardId, f.processId());
+                        }
+                        diffLinks(cardId, oldPredecessors, f.predecessors(), true);
+                        diffLinks(cardId, oldSuccessors, f.successors(), false);
+                        refresh();
+                    }));
+        });
+    }
+
+    /** Applies predecessor/successor diffs as link/unlink transactions. */
+    private void diffLinks(com.personalkanban.domain.board.CardId cardId,
+                           List<com.personalkanban.domain.board.CardId> before,
+                           List<com.personalkanban.domain.board.CardId> after,
+                           boolean asPredecessor) {
+        for (var other : after) {
+            if (!before.contains(other)) {
+                if (asPredecessor) {
+                    service.linkCards(other, cardId);
+                } else {
+                    service.linkCards(cardId, other);
+                }
+            }
+        }
+        for (var other : before) {
+            if (!after.contains(other)) {
+                if (asPredecessor) {
+                    service.unlinkCards(other, cardId);
+                } else {
+                    service.unlinkCards(cardId, other);
+                }
+            }
+        }
     }
 
     /** Opens the non-modal markdown detail window for a card. */
@@ -991,6 +1451,20 @@ public final class BoardController {
         });
     }
 
+    /** Stable priority sort of one column: (★+!) → (!) → (★) → rest. */
+    public void onSortColumnByPriority(com.personalkanban.domain.board.ColumnId columnId) {
+        guarded(() -> {
+            service.sortColumnByPriority(columnId);
+            refresh();
+        });
+    }
+
+    /** Opens the detail window for reading/updating a card's notes. */
+    public void onOpenCardNotes(com.personalkanban.domain.board.CardId cardId) {
+        service.board().findCard(cardId).ifPresent(card ->
+                CardDetailWindow.open(card, this, i18n, themeManager));
+    }
+
     public void onMoveColumn(com.personalkanban.domain.board.ColumnId columnId, int targetIndex) {
         guarded(() -> {
             service.moveColumn(columnId, targetIndex);
@@ -1037,6 +1511,7 @@ public final class BoardController {
                 ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter, quickFilter,
                         selectionMode, collapsedColumns, themeManager.isDark(), columnWidths));
         rebuildBoardMenu(); // keep the active-board marker in sync
+        rebuildProcessMenu();
         syncCardViewMenu();
         undoRedo.sync();
         updateSelectionBarState();

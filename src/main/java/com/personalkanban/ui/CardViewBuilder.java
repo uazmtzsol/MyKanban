@@ -47,6 +47,15 @@ final class CardViewBuilder {
         VBox view = new VBox(4);
         view.getStyleClass().addAll("card", ColorCss.styleClass(card.color()));
         ColorCss.applySurface(view, card.color(), dark);
+        // Quick-flag highlight classes (user request: (i)/(u)/(iu) must stand
+        // out); CSS owns the look per theme.
+        if (card.isUrgentAndImportantCard()) {
+            view.getStyleClass().add("card-priority-urgent-important");
+        } else if (card.isUrgentOnlyCard()) {
+            view.getStyleClass().add("card-priority-urgent");
+        } else if (card.isImportantOnlyCard()) {
+            view.getStyleClass().add("card-priority-important");
+        }
         if (board.isCardSelected(card.id())) {
             view.getStyleClass().add("card-selected");
         }
@@ -61,12 +70,17 @@ final class CardViewBuilder {
                     "\u2605", "card.flag.important", "card-flag-important"));
             titleRow.getChildren().add(flagButton(board, card, Card.LABEL_URGENT,
                     "!", "card.flag.urgent", "card-flag-urgent"));
+            titleRow.getChildren().add(notesButton(i18n, board, card));
         }
         view.getChildren().add(titleRow);
 
         addDescriptionByMode(view, card, mode);
 
         addDueBadgeIfPresent(i18n, card, view);
+        addChecklistProgressIfPresent(i18n, card, view);
+        addNotesIndicatorIfPresent(i18n, card, view);
+        addProcessChipIfPresent(board, card, view);
+        addRelationBadgesIfPresent(i18n, board, card, view);
         addLabelChipsIfPresent(card, view);
 
         HBox actions = new HBox(4,
@@ -128,6 +142,61 @@ final class CardViewBuilder {
 
         installDragSource(view, card.id());
         return view;
+    }
+
+    /** "☑ n/m" progress badge when the card carries a checklist. */
+    private static void addChecklistProgressIfPresent(I18n i18n, Card card, VBox view) {
+        if (card.checklistCount() == 0) {
+            return;
+        }
+        long done = card.doneChecklistCount();
+        Label badge = new Label("\u2611 " + done + "/" + card.checklistCount());
+        badge.getStyleClass().add(done == card.checklistCount()
+                ? "card-checklist-done" : "card-checklist");
+        badge.setTooltip(new Tooltip(i18n.text("checklist.progress.tip")));
+        view.getChildren().add(badge);
+    }
+
+    /** "\uD83D\uDCDD Notes" hint when the card has plain-text notes. */
+    private static void addNotesIndicatorIfPresent(I18n i18n, Card card, VBox view) {
+        if (card.notes().isBlank()) {
+            return;
+        }
+        Label badge = new Label("\uD83D\uDCDD");
+        badge.getStyleClass().add("card-notes-indicator");
+        String notes = card.notes();
+        String extract = notes.length() > 120 ? notes.substring(0, 120) + "\u2026" : notes;
+        badge.setTooltip(new Tooltip(extract));
+        view.getChildren().add(badge);
+    }
+
+    /** Small chip naming the process the card belongs to (session 4.6). */
+    private static void addProcessChipIfPresent(BoardController board, Card card, VBox view) {
+        if (card.processId() == null) {
+            return;
+        }
+        board.currentProcesses().stream()
+                .filter(process -> process.id().equals(card.processId()))
+                .findFirst()
+                .ifPresent(process -> {
+                    Label chip = new Label("\u26AD " + process.name());
+                    chip.getStyleClass().add("card-process-chip");
+                    view.getChildren().add(chip);
+                });
+    }
+
+    /** "\u2190n \u2192n" badges counting predecessors/successors (session 4.6). */
+    private static void addRelationBadgesIfPresent(I18n i18n, BoardController board,
+                                                   Card card, VBox view) {
+        int predecessors = board.predecessorCountOf(card.id());
+        int successors = board.successorCountOf(card.id());
+        if (predecessors == 0 && successors == 0) {
+            return;
+        }
+        Label badge = new Label("\u2190" + predecessors + " \u2192" + successors);
+        badge.getStyleClass().add("card-relations");
+        badge.setTooltip(new Tooltip(i18n.text("card.relations.tip")));
+        view.getChildren().add(badge);
     }
 
     /** \u26A0-style badge with the localized date; red styling when overdue. */
@@ -209,6 +278,22 @@ final class CardViewBuilder {
         button.setMinWidth(Region.USE_PREF_SIZE);
         button.setMinHeight(Region.USE_PREF_SIZE);
         button.setOnAction(e -> board.onToggleCardLabel(card.id(), label));
+        return button;
+    }
+
+    /**
+     * Notes button (user request): sits next to ★/!, dimmed when the card
+     * has no notes, vivid when it does; always opens the detail window.
+     */
+    private static Button notesButton(I18n i18n, BoardController board, Card card) {
+        Button button = new Button("\uD83D\uDCDD");
+        button.getStyleClass().add(card.notes().isBlank()
+                ? "card-flag-off" : "card-flag-on");
+        button.setTooltip(new Tooltip(i18n.text("card.notes.button.tip")));
+        button.setFocusTraversable(false);
+        button.setMinWidth(Region.USE_PREF_SIZE);
+        button.setMinHeight(Region.USE_PREF_SIZE);
+        button.setOnAction(e -> board.onOpenCardNotes(card.id()));
         return button;
     }
 

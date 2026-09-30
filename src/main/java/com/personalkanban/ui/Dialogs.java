@@ -38,9 +38,26 @@ final class Dialogs {
     record ColumnForm(String title, String description, BoardColor color, WipLimit wipLimit) {
     }
 
-    /** Result of the card dialog. */
+    /** Result of the card dialog (session 5: advanced fields added). */
     record CardForm(String title, String description, BoardColor color,
-                    LocalDate dueDate, List<String> labels) {
+                    LocalDate dueDate, List<String> labels,
+                    String notes, List<String> checklistLines, com.personalkanban.domain.board.ProcessId processId,
+                    List<com.personalkanban.domain.board.CardId> predecessors,
+                    List<com.personalkanban.domain.board.CardId> successors) {
+
+        /** Session-5 shape without relation fields. */
+        CardForm(String title, String description, BoardColor color,
+                 LocalDate dueDate, List<String> labels,
+                 String notes, List<String> checklistLines, com.personalkanban.domain.board.ProcessId processId) {
+            this(title, description, color, dueDate, labels, notes, checklistLines, processId,
+                    List.of(), List.of());
+        }
+
+        /** Backward-compatible shape: minimal fields only. */
+        CardForm(String title, String description, BoardColor color,
+                 LocalDate dueDate, List<String> labels) {
+            this(title, description, color, dueDate, labels, "", List.of(), null, List.of(), List.of());
+        }
     }
 
     /** Result of the bulk labels dialog: which operation and which labels. */
@@ -99,7 +116,11 @@ final class Dialogs {
     // Card dialog
     // ------------------------------------------------------------------
 
-    Optional<CardForm> cardDialog(CardForm initial, List<String> labelVocabulary) {
+    Optional<CardForm> cardDialog(CardForm initial, List<String> labelVocabulary,
+                                  List<com.personalkanban.domain.board.Process> processes,
+                                  List<com.personalkanban.domain.board.Card> otherCards,
+                                  List<com.personalkanban.domain.board.CardId> currentPredecessors,
+                                  List<com.personalkanban.domain.board.CardId> currentSuccessors) {
         TextField titleField = new TextField(initial == null ? "" : initial.title());
         TextArea descriptionArea = new TextArea(initial == null ? "" : initial.description());
         descriptionArea.setPrefRowCount(3);
@@ -111,6 +132,103 @@ final class Dialogs {
         labelsField.setPromptText(i18n.text("card.labels.prompt"));
         List<String> ownLabels = initial == null ? List.of() : initial.labels();
         LabelAutoComplete.attach(labelsField, new LabelSuggester(labelVocabulary), () -> ownLabels);
+
+        // --- Advanced (collapsible) section — user request: the dialog shows
+        //     the minimal useful fields by default; one checklist-shaped
+        //     toggle reveals notes, checklist and process. ---
+        TextArea notesArea = new TextArea(initial == null ? "" : initial.notes());
+        notesArea.setPromptText(i18n.text("card.notes.prompt"));
+        notesArea.setPrefRowCount(2);
+        notesArea.setWrapText(true);
+        TextArea checklistArea = new TextArea(initial == null || initial.checklistLines().isEmpty()
+                ? "" : String.join("\n", initial.checklistLines()));
+        checklistArea.setPromptText(i18n.text("checklist.dialog.prompt"));
+        checklistArea.setPrefRowCount(3);
+        checklistArea.setWrapText(true);
+        javafx.scene.control.ComboBox<com.personalkanban.domain.board.Process> processCombo =
+                new javafx.scene.control.ComboBox<>(
+                        javafx.collections.FXCollections.observableArrayList(processes));
+        processCombo.setPromptText(i18n.text("card.process.none"));
+        processCombo.setMaxWidth(Double.MAX_VALUE);
+        processCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(com.personalkanban.domain.board.Process process) {
+                return process == null ? "" : process.name();
+            }
+
+            @Override
+            public com.personalkanban.domain.board.Process fromString(String string) {
+                return null;
+            }
+        });
+        if (initial != null && initial.processId() != null) {
+            processes.stream()
+                    .filter(process -> process.id().equals(initial.processId()))
+                    .findFirst()
+                    .ifPresent(processCombo.getSelectionModel()::select);
+        }
+
+        javafx.scene.control.Label notesCaption =
+                new javafx.scene.control.Label(i18n.text("card.tab.notes"));
+        javafx.scene.control.Label checklistCaption =
+                new javafx.scene.control.Label(i18n.text("card.tab.checklist"));
+        checklistCaption.setTooltip(new javafx.scene.control.Tooltip(
+                i18n.text("checklist.dialog.help")));
+        javafx.scene.control.Label processCaption =
+                new javafx.scene.control.Label(i18n.text("card.process.label"));
+        javafx.scene.layout.VBox advancedBox = new javafx.scene.layout.VBox(
+                8, notesCaption, notesArea, checklistCaption, checklistArea,
+                processCaption, processCombo);
+
+        // --- Precedence links (user request ②): which tasks come BEFORE and
+        //     AFTER this one. Two multi-selection lists of the other cards;
+        //     the controller diffs them into link/unlink transactions. ---
+        java.util.LinkedHashMap<String, com.personalkanban.domain.board.CardId> candidates =
+                new java.util.LinkedHashMap<>();
+        for (com.personalkanban.domain.board.Card candidate : otherCards) {
+            candidates.put(candidate.title(), candidate.id());
+        }
+        java.util.List<com.personalkanban.domain.board.CardId> oldPredecessors =
+                currentPredecessors == null ? List.of() : currentPredecessors;
+        javafx.scene.control.ListView<String> predecessorsList =
+                new javafx.scene.control.ListView<>(
+                        javafx.collections.FXCollections.observableArrayList(candidates.keySet()));
+        javafx.scene.control.ListView<String> successorsList =
+                new javafx.scene.control.ListView<>(
+                        javafx.collections.FXCollections.observableArrayList(candidates.keySet()));
+        predecessorsList.setPrefHeight(90);
+        successorsList.setPrefHeight(90);
+        predecessorsList.getSelectionModel().setSelectionMode(
+                javafx.scene.control.SelectionMode.MULTIPLE);
+        successorsList.getSelectionModel().setSelectionMode(
+                javafx.scene.control.SelectionMode.MULTIPLE);
+        predecessorsList.setCellFactory(view -> relationCell(oldPredecessors, candidates));
+        successorsList.setCellFactory(view -> relationCell(
+                currentSuccessors == null ? List.of() : currentSuccessors, candidates));
+        oldPredecessors.forEach(id -> candidates.entrySet().stream()
+                .filter(entry -> entry.getValue().equals(id))
+                .map(java.util.Map.Entry::getKey)
+                .findFirst()
+                .ifPresent(title -> predecessorsList.getSelectionModel().select(title)));
+        oldPredecessors.forEach(id -> candidates.entrySet().stream()
+                .filter(entry -> entry.getValue().equals(id))
+                .map(java.util.Map.Entry::getKey)
+                .findFirst()
+                .ifPresent(title -> predecessorsList.getSelectionModel().select(title)));
+        javafx.scene.control.Label predecessorsCaption =
+                new javafx.scene.control.Label(i18n.text("card.links.predecessors"));
+        javafx.scene.control.Label successorsCaption =
+                new javafx.scene.control.Label(i18n.text("card.links.successors"));
+        javafx.scene.layout.VBox relationsBox = new javafx.scene.layout.VBox(
+                4, predecessorsCaption, predecessorsList, successorsCaption, successorsList);
+
+        advancedBox.getChildren().add(relationsBox);
+
+        javafx.scene.control.ToggleButton advancedToggle =
+                new javafx.scene.control.ToggleButton("\u2611 " + i18n.text("card.advanced.toggle"));
+        advancedToggle.getStyleClass().addAll("tool-button", "card-advanced-toggle");
+        advancedBox.visibleProperty().bind(advancedToggle.selectedProperty());
+        advancedBox.managedProperty().bind(advancedToggle.selectedProperty());
 
         Dialog<CardForm> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("dialog.card.title"));
@@ -126,6 +244,8 @@ final class Dialogs {
         grid.add(dueDatePicker, 1, 3);
         grid.add(new Label(i18n.text("card.labels")), 0, 4);
         grid.add(labelsField, 1, 4);
+        grid.add(advancedToggle, 0, 5, 2, 1);
+        grid.add(advancedBox, 0, 6, 2, 1);
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(button -> {
@@ -137,10 +257,58 @@ final class Dialogs {
                 return null;
             }
             return new CardForm(title, descriptionArea.getText(), selectedColor(colorPicker),
-                    dueDatePicker.getValue(), parseLabels(labelsField.getText()));
+                    dueDatePicker.getValue(), parseLabels(labelsField.getText()),
+                    notesArea.getText(), parseChecklistLines(checklistArea.getText()),
+                    processCombo.getValue() == null ? null : processCombo.getValue().id(),
+                    selectedIds(predecessorsList, candidates),
+                    selectedIds(successorsList, candidates));
         });
 
         return dialog.showAndWait();
+    }
+
+    /** Cell that pre-checks the currently linked cards (✔ prefix). */
+    private javafx.scene.control.ListCell<String> relationCell(
+            List<com.personalkanban.domain.board.CardId> linked,
+            java.util.LinkedHashMap<String, com.personalkanban.domain.board.CardId> candidates) {
+        return new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                com.personalkanban.domain.board.CardId id = candidates.get(item);
+                boolean isLinked = id != null && linked.stream()
+                        .anyMatch(linkedId -> linkedId.equals(id));
+                setText(isLinked ? "\u2714 " + item : item);
+            }
+        };
+    }
+
+    private List<com.personalkanban.domain.board.CardId> selectedIds(
+            javafx.scene.control.ListView<String> list,
+            java.util.LinkedHashMap<String, com.personalkanban.domain.board.CardId> candidates) {
+        return list.getSelectionModel().getSelectedItems().stream()
+                .map(candidates::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * Checklist text area → lines: "[x] task" = done, "[ ] task"/"task" =
+     * pending. Blank lines are dropped; the markers survive as text so the
+     * domain's line parser reads them.
+     */
+    static List<String> parseChecklistLines(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(text.split("\\R"))
+                .map(String::strip)
+                .filter(line -> !line.isEmpty())
+                .toList();
     }
 
     // ------------------------------------------------------------------

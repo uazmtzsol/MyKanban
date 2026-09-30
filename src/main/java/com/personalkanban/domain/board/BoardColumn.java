@@ -71,12 +71,23 @@ public final class BoardColumn {
     /** Appends a card, enforcing the WIP limit, and returns the resulting event. */
     CardAdded addCard(String title, String description, BoardColor color,
                       java.time.LocalDate dueDate, List<String> labels) {
+        return addCard(Ids.newCardId(), title, description, color, dueDate, labels);
+    }
+
+    /** Appends a card with a pre-minted id (session-4 extras on the aggregate). */
+    CardAdded addCard(CardId cardId, String title, String description, BoardColor color,
+                      java.time.LocalDate dueDate, List<String> labels) {
         if (wipLimit.isExceededBy(cards.size() + 1)) {
             throw new com.personalkanban.domain.exception.WipLimitExceededException(id, wipLimit.value());
         }
-        Card card = new Card(id, title, description, color, dueDate, labels);
+        Card card = new Card(cardId, id, title, description, color, dueDate, labels, Instant.now());
         cards.add(card);
         return new CardAdded(card.id(), id, Instant.now());
+    }
+
+    /** Color used for cards converted from checklist items (same as new columns). */
+    BoardColor defaultCardColor() {
+        return BoardColor.DEFAULT;
     }
 
     void removeCard(CardId cardId) {
@@ -85,6 +96,12 @@ public final class BoardColumn {
 
     void clearCards() {
         cards.clear();
+    }
+
+    /** Replaces the whole card order (priority sort); aggregate-checked. */
+    void replaceCards(List<Card> newOrder) {
+        cards.clear();
+        cards.addAll(newOrder);
     }
 
     /**
