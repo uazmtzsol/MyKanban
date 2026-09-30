@@ -4,8 +4,9 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Última actualización: 2026-09-29 · Sesión 3 en curso: 5 correcciones/mejoras
-UI pedidas por el usuario (ver checklist abajo).*
+*Última actualización: 2026-09-29 · Sesión 3 completa: 5 correcciones/mejoras
+de UI implementadas, probadas (130/130 tests) y en `ImprovementsV1`. Falta
+prueba manual del usuario (ver checklist abajo).*
 
 ---
 
