@@ -59,7 +59,8 @@ final class ColumnViewBuilder {
             }
             all.add(view);
         }
-        // Resize handles BETWEEN columns (drag the gap to change the left one's width).
+        // Resize handles BETWEEN columns (drag the gap to change the left one's width),
+        // plus one AFTER the last column so it is resizable too.
         for (int i = 0; i < all.size() - 1; i++) {
             VBox left = all.get(i);
             ColumnId leftId = (ColumnId) left.getUserData();
@@ -67,7 +68,10 @@ final class ColumnViewBuilder {
             views.add(resizeHandle(left, leftId.value(), board));
         }
         if (!all.isEmpty()) {
-            views.add(all.getLast());
+            VBox last = all.getLast();
+            ColumnId lastId = (ColumnId) last.getUserData();
+            views.add(last);
+            views.add(resizeHandle(last, lastId.value(), board));
         }
         return views;
     }

@@ -4,7 +4,28 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Última actualización: 2026-09-29 · Sesión 2: **P0 implementada** + **i18n reducido a EN/ES/DE/FR** + **P1.5 selección múltiple** + **columnas al crear tablero**. 100 tests OK. Pendiente: prueba manual del usuario.*
+*Última actualización: 2026-09-29 · Sesión 3 en curso: 5 correcciones/mejoras
+UI pedidas por el usuario (ver checklist abajo).*
+
+---
+
+## Sesión 3 — Correcciones y mejoras de UI (pedidas por el usuario)
+
+- [x] **3.1 — Asa de resize en la última columna.** `ColumnViewBuilder.buildAll`
+  ahora añade un handle también DESPUÉS de la última columna (antes solo
+  había entre columnas), simétrico al existente.
+- [ ] **3.2 — Quitar botón "Vaciar tablero"** de la toolbar (🗑, entre añadir
+  columna y deshacer): eliminar botón + handler + `BoardService.clearBoard()`
+  + `ClearBoardCommand` + test asociado + i18n `toolbar.clear.board`/
+  `confirm.clear.board` (4 bundles). Confirmado sin otro uso: "Eliminar
+  tablero" del menú usa `deleteBoard()`, un método distinto.
+- [ ] **3.3 — Botón "copiar todo" en el editor markdown** de comentarios
+  (`CardDetailWindow`): copia el contenido del editor al portapapeles.
+- [ ] **3.4 — Toggles ★ Importante / ! Urgente en la barra de filtro:**
+  filtran tarjetas por esas etiquetas; con ambos activos exige las dos
+  (AND), combinado con el filtro de texto existente.
+- [ ] **3.5 — Exportar el tablero visible a PDF:** snapshot visual paginado
+  (Apache PDFBox), accesible desde botón de toolbar y menú Board.
 
 ---
 
