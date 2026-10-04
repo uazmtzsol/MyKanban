@@ -9,6 +9,7 @@ import com.personalkanban.application.command.AddProcessCommand;
 import com.personalkanban.application.command.AssignProcessCommand;
 import com.personalkanban.application.command.BoardCommand;
 import com.personalkanban.application.command.ClearColumnCommand;
+import com.personalkanban.application.command.CommentTimeEntryCommand;
 import com.personalkanban.application.command.ConvertChecklistItemCommand;
 import com.personalkanban.application.command.EditCardCommand;
 import com.personalkanban.application.command.EditColumnCommand;
@@ -32,7 +33,10 @@ import com.personalkanban.application.command.RemoveCardCommand;
 import com.personalkanban.application.command.RemoveColumnCommand;
 import com.personalkanban.application.command.RenameColumnCommand;
 import com.personalkanban.application.command.RenameProcessCommand;
+import com.personalkanban.application.command.RemoveTimeEntryCommand;
 import com.personalkanban.application.command.SetChecklistFromLinesCommand;
+import com.personalkanban.application.command.StartTimeTrackingCommand;
+import com.personalkanban.application.command.StopTimeTrackingCommand;
 import com.personalkanban.application.command.SortColumnByPriorityCommand;
 import com.personalkanban.application.command.UnlinkCardsCommand;
 import com.personalkanban.application.port.BoardRepository;
@@ -49,8 +53,10 @@ import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.DependencyGuard;
+import com.personalkanban.domain.board.EntryId;
 import com.personalkanban.domain.board.Process;
 import com.personalkanban.domain.board.ProcessId;
+import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.domain.board.WipLimit;
 
 import java.io.IOException;
@@ -97,9 +103,7 @@ public final class BoardService {
         this.repository = Objects.requireNonNull(repository);
         this.history = Objects.requireNonNull(history);
         this.settings = Objects.requireNonNull(settings);
-        this.mapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        this.mapper = BoardJsonMapper.create();
         this.catalog.addAll(repository.listBoards());
         this.activeBoard = selectInitialBoard();
     }
@@ -300,6 +304,56 @@ public final class BoardService {
      */
     public void sortColumnByPriority(ColumnId columnId) {
         execute(new SortColumnByPriorityCommand(columnId));
+    }
+
+    // ------------------------------------------------------------------
+    // Time tracking (session 6)
+    // ------------------------------------------------------------------
+
+    /** Starts a time-tracking entry on the card (toggles on: first click). */
+    public void startTimeTracking(CardId cardId) {
+        execute(new StartTimeTrackingCommand(cardId));
+    }
+
+    /** Stops the running time-tracking entry (toggles off: second click). */
+    public void stopTimeTracking(CardId cardId) {
+        execute(new StopTimeTrackingCommand(cardId));
+    }
+
+    /**
+     * Saves the comment typed for the running entry. The domain strips blank
+     * text to nothing, so an empty editor simply leaves the entry commentless.
+     */
+    public void commentRunningTimeEntry(CardId cardId, String comment) {
+        execute(new CommentTimeEntryCommand(cardId, comment));
+    }
+
+    /** Deletes one time-tracking entry; returns true when it existed. */
+    public boolean removeTimeEntry(CardId cardId, EntryId entryId) {
+        boolean existed = activeBoard.timeEntriesOf(cardId).stream()
+                .anyMatch(entry -> entry.id().equals(entryId));
+        if (existed) {
+            execute(new RemoveTimeEntryCommand(cardId, entryId));
+        }
+        return existed;
+    }
+
+    /** Time-tracking entries of one card, chronological (read-only view). */
+    public List<TimelineEntry> timeEntriesOf(CardId cardId) {
+        return activeBoard.timeEntriesOf(cardId);
+    }
+
+    /** True while the card is being timed right now. */
+    public boolean isTracking(CardId cardId) {
+        return activeBoard.runningTimeEntryOf(cardId) != null;
+    }
+
+    /** Total tracked time of one card in milliseconds (closed + running). */
+    public long trackedMillisOf(CardId cardId) {
+        java.time.Instant now = java.time.Instant.now();
+        return activeBoard.timeEntriesOf(cardId).stream()
+                .mapToLong(entry -> entry.durationMillis(now))
+                .sum();
     }
 
     // ------------------------------------------------------------------

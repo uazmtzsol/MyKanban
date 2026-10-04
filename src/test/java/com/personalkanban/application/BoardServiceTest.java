@@ -398,6 +398,26 @@ class BoardServiceTest {
     }
 
     @Test
+    void exportThenImportKeepsTimeTracking(@TempDir Path tempDir) throws Exception {
+        var col = service.addColumn("To Do", "", BoardColor.BLUE, WipLimit.unlimited());
+        var cardId = service.addCard(col, "timed", "", BoardColor.TEAL);
+        service.startTimeTracking(cardId);
+        service.commentRunningTimeEntry(cardId, "working");
+        service.stopTimeTracking(cardId);
+
+        Path file = tempDir.resolve("timed.json");
+        service.exportBoard(file);
+        BoardId imported = service.importBoard(file);
+        service.openBoard(imported);
+
+        var card = service.board().columns().get(0).cards().get(0);
+        var entries = service.timeEntriesOf(card.id());
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).comment()).isEqualTo("working");
+        assertThat(entries.get(0).isClosed()).isTrue();
+    }
+
+    @Test
     void importRejectsInvalidFiles(@TempDir Path tempDir) throws Exception {
         Path bogus = tempDir.resolve("bogus.json");
         Files.writeString(bogus, "{\"payload\": {\"name\": \"no board here\"}}");

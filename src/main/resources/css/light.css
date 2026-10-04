@@ -240,6 +240,43 @@
     -fx-font-weight: bold;
 }
 
+/* Session 6: markdown edit/view toggle and time tracking */
+.md-mode-toggle {
+    -fx-font-size: 12px;
+    -fx-background-color: #eef1f6;
+    -fx-background-radius: 6;
+    -fx-padding: 2 8 2 8;
+}
+.md-mode-toggle:selected { -fx-background-color: #dbe4f0; }
+.time-stopwatch {
+    -fx-font-size: 18px;
+    -fx-min-width: 40; -fx-min-height: 40;
+    -fx-background-color: #eef1f6;
+    -fx-background-radius: 20;
+}
+.time-stopwatch:selected { -fx-background-color: #fde68a; -fx-text-fill: #92400e; }
+.time-entry { -fx-font-size: 12px; -fx-text-fill: #374151; }
+.time-entry-comment { -fx-font-size: 12px; -fx-text-fill: #6b7280; }
+.time-entry-delete { -fx-font-size: 12px; -fx-background-color: transparent; }
+.time-entry-delete:hover { -fx-background-color: #fee2e2; }
+
+/* Session 6: process view */
+.process-row { -fx-padding: 6; }
+.process-header { -fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1d4ed8; }
+.process-row-scroll { -fx-background-color: transparent; }
+.process-card {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-min-width: 150;
+}
+.process-card-title { -fx-font-weight: bold; }
+.process-arrow-button { -fx-font-size: 12px; -fx-background-color: transparent; -fx-padding: 1 4 1 4; }
+.process-arrow-button:hover { -fx-background-color: #eef1f6; }
+.process-arrow { -fx-font-size: 16px; -fx-text-fill: #1d4ed8; -fx-background-color: transparent; }
+.process-arrow-open { -fx-font-size: 16px; -fx-text-fill: #9ca3af; -fx-background-color: transparent; }
+
 /* Session 4: checklists, notes, processes and relations on card fronts */
 .card-checklist {
     -fx-font-size: 11px;

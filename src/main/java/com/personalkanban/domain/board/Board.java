@@ -199,6 +199,49 @@ public final class Board {
         events.add(new CardRemoved(cardId, column.id(), Instant.now()));
     }
 
+    // ------------------------------------------------------------------
+    // Time tracking (session 6)
+    // ------------------------------------------------------------------
+
+    /** Starts a new time-tracking entry on one card (first stopwatch click). */
+    public TimelineEntry startTimeTracking(CardId cardId, Instant now) {
+        return cardOrThrow(cardId).timeline().startTracking(now);
+    }
+
+    /** Stops the running time-tracking entry of one card (null when none). */
+    public TimelineEntry stopTimeTracking(CardId cardId, Instant now) {
+        return cardOrThrow(cardId).timeline().stopTracking(now);
+    }
+
+    /** Sets (or clears) the comment of the running entry; no-op when idle. */
+    public void annotateRunningTimeEntry(CardId cardId, String comment) {
+        cardOrThrow(cardId).timeline().setRunningComment(comment);
+    }
+
+    /** Deletes one time-tracking entry of one card (closed or running). */
+    public void removeTimeEntry(CardId cardId, EntryId entryId) {
+        cardOrThrow(cardId).timeline().removeEntry(entryId);
+    }
+
+    /** Time-tracking entries of one card, in chronological order. */
+    public List<TimelineEntry> timeEntriesOf(CardId cardId) {
+        return cardOrThrow(cardId).timeline().entries();
+    }
+
+    /** The running time-tracking entry of one card, or null when idle. */
+    public TimelineEntry runningTimeEntryOf(CardId cardId) {
+        return cardOrThrow(cardId).timeline().runningEntry();
+    }
+
+    /** True when a direct precedence link {@code from → to} exists. */
+    public boolean hasLink(CardId from, CardId to) {
+        return outgoingSuccessorsOf(from).contains(to);
+    }
+
+    private Card cardOrThrow(CardId cardId) {
+        return findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+    }
+
     /**
      * Bulk: adds labels to the given cards (dedup is case-insensitive, so an
      * existing "uaz" plus "UAZ" stays a single label).
@@ -616,6 +659,15 @@ public final class Board {
         links.clear();
         for (CardLink link : memento.links()) {
             links.computeIfAbsent(link.from(), key -> new LinkedHashSet<>()).add(link.to());
+        }
+        // Distribute the flat timeline entries back onto their cards.
+        if (!memento.timeline().isEmpty()) {
+            Map<CardId, List<TimelineEntry>> byCard = new LinkedHashMap<>();
+            for (TimelineEntry entry : memento.timeline()) {
+                byCard.computeIfAbsent(entry.cardId(), key -> new ArrayList<>()).add(entry);
+            }
+            byCard.forEach((cardId, entries) ->
+                    findCard(cardId).ifPresent(card -> card.restoreTimeline(entries)));
         }
     }
 

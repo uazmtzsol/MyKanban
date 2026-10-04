@@ -269,3 +269,44 @@ Migraciones: crear `V<n>__desc.sql` **y** registrar en
   `background()` debía normalizar `""` → null.
 - **Pendiente:** prueba manual del usuario (checklist arriba) y
   regeneración del portable con sello nuevo.
+
+## Sesión 6 — procesos, time tracking, editor Markdown y plan de sync
+
+- **Time tracking (completo):**
+  - Dominio: `EntryId`, `TimelineEntry` (start/end/comentario, inmutables
+    una vez cerrados; sólo borrado), `Timeline` (un registro por clic).
+  - `Card.timeline()` ahora es un campo real (antes devolvía uno nuevo
+    cada vez: bug corregido).
+  - Persistencia: migración **V8** (`timeline`, epoch millis, FK
+    ON DELETE CASCADE), `BoardMemento` con 4º campo `timeline`,
+    `SqliteBoardRepository` reescrito (tenía duplicados que no
+    compilaban), `JsonUndoHistory` con módulo Jackson propio para
+    `TimelineEntry` (dominio sigue puro).
+  - `BoardMemento.capture` copia defensivamente los `TimelineEntry`
+    (mutables) para que un `stop` posterior no reescriba el "antes".
+  - Servicio: `startTimeTracking` / `stopTimeTracking` /
+    `commentRunningTimeEntry` / `removeTimeEntry` / `timeEntriesOf`
+    (comandos `Start/Stop/Comment/RemoveTimeEntry`), todo undoable.
+  - UI: pestaña **Tiempo** en `CardDetailWindow` con botón cronómetro,
+    comentario y lista de registros (borrar, no editar). CSS + i18n
+    (EN/ES/FR/DE).
+- **Editor Markdown reutilizable:** `ui/MarkdownEditor.java` con toggle
+  lápiz/ojo entre edición y vista renderizada; usado en descripción y
+  notas del detalle y en el diálogo de tarjeta.
+- **Vista de procesos:** `ui/ProcessViewBuilder.java` — una fila por
+  proceso, tarjetas de izquierda a derecha unidas por flechas según el
+  orden de precedencia; cada tarjeta con 2 flechas superiores (crear
+  tarjeta nueva antes/después) y 2 inferiores (elegir tarjeta existente).
+  Alternada con el kanban por el botón ⇄ de la barra. Se añadió
+  `Board.hasLink(from,to)`.
+- **Etiquetas manuales:** `Dialogs.parseLabels` ahora rechaza el '#' al
+  inicio (vía `LabelConventions`); las etiquetas de proceso llevan '#'.
+- **Sincronización (plan, no implementada):** ver `docs/design.md`.
+  Enfoque Zotero: BD local (`kanban.db`) + export/import por `BoardMemento`
+  y claves estables (`CardId`/`EntryId`), reconciliación por contenido.
+- **Tests:** 190/190 verdes (`mvn test -DskipITs`). Nuevos: `TimelineTest`,
+  `LabelConventionsTest`, `SqliteTimelineRoundTripTest`,
+  `SessionSixServiceTest`, caso '#' en `DialogsParseLabelsTest`.
+- **Pendiente:** notas por flecha en la vista de procesos (hoy la flecha
+  enlaza/desenlaza), implementación real del sync, y prueba manual de la
+  vista de procesos y del cronómetro.

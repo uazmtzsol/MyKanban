@@ -6,9 +6,15 @@ import com.personalkanban.domain.board.BoardDescriptor;
 import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
 import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.CardLink;
 import com.personalkanban.domain.board.CardSnapshot;
+import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.ColumnSnapshot;
+import com.personalkanban.domain.board.EntryId;
+import com.personalkanban.domain.board.ProcessId;
+import com.personalkanban.domain.board.ProcessSnapshot;
+import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.domain.board.WipLimit;
 
 import java.sql.PreparedStatement;
@@ -17,6 +23,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -28,6 +35,9 @@ import java.util.UUID;
  * for board contents. Order comes from per-table integer positions written
  * from list order at save time (single writer). Each {@link #save} is one
  * transaction. No two JDBC statements are open at once (driver requirement).
+ *
+ * <p>Since session 6 the contents also include the per-card time-tracking
+ * entries ({@code timeline}), flattened into a single table keyed by card.</p>
  */
 public final class SqliteBoardRepository implements BoardRepository {
 
@@ -131,19 +141,20 @@ public final class SqliteBoardRepository implements BoardRepository {
             withCards.add(new ColumnSnapshot(column.id(), column.title(), column.description(),
                     column.color(), column.wipLimit(), column.createdAt(), readCards(column.id())));
         }
-        return new BoardMemento(withCards, readProcesses(boardId), readLinks(boardId));
+        return new BoardMemento(withCards, readProcesses(boardId), readLinks(boardId),
+                readTimeline(boardId));
     }
 
     /** Processes of one board, in stored position order. */
-    private List<com.personalkanban.domain.board.ProcessSnapshot> readProcesses(BoardId boardId) {
-        List<com.personalkanban.domain.board.ProcessSnapshot> processes = new ArrayList<>();
+    private List<ProcessSnapshot> readProcesses(BoardId boardId) {
+        List<ProcessSnapshot> processes = new ArrayList<>();
         String sql = "SELECT id, name FROM process WHERE board_id = ? ORDER BY position";
         try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
             statement.setString(1, boardId.value());
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
-                    processes.add(new com.personalkanban.domain.board.ProcessSnapshot(
-                            new com.personalkanban.domain.board.ProcessId(resultSet.getString("id")),
+                    processes.add(new ProcessSnapshot(
+                            new ProcessId(resultSet.getString("id")),
                             resultSet.getString("name")));
                 }
             }
@@ -153,9 +164,46 @@ public final class SqliteBoardRepository implements BoardRepository {
         return processes;
     }
 
-    /** Precedence links of one board (both endpoints belong to it). */
-    private List<com.personalkanban.domain.board.CardLink> readLinks(BoardId boardId) {
-        List<com.personalkanban.domain.board.CardLink> links = new ArrayList<>();
+    /** Time entries of every card that belongs to the given board. */
+    private List<TimelineEntry> readTimeline(BoardId boardId) {
+        List<TimelineEntry> entries = new ArrayList<>();
+        String sql = """
+                SELECT t.card_id, t.id, t.started_at, t.ended_at, t.comment
+                FROM timeline t
+                JOIN card c ON c.id = t.card_id
+                JOIN board_column bc ON bc.id = c.column_id
+                WHERE bc.board_id = ?
+                ORDER BY t.started_at, t.id
+                """;
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
+            statement.setString(1, boardId.value());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    entries.add(readTimelineEntry(resultSet));
+                }
+            }
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not load time entries of board " + boardId, e);
+        }
+        return entries;
+    }
+
+    private TimelineEntry readTimelineEntry(ResultSet resultSet) throws SQLException {
+        EntryId id = new EntryId(resultSet.getString("id"));
+        CardId cardId = new CardId(resultSet.getString("card_id"));
+        Instant start = readInstant(resultSet, "started_at");
+        Instant end = readInstant(resultSet, "ended_at");
+        String comment = resultSet.getString("comment");
+        return TimelineEntry.restore(cardId, id, start, end, comment);
+    }
+
+    private Instant readInstant(ResultSet resultSet, String column) throws SQLException {
+        long value = resultSet.getLong(column);
+        return resultSet.wasNull() ? null : Instant.ofEpochMilli(value);
+    }
+
+    private List<CardLink> readLinks(BoardId boardId) {
+        List<CardLink> links = new ArrayList<>();
         String sql = """
                 SELECT l.from_card_id, l.to_card_id FROM card_link l
                 JOIN card c ON c.id = l.from_card_id
@@ -166,7 +214,7 @@ public final class SqliteBoardRepository implements BoardRepository {
             statement.setString(1, boardId.value());
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
-                    links.add(new com.personalkanban.domain.board.CardLink(
+                    links.add(new CardLink(
                             new CardId(resultSet.getString("from_card_id")),
                             new CardId(resultSet.getString("to_card_id"))));
                 }
@@ -214,6 +262,10 @@ public final class SqliteBoardRepository implements BoardRepository {
                 INSERT INTO card_checklist_item (id, card_id, position, text, done)
                 VALUES (?, ?, ?, ?, ?)
                 """;
+        String timelineSql = """
+                INSERT INTO timeline (id, card_id, started_at, ended_at, comment)
+                VALUES (?, ?, ?, ?, ?)
+                """;
         String processSql = """
                 INSERT INTO process (id, board_id, name, position, created_at)
                 VALUES (?, ?, ?, ?, ?)
@@ -224,6 +276,7 @@ public final class SqliteBoardRepository implements BoardRepository {
         try (PreparedStatement columnStatement = database.connection().prepareStatement(columnSql);
              PreparedStatement cardStatement = database.connection().prepareStatement(cardSql);
              PreparedStatement checklistStatement = database.connection().prepareStatement(checklistSql);
+             PreparedStatement timelineStatement = database.connection().prepareStatement(timelineSql);
              PreparedStatement processStatement = database.connection().prepareStatement(processSql);
              PreparedStatement linkStatement = database.connection().prepareStatement(linkSql)) {
             int columnIndex = 0;
@@ -237,30 +290,50 @@ public final class SqliteBoardRepository implements BoardRepository {
                     bindChecklistItems(checklistStatement, card);
                 }
             }
+            for (TimelineEntry entry : board.timeline()) {
+                if (entry.isEmpty()) {
+                    continue;
+                }
+                timelineStatement.setString(1, entry.id().value());
+                timelineStatement.setString(2, entry.cardId().value());
+                setInstant(timelineStatement, 3, entry.start());
+                setInstant(timelineStatement, 4, entry.end());
+                timelineStatement.setString(5, entry.comment());
+                timelineStatement.addBatch();
+            }
             int processIndex = 0;
-            for (com.personalkanban.domain.board.ProcessSnapshot process : board.processes()) {
+            for (ProcessSnapshot process : board.processes()) {
                 bindProcess(processStatement, boardId, process, processIndex++);
                 processStatement.addBatch();
             }
-            for (com.personalkanban.domain.board.CardLink link : board.links()) {
+            for (CardLink link : board.links()) {
                 linkStatement.setString(1, link.from().value());
                 linkStatement.setString(2, link.to().value());
                 linkStatement.addBatch();
             }
-            // FK order matters: processes first (cards reference them),
-            // then columns, cards, their checklists, and finally the links
+            // FK order matters: processes first (cards reference them), then
+            // columns, cards, their checklists/timeline, and finally the links
             // (which reference cards).
             processStatement.executeBatch();
             columnStatement.executeBatch();
             cardStatement.executeBatch();
             checklistStatement.executeBatch();
+            timelineStatement.executeBatch();
             linkStatement.executeBatch();
+        }
+    }
+
+    private void setInstant(PreparedStatement statement, int index, Instant value) throws SQLException {
+        if (value == null) {
+            statement.setNull(index, Types.INTEGER);
+        } else {
+            statement.setLong(index, value.toEpochMilli());
         }
     }
 
     private void bindChecklistItems(PreparedStatement statement, CardSnapshot card) throws SQLException {
         int position = 0;
-        for (com.personalkanban.domain.board.ChecklistItem item : card.checklist()) {
+        for (ChecklistItem item : card.checklist()) {
             statement.setString(1, item.id());
             statement.setString(2, card.id().value());
             statement.setInt(3, position++);
@@ -271,8 +344,7 @@ public final class SqliteBoardRepository implements BoardRepository {
     }
 
     private void bindProcess(PreparedStatement statement, BoardId boardId,
-                             com.personalkanban.domain.board.ProcessSnapshot process, int position)
-            throws SQLException {
+                             ProcessSnapshot process, int position) throws SQLException {
         statement.setString(1, process.id().value());
         statement.setString(2, boardId.value());
         statement.setString(3, process.name());
@@ -284,7 +356,8 @@ public final class SqliteBoardRepository implements BoardRepository {
 
     private void deleteBoardContents(BoardId boardId) throws SQLException {
         // Cards of this board first (join through columns): their checklist
-        // items and links cascade. Then its columns, then its processes.
+        // items, time entries and links cascade. Then its columns, then its
+        // processes.
         String deleteCards = """
                 DELETE FROM card WHERE column_id IN (
                     SELECT id FROM board_column WHERE board_id = ?
@@ -386,7 +459,7 @@ public final class SqliteBoardRepository implements BoardRepository {
                             Instant.ofEpochMilli(resultSet.getLong("created_at")),
                             readNotes(resultSet),
                             readChecklist(cardId),
-                            processId == null ? null : new com.personalkanban.domain.board.ProcessId(processId)));
+                            processId == null ? null : new ProcessId(processId)));
                 }
             }
         } catch (SQLException e) {
@@ -401,8 +474,8 @@ public final class SqliteBoardRepository implements BoardRepository {
     }
 
     /** Checklist of one card, in stored position order. */
-    private List<com.personalkanban.domain.board.ChecklistItem> readChecklist(CardId cardId) {
-        List<com.personalkanban.domain.board.ChecklistItem> items = new ArrayList<>();
+    private List<ChecklistItem> readChecklist(CardId cardId) {
+        List<ChecklistItem> items = new ArrayList<>();
         String sql = """
                 SELECT id, text, done FROM card_checklist_item
                 WHERE card_id = ? ORDER BY position
@@ -411,7 +484,7 @@ public final class SqliteBoardRepository implements BoardRepository {
             statement.setString(1, cardId.value());
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
-                    items.add(new com.personalkanban.domain.board.ChecklistItem(
+                    items.add(new ChecklistItem(
                             resultSet.getString("id"),
                             resultSet.getString("text"),
                             resultSet.getInt("done") != 0));
@@ -423,9 +496,9 @@ public final class SqliteBoardRepository implements BoardRepository {
         return items;
     }
 
-    private java.time.LocalDate readDueDate(ResultSet resultSet) throws SQLException {
+    private LocalDate readDueDate(ResultSet resultSet) throws SQLException {
         String iso = resultSet.getString("due_date");
-        return iso == null ? null : java.time.LocalDate.parse(iso);
+        return iso == null ? null : LocalDate.parse(iso);
     }
 
     private List<String> readLabels(ResultSet resultSet) throws SQLException {

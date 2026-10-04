@@ -38,6 +38,15 @@ class DialogsParseLabelsTest {
     }
 
     @Test
+    void hashPrefixedLabelsAreRejectedOnManualEntry() {
+        assertThat(Dialogs.parseLabels("#compras"))
+                .as("process labels start with '#' and must not be typed by hand")
+                .isEmpty();
+        assertThat(Dialogs.parseLabels("et1 #compras et2"))
+                .containsExactly("et1", "et2");
+    }
+
+    @Test
     void blankInputYieldsNoLabels() {
         assertThat(Dialogs.parseLabels(null)).isEmpty();
         assertThat(Dialogs.parseLabels("")).isEmpty();

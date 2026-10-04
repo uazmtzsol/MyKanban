@@ -3,6 +3,7 @@ package com.personalkanban.ui;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.ColumnId;
+import com.personalkanban.domain.board.LabelConventions;
 import com.personalkanban.domain.board.LabelSuggester;
 import com.personalkanban.domain.board.WipLimit;
 import javafx.collections.FXCollections;
@@ -122,8 +123,8 @@ final class Dialogs {
                                   List<com.personalkanban.domain.board.CardId> currentPredecessors,
                                   List<com.personalkanban.domain.board.CardId> currentSuccessors) {
         TextField titleField = new TextField(initial == null ? "" : initial.title());
-        TextArea descriptionArea = new TextArea(initial == null ? "" : initial.description());
-        descriptionArea.setPrefRowCount(3);
+        MarkdownEditor descriptionEditor = new MarkdownEditor(
+                initial == null ? "" : initial.description(), null, 70, i18n, null);
         ColorPicker colorPicker = colorPicker(initial == null ? BoardColor.DEFAULT : initial.color());
         DatePicker dueDatePicker = new DatePicker(initial == null ? null : initial.dueDate());
         dueDatePicker.setPromptText(i18n.text("card.due.none"));
@@ -136,10 +137,8 @@ final class Dialogs {
         // --- Advanced (collapsible) section — user request: the dialog shows
         //     the minimal useful fields by default; one checklist-shaped
         //     toggle reveals notes, checklist and process. ---
-        TextArea notesArea = new TextArea(initial == null ? "" : initial.notes());
-        notesArea.setPromptText(i18n.text("card.notes.prompt"));
-        notesArea.setPrefRowCount(2);
-        notesArea.setWrapText(true);
+        MarkdownEditor notesEditor = new MarkdownEditor(
+                initial == null ? "" : initial.notes(), "card.notes.prompt", 50, i18n, null);
         TextArea checklistArea = new TextArea(initial == null || initial.checklistLines().isEmpty()
                 ? "" : String.join("\n", initial.checklistLines()));
         checklistArea.setPromptText(i18n.text("checklist.dialog.prompt"));
@@ -177,7 +176,7 @@ final class Dialogs {
         javafx.scene.control.Label processCaption =
                 new javafx.scene.control.Label(i18n.text("card.process.label"));
         javafx.scene.layout.VBox advancedBox = new javafx.scene.layout.VBox(
-                8, notesCaption, notesArea, checklistCaption, checklistArea,
+                8, notesCaption, notesEditor.node(), checklistCaption, checklistArea,
                 processCaption, processCombo);
 
         // --- Precedence links (user request ②): which tasks come BEFORE and
@@ -237,7 +236,7 @@ final class Dialogs {
         grid.add(new Label(i18n.text("dialog.title.label")), 0, 0);
         grid.add(titleField, 1, 0);
         grid.add(new Label(i18n.text("dialog.description")), 0, 1);
-        grid.add(descriptionArea, 1, 1);
+        grid.add(descriptionEditor.node(), 1, 1);
         grid.add(new Label(i18n.text("dialog.color")), 0, 2);
         grid.add(colorPicker, 1, 2);
         grid.add(new Label(i18n.text("card.due")), 0, 3);
@@ -256,9 +255,9 @@ final class Dialogs {
             if (title == null || title.isBlank()) {
                 return null;
             }
-            return new CardForm(title, descriptionArea.getText(), selectedColor(colorPicker),
+            return new CardForm(title, descriptionEditor.text(), selectedColor(colorPicker),
                     dueDatePicker.getValue(), parseLabels(labelsField.getText()),
-                    notesArea.getText(), parseChecklistLines(checklistArea.getText()),
+                    notesEditor.text(), parseChecklistLines(checklistArea.getText()),
                     processCombo.getValue() == null ? null : processCombo.getValue().id(),
                     selectedIds(predecessorsList, candidates),
                     selectedIds(successorsList, candidates));
@@ -309,6 +308,40 @@ final class Dialogs {
                 .map(String::strip)
                 .filter(line -> !line.isEmpty())
                 .toList();
+    }
+
+    // ------------------------------------------------------------------
+    // Card chooser (process view relations)
+    // ------------------------------------------------------------------
+
+    /**
+     * Lets the user pick one existing card by title. Titles may repeat, so
+     * duplicates get a numeric suffix while the underlying card mapping stays
+     * exact. Returns empty when there is nothing to choose or the user cancels.
+     */
+    Optional<com.personalkanban.domain.board.Card> chooseCard(
+            List<com.personalkanban.domain.board.Card> cards, String header) {
+        if (cards.isEmpty()) {
+            info(i18n.text("process.link.none"));
+            return Optional.empty();
+        }
+        java.util.LinkedHashMap<String, com.personalkanban.domain.board.Card> byLabel =
+                new java.util.LinkedHashMap<>();
+        for (com.personalkanban.domain.board.Card card : cards) {
+            String base = card.title();
+            String label = base;
+            int suffix = 2;
+            while (byLabel.containsKey(label)) {
+                label = base + " (" + suffix++ + ")";
+            }
+            byLabel.put(label, card);
+        }
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(
+                byLabel.keySet().iterator().next(), byLabel.keySet());
+        dialog.setTitle(i18n.text("dialog.card.choice.title"));
+        dialog.setHeaderText(header);
+        dialog.setContentText(i18n.text("dialog.card.choice.label"));
+        return dialog.showAndWait().map(byLabel::get);
     }
 
     // ------------------------------------------------------------------
@@ -501,9 +534,12 @@ final class Dialogs {
         if (text == null || text.isBlank()) {
             return List.of();
         }
+        // Manually entered labels must be simple names: a leading '#' (or any
+        // '#') is rejected here, since process labels are the only ones that
+        // start with '#' (LabelConventions, session 6).
         return Arrays.stream(text.split("[,\\s\uFF0C]+"))
                 .map(String::strip)
-                .filter(part -> !part.isEmpty())
+                .filter(LabelConventions::isValid)
                 .toList();
     }
 

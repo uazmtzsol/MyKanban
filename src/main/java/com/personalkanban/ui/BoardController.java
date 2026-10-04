@@ -65,6 +65,9 @@ public final class BoardController {
     private final VBox root;
 
     private HBox columnsRow;
+    private ScrollPane boardScroller;
+    // View mode: kanban (columns) or processes (one row per process).
+    private boolean processView;
     private Menu boardMenu;
     private Menu databaseMenu;
     private Menu processMenu;
@@ -213,12 +216,12 @@ public final class BoardController {
         columnsRow = new HBox(12);
         columnsRow.setPadding(new Insets(14));
 
-        ScrollPane scroller = new ScrollPane(columnsRow);
-        scroller.setFitToHeight(true);
-        VBox.setVgrow(scroller, Priority.ALWAYS);
+        boardScroller = new ScrollPane(columnsRow);
+        boardScroller.setFitToHeight(true);
+        VBox.setVgrow(boardScroller, Priority.ALWAYS);
 
         buildSelectionBar();
-        root.getChildren().setAll(menuBar, toolbar, selectionBar, filterBar, scroller);
+        root.getChildren().setAll(menuBar, toolbar, selectionBar, filterBar, boardScroller);
         updateBoardIdentity();
         refresh();
     }
@@ -229,6 +232,9 @@ public final class BoardController {
 
         Button addColumn = toolButton("\u2795", "toolbar.add.column");
         addColumn.setOnAction(e -> onAddColumn());
+
+        Button viewToggle = toolButton("\u21C4", "toolbar.view.toggle");
+        viewToggle.setOnAction(e -> onToggleView());
 
         Button undoButton = toolButton("\u21B6", "toolbar.undo");
         undoButton.disableProperty().bind(undoRedo.canUndoProperty().not());
@@ -266,7 +272,7 @@ public final class BoardController {
         boardNameLabel = new Label();
         boardNameLabel.getStyleClass().add("board-name");
 
-        HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn,
+        HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, viewToggle,
                 undoButton, redoButton, save, darkMode, exportPdf, cardViewMenu, spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
@@ -1197,6 +1203,11 @@ public final class BoardController {
         return service.board().findCard(cardId);
     }
 
+    /** Package-visible confirmation for windows that own their own buttons. */
+    boolean confirm(String message) {
+        return dialogs.confirm(message);
+    }
+
     public void onChecklistAdd(com.personalkanban.domain.board.CardId cardId, String text) {
         guarded(() -> {
             service.addChecklistItem(cardId, text);
@@ -1245,6 +1256,48 @@ public final class BoardController {
         });
     }
 
+    // ------------------------------------------------------------------
+    // Intents: time tracking (session 6)
+    // ------------------------------------------------------------------
+
+    /** First stopwatch click: starts tracking time on the card. */
+    public void onStartTimeTracking(com.personalkanban.domain.board.CardId cardId) {
+        guarded(() -> {
+            service.startTimeTracking(cardId);
+            refresh();
+        });
+    }
+
+    /** Second stopwatch click: closes the running entry. */
+    public void onStopTimeTracking(com.personalkanban.domain.board.CardId cardId) {
+        guarded(() -> {
+            service.stopTimeTracking(cardId);
+            refresh();
+        });
+    }
+
+    /** Saves the comment typed while tracking; blank text simply clears it. */
+    public void onCommentTimeEntry(com.personalkanban.domain.board.CardId cardId, String comment) {
+        guarded(() -> {
+            service.commentRunningTimeEntry(cardId, comment);
+            refresh();
+        });
+    }
+
+    /** Deletes one time-tracking record (records are never editable). */
+    public void onRemoveTimeEntry(com.personalkanban.domain.board.CardId cardId,
+                                  com.personalkanban.domain.board.EntryId entryId) {
+        guarded(() -> {
+            service.removeTimeEntry(cardId, entryId);
+            refresh();
+        });
+    }
+
+    /** True while the card is being timed right now. */
+    boolean isTracking(com.personalkanban.domain.board.CardId cardId) {
+        return service.isTracking(cardId);
+    }
+
     public void onLinkCards(com.personalkanban.domain.board.CardId from,
                             com.personalkanban.domain.board.CardId to) {
         guarded(() -> {
@@ -1259,6 +1312,56 @@ public final class BoardController {
             service.unlinkCards(from, to);
             refresh();
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Intents: process view (session 6)
+    // ------------------------------------------------------------------
+
+    /** Arrow between two cards in a process row: links, or unlinks when linked. */
+    public void onArrangeArrow(com.personalkanban.domain.board.CardId from,
+                               com.personalkanban.domain.board.CardId to) {
+        guarded(() -> {
+            if (service.board().hasLink(from, to)) {
+                service.unlinkCards(from, to);
+            } else {
+                service.linkCards(from, to);
+            }
+            refresh();
+        });
+    }
+
+    /** Top arrows: adds a NEW card as predecessor/successor of the anchor. */
+    public void onProcessAddNewRelation(com.personalkanban.domain.board.CardId anchor,
+                                        boolean asPredecessor) {
+        service.board().findCard(anchor).ifPresent(anchorCard -> guarded(() -> {
+            CardId created = service.addCard(anchorCard.columnId(),
+                    i18n.text("process.new.card.title"), "", anchorCard.color());
+            if (asPredecessor) {
+                service.linkCards(created, anchor);
+            } else {
+                service.linkCards(anchor, created);
+            }
+            refresh();
+            onOpenCardDetail(created);
+        }));
+    }
+
+    /** Bottom arrows: links an EXISTING card as predecessor/successor. */
+    public void onProcessLinkExisting(com.personalkanban.domain.board.CardId anchor,
+                                      boolean asPredecessor) {
+        List<com.personalkanban.domain.board.Card> others = service.board().allCards().stream()
+                .filter(card -> !card.id().equals(anchor)).toList();
+        dialogs.chooseCard(others, i18n.text(asPredecessor
+                        ? "process.link.predecessor.header" : "process.link.successor.header"))
+                .ifPresent(other -> guarded(() -> {
+                    if (asPredecessor) {
+                        service.linkCards(other.id(), anchor);
+                    } else {
+                        service.linkCards(anchor, other.id());
+                    }
+                    refresh();
+                }));
     }
 
     /** Suggested order of a process: dialog with the topological order. */
@@ -1510,11 +1613,20 @@ public final class BoardController {
         columnsRow.getChildren().setAll(
                 ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter, quickFilter,
                         selectionMode, collapsedColumns, themeManager.isDark(), columnWidths));
+        boardScroller.setContent(processView
+                ? ProcessViewBuilder.buildAll(service, i18n, this)
+                : columnsRow);
         rebuildBoardMenu(); // keep the active-board marker in sync
         rebuildProcessMenu();
         syncCardViewMenu();
         undoRedo.sync();
         updateSelectionBarState();
+    }
+
+    /** Switches between the kanban and the processes view. */
+    public void onToggleView() {
+        processView = !processView;
+        refresh();
     }
 
     private Button toolButton(String glyph, String textKey) {

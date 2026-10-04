@@ -43,6 +43,7 @@ public final class Card {
     private List<String> labels = List.of();
     private final List<ChecklistItem> checklist = new ArrayList<>();
     private ProcessId processId;
+    private final Timeline timeline;
     private final Instant createdAt;
 
     Card(ColumnId columnId, String title, String description, BoardColor color) {
@@ -61,6 +62,7 @@ public final class Card {
         }
         this.id = id;
         this.columnId = columnId;
+        this.timeline = new Timeline(id);
         setTitle(title);
         setDescription(description);
         this.color = color;
@@ -289,5 +291,19 @@ public final class Card {
 
     public int checklistCount() {
         return checklist.size();
+    }
+
+    // ------------------------------------------------------------------
+    // Timeline (time tracking)
+    // ------------------------------------------------------------------
+
+    /** Mutable timeline of time-tracking entries of this card. */
+    public Timeline timeline() {
+        return timeline;
+    }
+
+    /** Replaces the timeline contents from a snapshot (persistence/memento). */
+    void restoreTimeline(List<TimelineEntry> entries) {
+        timeline.restore(entries);
     }
 }

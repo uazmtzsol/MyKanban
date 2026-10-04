@@ -1,8 +1,7 @@
 package com.personalkanban.infrastructure.history;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.personalkanban.application.BoardJsonMapper;
 import com.personalkanban.application.port.UndoHistory;
 import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
@@ -24,9 +23,8 @@ import java.util.Optional;
  */
 public final class JsonUndoHistory implements UndoHistory {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    // Same wire format as JSON export/import, so a memento survives both.
+    private static final ObjectMapper MAPPER = BoardJsonMapper.create();
 
     private final Path directory;
 

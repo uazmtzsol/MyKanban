@@ -6,9 +6,10 @@ import java.util.List;
 
 /**
  * Public immutable DTO describing one card. Canonical shape shared by
- * persistence adapters and undo/redo mementos. Since session 4 it also
- * carries the plain-text notes, the flat checklist, and the process the
- * card is assigned to (null = none).
+ * persistence adapters and undo/redo mementos. It carries the plain-text
+ * notes, the flat checklist and the process assignment (null = none). The
+ * card's time-tracking timeline is carried by {@link BoardMemento}, not here,
+ * so this DTO stays focused on the card's own state.
  */
 public record CardSnapshot(CardId id, String title, String description, BoardColor color,
                            LocalDate dueDate, List<String> labels, Instant createdAt,
@@ -23,15 +24,15 @@ public record CardSnapshot(CardId id, String title, String description, BoardCol
         checklist = checklist == null ? List.of() : List.copyOf(checklist);
     }
 
-    /** Backward-compatible constructor: no due date, no labels. */
-    public CardSnapshot(CardId id, String title, String description, BoardColor color, Instant createdAt) {
-        this(id, title, description, color, null, List.of(), createdAt);
-    }
-
     /** Backward-compatible constructor: legacy shape without session-4 fields. */
     public CardSnapshot(CardId id, String title, String description, BoardColor color,
                         LocalDate dueDate, List<String> labels, Instant createdAt) {
         this(id, title, description, color, dueDate, labels, createdAt, "", List.of(), null);
+    }
+
+    /** Backward-compatible constructor: no due date, no labels. */
+    public CardSnapshot(CardId id, String title, String description, BoardColor color, Instant createdAt) {
+        this(id, title, description, color, null, List.of(), createdAt, "", List.of(), null);
     }
 
     static CardSnapshot from(Card card) {
