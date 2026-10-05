@@ -273,13 +273,30 @@
     -fx-border-color: #343947;
     -fx-border-radius: 6;
     -fx-background-radius: 6;
-    -fx-min-width: 150;
 }
 .process-card-title { -fx-font-weight: bold; -fx-text-fill: #e5e7eb; }
-.process-arrow-button { -fx-font-size: 12px; -fx-background-color: transparent; -fx-padding: 1 4 1 4; -fx-text-fill: #d1d5db; }
+/* Drawn arrow buttons on each process card. Green arrows create
+   a NEW card; blue arrows link an EXISTING card. */
+.process-arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 4;
+    -fx-cursor: hand;
+    -fx-padding: 2;
+}
 .process-arrow-button:hover { -fx-background-color: #343947; }
-.process-arrow { -fx-font-size: 16px; -fx-text-fill: #93c5fd; -fx-background-color: transparent; }
-.process-arrow-open { -fx-font-size: 16px; -fx-text-fill: #6b7280; -fx-background-color: transparent; }
+.arrow-shaft { -fx-stroke-width: 2.4; -fx-stroke-line-cap: round; }
+.process-arrow-new .arrow-shaft { -fx-stroke: #4ade80; }
+.process-arrow-new .arrow-head { -fx-fill: #4ade80; }
+.process-arrow-new .arrow-plus { -fx-stroke: #4ade80; -fx-stroke-width: 1.8; -fx-stroke-line-cap: round; }
+.process-arrow-link .arrow-shaft { -fx-stroke: #93c5fd; }
+.process-arrow-link .arrow-head { -fx-fill: #93c5fd; }
+.process-arrow-ghost .arrow-shaft { -fx-stroke: #6b7280; }
+.process-arrow-ghost .arrow-head { -fx-fill: #6b7280; }
+/* Connectors between process cards: solid = linked, dotted = suggested link. */
+.process-edge { -fx-stroke: #93c5fd; -fx-stroke-width: 2; }
+.process-edge-head { -fx-fill: #93c5fd; }
+.process-edge-ghost { -fx-stroke: #6b7280; -fx-stroke-width: 2; }
+.process-edge-head-ghost { -fx-fill: #6b7280; }
 
 /* Session 4: checklists, notes, processes and relations on card fronts */
 .card-checklist {
