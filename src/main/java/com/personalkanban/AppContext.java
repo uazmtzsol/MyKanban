@@ -2,7 +2,9 @@ package com.personalkanban;
 
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.port.SettingsStore;
+import com.personalkanban.application.port.SyncRepository;
 import com.personalkanban.infrastructure.history.JsonUndoHistory;
+import com.personalkanban.infrastructure.sync.HttpSyncRepository;
 import com.personalkanban.infrastructure.sqlite.Database;
 import com.personalkanban.infrastructure.sqlite.SchemaMigrator;
 import com.personalkanban.infrastructure.sqlite.SqliteBoardRepository;
@@ -33,6 +35,8 @@ public final class AppContext implements AutoCloseable {
 
     private static final String SETTING_LANGUAGE = "ui.language";
     private static final String SETTING_THEME = "ui.theme";
+    private static final String SETTING_SYNC_URL = "sync.server.url";
+    private static final String SETTING_SYNC_KEY = "sync.api.key";
     private static final String CONFIG_DB_PATH = "db.path";
     private static final String CONFIG_RECENT_PREFIX = "db.recent.";
     private static final String CONFIG_LAST_DIR = "io.lastdir";
@@ -45,6 +49,7 @@ public final class AppContext implements AutoCloseable {
     private BoardService boardService;
     private SettingsStore settings;
     private ThemeManager themeManager;
+    private java.util.Optional<SyncRepository> syncRepository = java.util.Optional.empty();
     private Path databasePath;
 
     /**
@@ -179,6 +184,7 @@ public final class AppContext implements AutoCloseable {
             ThemeManager newTheme = new ThemeManager(newSettings.get(SETTING_THEME)
                     .map(ThemeManager.Theme::valueOf)
                     .orElse(ThemeManager.Theme.LIGHT));
+            java.util.Optional<SyncRepository> newSync = wireSyncRepository(newSettings);
 
             // Commit point: everything built; now swap the live wiring.
             if (database != null) {
@@ -188,6 +194,7 @@ public final class AppContext implements AutoCloseable {
             boardService = newService;
             settings = newSettings;
             themeManager = newTheme;
+            syncRepository = newSync;
             databasePath = dbFile;
             rememberRecent(dbFile);
             writeConfiguredDatabase(dbFile);
@@ -281,6 +288,66 @@ public final class AppContext implements AutoCloseable {
 
     public ThemeManager themeManager() {
         return themeManager;
+    }
+
+    // ------------------------------------------------------------------
+    // Online sync (Zotero-style): per-database server URL + API key
+    // ------------------------------------------------------------------
+
+    /**
+     * Adapter for the online board store, or {@link Optional#empty()}
+     * when sync is not configured for the current database (no URL or
+     * no API key in settings). Never null: an unconfigured or invalid
+     * setup simply means the app runs purely local.
+     */
+    public java.util.Optional<SyncRepository> syncRepository() {
+        return syncRepository;
+    }
+
+    /** The configured sync server URL, or empty when sync is off. */
+    public java.util.Optional<String> syncServerUrl() {
+        return syncSetting(SETTING_SYNC_URL);
+    }
+
+    /** The configured sync API key, or empty when sync is off. */
+    public java.util.Optional<String> syncApiKey() {
+        return syncSetting(SETTING_SYNC_KEY);
+    }
+
+    /**
+     * Stores the sync server URL and API key for the current database
+     * and rewires the adapter. A blank URL or key disables sync.
+     */
+    public void configureSync(String serverUrl, String apiKey) {
+        String url = serverUrl == null ? "" : serverUrl.strip();
+        String key = apiKey == null ? "" : apiKey.strip();
+        if (url.isEmpty() || key.isEmpty()) {
+            settings.put(SETTING_SYNC_URL, "");
+            settings.put(SETTING_SYNC_KEY, "");
+        } else {
+            settings.put(SETTING_SYNC_URL, url);
+            settings.put(SETTING_SYNC_KEY, key);
+        }
+        syncRepository = wireSyncRepository(settings);
+    }
+
+    private java.util.Optional<String> syncSetting(String key) {
+        return settings.get(key).filter(value -> !value.isBlank());
+    }
+
+    /** Builds the adapter from settings; sync stays off on bad input. */
+    private java.util.Optional<SyncRepository> wireSyncRepository(SettingsStore store) {
+        String url = store.get(SETTING_SYNC_URL).orElse("").strip();
+        String key = store.get(SETTING_SYNC_KEY).orElse("").strip();
+        if (url.isEmpty() || key.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        try {
+            return java.util.Optional.of(new HttpSyncRepository(url, key));
+        } catch (RuntimeException e) {
+            // A malformed URL must never break opening the database.
+            return java.util.Optional.empty();
+        }
     }
 
     public Locale savedLocale() {

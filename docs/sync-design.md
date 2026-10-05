@@ -1,8 +1,49 @@
 # Sincronización con una base de datos externa — plan de diseño
 
-> Estado: **plan** (nada implementado todavía). Objetivo: trabajar con el
-> mismo tablero desde varias computadoras, con la base local como fuente de
-> verdad y sincronización cuando hay red, al estilo Zotero.
+> Estado: **MVP implementado** (cliente Java + API PHP/MySQL propia,
+> sincronización por snapshot completo con bloqueo optimista). Objetivo:
+> trabajar con el mismo tablero desde varias computadoras, con la base
+> local como fuente de verdad y sincronización cuando hay red, al estilo
+> Zotero.
+
+## 0. MVP implementado (2026-10-05)
+
+Decisión del usuario: **API PHP + MySQL propio** (tiene hosting con
+MySQL donde puede subir scripts PHP) en vez de los BaaS de §5, con
+ granularidad **MVP de tablero completo ahora, deltas después**.
+
+- **API** (`sync/`, un solo archivo `index.php` sin framework):
+  `GET ?action=get&board_id=<uuid>`, `POST ?action=put`,
+  `GET ?action=catalog`. Auth por cabecera `X-API-Key` (el hash
+  SHA-256 vive en `config.php`, fuera del repo). Escritura optimista:
+  el push lleva `base_version`; un push desfasado responde **409 con
+  el board remoto** para fusionar; `base_version: -1` fuerza el
+  sobreescrito. Cada escritura aceptada sube la versión y estampa el
+  reloj del servidor (nunca los relojes del cliente). `setup.sql`
+  crea `sync_board` + `sync_meta`; `config.sample.php` documenta
+  `max_payload_bytes` (5 MB).
+- **Cliente Java**: puerto `SyncRepository` (`application.port`,
+  `fetch`/`push`/`catalog`) + DTOs `RemoteBoard`/`RemoteBoardInfo` +
+  `PushResult` sellado (`Ok` | `Conflict` con el remoto) +
+  `SyncException` (Kind + statusCode) — todos en `application` porque
+  ArchUnit prohíbe que application dependa de infrastructure.
+- **Adaptador** `HttpSyncRepository` (`infrastructure.sync`):
+  `java.net.http.HttpClient` del JDK (cero dependencias nuevas) +
+  `BoardJsonMapper`; el payload es el mismo JSON del undo y del
+  export/import. Traduce 401/400/413/409/5xx a excepciones tipadas.
+- **Wiring** en `AppContext`: settings `sync.server.url` y
+  `sync.api.key` por base de datos; `configureSync(url, key)` y
+  `syncRepository()`. Sin URL o sin clave → sync desactivado y la app
+  arranca igual (local-first, §1).
+- **Tests:** `HttpSyncRepositoryTest` (9, con un servidor HTTP del JDK
+  que imita el contrato de la API) y `PhpSyncApiEndpointTest` (e2e
+  real contra PHP + MariaDB; se autosalta si el servidor no está).
+  Suite: **203/203 OK**.
+
+Camino a deltas (fase siguiente): migración V10 con `updated_at`,
+lápidas y token de sync; outbox por entidad (§3.1) y cursores
+(§3.2) para el ciclo pull→merge→push de §3.3 — el puerto ya lo
+soporta sin tocar dominio ni UI.
 
 ## 1. Principios
 
@@ -155,6 +196,15 @@ que revalidarlos antes de implementar.
 
 ### 5.1 Recomendación
 
+> **Decisión (2026-10-05):** se eligió **API PHP + MySQL propio**
+> (opción no tabulada arriba: el usuario tiene hosting con MySQL).
+> Ventajas frente al plan original: cero dependencia de OAuth o de
+> terceros, control total del esquema y del límite de payload, y el
+> mismo wire protocol sirve para el MVP (snapshot) y para los deltas
+> futuros (endpoints `?since=`). Desventaja: hay que mantener el
+> script y la BD remota; el cifrado en reposo y el TLS terminan en
+> el servidor propio (§5).
+
 1. **Para el primer prototipo (menor esfuerzo): Google Drive como blob.**
    Sin backend que mantener: un archivo JSON por tablero con
    `{cursor, objects[]}` y el outbox local. OAuth de escritorio de Google.
@@ -169,24 +219,36 @@ complica la reconciliación por campo y ata al proveedor.
 ## 6. Plan por fases
 
 ### Fase 1 — Andamiaje local (sin red, sin riesgo)
-- Migración V9: `sync_object`, `sync_outbox`, `sync_meta`; `device_id`
+
+> **Pendiente.** El puerto `SyncRepository` y su adaptador HTTP ya
+> existen (§0), pero el outbox de §3.1 (migración V10: `sync_object`,
+> `sync_outbox`, `sync_meta`, `device_id`) aún no.
+
+- Migración V10: `sync_object`, `sync_outbox`, `sync_meta`; `device_id`
   generado una vez y guardado en `sync_meta`.
 - En `BoardService`, al final de `finishTransaction`, registrar el cambio en
   el outbox (a partir del diff entre `before` y el memento nuevo) — o, más
   simple, marcar el tablero completo como “dirty” al principio.
-- Puerto `SyncRepository` + adaptador `NoopSyncRepository` (mantiene todo
-  offline y testeable).
 - Tests de que el outbox refleja altas/ediciones/borrados.
 
 ### Fase 2 — Backend mínimo
-- Elegir backend (§5.1) y escribir el esquema remoto (§3.2).
-- API mínima: `GET /objects?since=` y `POST /objects` (lote).
-- Auth: token de API o OAuth; guardar credenciales fuera del repo.
+
+> **Hecho (2026-10-05):** API PHP (`sync/index.php`) + esquema remoto
+> (`sync/setup.sql`) + auth por `X-API-Key` con hash en `config.php`.
+> La API actual es de snapshot completo; los endpoints `?since=` de
+> §3.2 llegan con la Fase 1 (deltas).
+
+- (Hecho) API mínima: `GET ?action=get`, `POST ?action=put`,
+  `GET ?action=catalog`.
+- Pendiente: `GET /objects?since=<cursor>` y `POST /objects` (lote)
+  para sincronización por cambios.
 
 ### Fase 3 — Motor bidireccional
 - Implementar el ciclo pull → merge → push con conflictos (§3.3, §4).
 - Botón **Sincronizar** + estado (última sync, pendientes, errores) en la UI.
 - Reusar `BoardJsonMapper` para el payload; `Board.restore` para aplicar.
+- Pendiente también: UI para pedir URL/clave (diálogo de preferencias)
+  y resolver el 409 (§4.1: copia de conflicto).
 
 ### Fase 4 — Robustez
 - Reintentos con backoff, sync en segundo plano, detección de offline.
