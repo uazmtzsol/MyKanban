@@ -119,7 +119,7 @@ public final class SqliteBoardRepository implements BoardRepository {
     public BoardMemento load(BoardId boardId) {
         List<ColumnSnapshot> columns = new ArrayList<>();
         String sql = """
-                SELECT id, title, description, color, wip_limit, created_at
+                SELECT id, title, description, color, wip_limit, created_at, done, background_color
                 FROM board_column
                 WHERE board_id = ?
                 ORDER BY position
@@ -139,7 +139,8 @@ public final class SqliteBoardRepository implements BoardRepository {
         List<ColumnSnapshot> withCards = new ArrayList<>();
         for (ColumnSnapshot column : columns) {
             withCards.add(new ColumnSnapshot(column.id(), column.title(), column.description(),
-                    column.color(), column.wipLimit(), column.createdAt(), readCards(column.id())));
+                    column.color(), column.wipLimit(), column.createdAt(), column.done(),
+                    column.backgroundColor(), readCards(column.id())));
         }
         return new BoardMemento(withCards, readProcesses(boardId), readLinks(boardId),
                 readTimeline(boardId));
@@ -251,8 +252,8 @@ public final class SqliteBoardRepository implements BoardRepository {
     private void replaceAll(BoardId boardId, BoardMemento board) throws SQLException {
         deleteBoardContents(boardId);
         String columnSql = """
-                INSERT INTO board_column (id, board_id, title, description, color, position, wip_limit, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO board_column (id, board_id, title, description, color, position, wip_limit, created_at, done, background_color)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         String cardSql = """
                 INSERT INTO card (id, column_id, title, description, color, position, due_date, labels, created_at, notes, process_id)
@@ -393,6 +394,12 @@ public final class SqliteBoardRepository implements BoardRepository {
             statement.setNull(7, Types.INTEGER);
         }
         statement.setLong(8, column.createdAt().toEpochMilli());
+        statement.setInt(9, column.done() ? 1 : 0);
+        if (column.backgroundColor() == null) {
+            statement.setNull(10, Types.VARCHAR);
+        } else {
+            statement.setString(10, column.backgroundColor());
+        }
     }
 
     private void bindCard(PreparedStatement statement, CardSnapshot card, ColumnId ownerId, int position)
@@ -425,6 +432,7 @@ public final class SqliteBoardRepository implements BoardRepository {
     // ------------------------------------------------------------------
 
     private ColumnSnapshot readColumnRow(ResultSet resultSet) throws SQLException {
+        String background = resultSet.getString("background_color");
         return new ColumnSnapshot(
                 new ColumnId(resultSet.getString("id")),
                 resultSet.getString("title"),
@@ -432,6 +440,8 @@ public final class SqliteBoardRepository implements BoardRepository {
                 BoardColor.fromStored(resultSet.getString("color")),
                 readWipLimit(resultSet),
                 Instant.ofEpochMilli(resultSet.getLong("created_at")),
+                resultSet.getInt("done") != 0,
+                background == null ? null : background,
                 List.of());
     }
 

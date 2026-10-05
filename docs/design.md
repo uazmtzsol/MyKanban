@@ -88,6 +88,11 @@ Se planea cómo sincronizar la base de datos local con una externa, de la
 manera de Zotero (base de datos local + sincronización cuando hay red).
 Esto permite trabajar con el mismo programa desde distintas computadoras.
 
+➡️ **El plan completo vive en [sync-design.md](sync-design.md)**: modelo de
+outbox y lápidas, política de conflictos por campo, comparativa de backends
+gratuitos (Cloudflare D1, Turso, Supabase, Firestore, Google Drive) y plan
+por fases.
+
 ## Etiquetas de proceso y validación
 
 - Las etiquetas de los procesos comienzan con "#", pero **no se permite el
@@ -97,27 +102,15 @@ Esto permite trabajar con el mismo programa desde distintas computadoras.
   - `split(raw)`: divide por espacios, comas o punto y coma y devuelve
     `List<String>` de etiquetas válidas.
 
-## Clave importante: cómo se sincroniza Zotero (base de datos local)
+## Cómo se sincroniza Zotero (referencia)
 
-Zotero tiene una base de datos local y se sincroniza con una base externa
-cuando hay red. Para el este programa:
-
-1. **Base de datos local**: el archivo SQLite `kanban.db` (ya existe).
-2. **Base de datos externa**: un archivo/nodo remoto (ej. SQLite en un
-   servidor cloud, o un archivo JSON/SQLite compartido).
-3. **Sincronización**:
-   - Cambios locales → exportan al formato de intercambio local (ya existe:
-     `BoardExport` JSON + `BoardMemento`).
-   - Cambios remotos → importan el mismo formato.
-   - Se comparan `BoardMemento`, y se aplican las diferencias sin cacheado.
-4. **Iteración**: la aplicación se ejecuta sin red, genera cambios, los
-   sincroniza al ejecutarse con red. Para evitar conflictos, se usa un
-   **reloj de reconciliación** que discrimina cambios locales por el
-   `CardId`/`EditorId` y las versiones de contenido.
-
-**Clave**: el contraste se hace por `CardId`/`EditorId` y el *contenido*
-operacional (no por `CardId` + `position` que pueden variar entre
-instancias), evitando campos que cambian por la "estructura" de la tabla.
+Zotero mantiene una base local y sube/baja cambios cuando hay red, con
+identificadores estables y resolución de conflictos por versión. Nuestro
+plan aplica las mismas ideas (ver [sync-design.md](sync-design.md)):
+IDs generados por el cliente (ya es el caso), outbox de cambios, lápidas
+para borrados y reconciliación determinista. El contraste se hace por
+`CardId`/`EntryId` y el **contenido** (no por `position`, que varía entre
+instancias).
 
 ## Resumen de entidades nuevas
 

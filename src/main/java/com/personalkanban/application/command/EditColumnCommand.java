@@ -18,12 +18,21 @@ public final class EditColumnCommand implements BoardCommand {
     private final String newDescription;
     private final BoardColor newColor;
     private final WipLimit newWipLimit;
+    private final boolean newDone;
+    private final String newBackgroundColor; // nullable
 
     public EditColumnCommand(ColumnId columnId, String newDescription, BoardColor newColor, WipLimit newWipLimit) {
+        this(columnId, newDescription, newColor, newWipLimit, false, null);
+    }
+
+    public EditColumnCommand(ColumnId columnId, String newDescription, BoardColor newColor,
+                              WipLimit newWipLimit, boolean newDone, String newBackgroundColor) {
         this.columnId = Objects.requireNonNull(columnId);
         this.newDescription = newDescription == null ? "" : newDescription;
         this.newColor = Objects.requireNonNull(newColor);
         this.newWipLimit = Objects.requireNonNull(newWipLimit);
+        this.newDone = newDone;
+        this.newBackgroundColor = newBackgroundColor;
     }
 
     @Override
@@ -31,5 +40,7 @@ public final class EditColumnCommand implements BoardCommand {
         board.redescribeColumn(columnId, newDescription);
         board.recolorColumn(columnId, newColor);
         board.limitColumn(columnId, newWipLimit);
+        board.markColumnDone(columnId, newDone);
+        board.setColumnBackground(columnId, newBackgroundColor);
     }
 }

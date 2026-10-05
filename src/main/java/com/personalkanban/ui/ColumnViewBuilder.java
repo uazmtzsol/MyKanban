@@ -121,6 +121,13 @@ final class ColumnViewBuilder {
         Label title = new Label(column.title());
         title.getStyleClass().add("column-title");
 
+        // "✓" marker on finalized columns (at most one per board).
+        Label doneBadge = new Label("\u2713");
+        doneBadge.getStyleClass().add("column-done-badge");
+        doneBadge.setTooltip(new Tooltip(i18n.text("column.done")));
+        doneBadge.setVisible(column.isDone());
+        doneBadge.setManaged(column.isDone());
+
         Label wip = new Label(wipText(column));
         wip.getStyleClass().add("column-wip");
         wip.getStyleClass().add(column.isFull() ? "wip-full" : "wip-ok");
@@ -142,16 +149,23 @@ final class ColumnViewBuilder {
         MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
         MenuItem editItem = new MenuItem(i18n.text("column.edit"));
         editItem.setOnAction(e -> board.onEditColumn(column.id()));
+        MenuItem doneItem = new MenuItem(i18n.text("column.done"));
+        doneItem.setOnAction(e -> board.onSetColumnDone(column.id()));
+        MenuItem backgroundItem = new MenuItem(i18n.text("column.background"));
+        backgroundItem.setOnAction(e -> board.onSetColumnBackground(column.id()));
+        MenuItem orderItem = new MenuItem(i18n.text("column.order"));
+        orderItem.setOnAction(e -> board.onReorderColumn(column.id()));
         MenuItem collapseItem = new MenuItem(i18n.text("column.collapse"));
         collapseItem.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
         MenuItem deleteItem = new MenuItem(i18n.text("column.delete"));
         deleteItem.setOnAction(e -> board.onRemoveColumn(column.id()));
         MenuItem clearItem = new MenuItem(i18n.text("column.clear.cards"));
         clearItem.setOnAction(e -> board.onClearColumn(column.id()));
-        columnMenu.getItems().setAll(editItem, collapseItem, deleteItem,
+        columnMenu.getItems().setAll(editItem, doneItem, backgroundItem,
+                orderItem, collapseItem, deleteItem,
                 new SeparatorMenuItem(), clearItem);
 
-        HBox header = new HBox(6, title, wip, addCard, sortPriority, selectCards, collapse, columnMenu);
+        HBox header = new HBox(6, title, doneBadge, wip, addCard, sortPriority, selectCards, collapse, columnMenu);
         header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         header.getStyleClass().add("column-header");
 
@@ -162,7 +176,9 @@ final class ColumnViewBuilder {
 
         VBox view = new VBox(8);
         view.getStyleClass().addAll("column", ColorCss.styleClass(column.color()));
-        ColorCss.applySurface(view, column.color(), dark);
+        StringBuilder style = new StringBuilder(ColorCss.surfaceStyle(column.color(), dark));
+        appendColumnBackground(style, column);
+        view.setStyle(style.toString());
         view.setUserData(column.id());
         view.setMinWidth(240);
         view.setPrefWidth(280);
@@ -212,7 +228,7 @@ final class ColumnViewBuilder {
         expand.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
         expand.setTooltip(new Tooltip(i18n.text("column.expand")));
 
-        Label verticalTitle = new Label(column.title());
+        Label verticalTitle = new Label((column.isDone() ? "\u2713 " : "") + column.title());
         verticalTitle.getStyleClass().add("column-title-vertical");
         verticalTitle.setRotate(-90);
         if (!column.description().isBlank()) {
@@ -230,12 +246,21 @@ final class ColumnViewBuilder {
         expandItem.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
         MenuItem editItem = new MenuItem(i18n.text("column.edit"));
         editItem.setOnAction(e -> board.onEditColumn(column.id()));
-        columnMenu.getItems().setAll(expandItem, editItem);
+        MenuItem doneItem = new MenuItem(i18n.text("column.done"));
+        doneItem.setOnAction(e -> board.onSetColumnDone(column.id()));
+        MenuItem backgroundItem = new MenuItem(i18n.text("column.background"));
+        backgroundItem.setOnAction(e -> board.onSetColumnBackground(column.id()));
+        MenuItem orderItem = new MenuItem(i18n.text("column.order"));
+        orderItem.setOnAction(e -> board.onReorderColumn(column.id()));
+        columnMenu.getItems().setAll(expandItem, editItem, doneItem,
+                backgroundItem, orderItem);
 
         VBox view = new VBox(6, expand, columnMenu, verticalText, count);
         view.setAlignment(javafx.geometry.Pos.TOP_CENTER);
         view.getStyleClass().addAll("column", "collapsed", ColorCss.styleClass(column.color()));
-        ColorCss.applySurface(view, column.color(), dark);
+        StringBuilder style = new StringBuilder(ColorCss.surfaceStyle(column.color(), dark));
+        appendColumnBackground(style, column);
+        view.setStyle(style.toString());
         view.setUserData(column.id());
         view.setMinWidth(52);
         view.setPrefWidth(52);
@@ -243,6 +268,14 @@ final class ColumnViewBuilder {
 
         installColumnDragSource(view, column.id(), service, board);
         return view;
+    }
+
+    /** The column's own background color (separate from the card-tab color). */
+    private static void appendColumnBackground(StringBuilder style, BoardColumn column) {
+        if (column.backgroundColor() != null && !column.backgroundColor().isBlank()) {
+            style.append("-fx-background-color: ")
+                    .append(column.backgroundColor()).append(";");
+        }
     }
 
     static String wipText(BoardColumn column) {

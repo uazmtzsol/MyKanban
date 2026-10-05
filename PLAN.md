@@ -301,12 +301,16 @@ Migraciones: crear `V<n>__desc.sql` **y** registrar en
   `Board.hasLink(from,to)`.
 - **Etiquetas manuales:** `Dialogs.parseLabels` ahora rechaza el '#' al
   inicio (vía `LabelConventions`); las etiquetas de proceso llevan '#'.
-- **Sincronización (plan, no implementada):** ver `docs/design.md`.
-  Enfoque Zotero: BD local (`kanban.db`) + export/import por `BoardMemento`
-  y claves estables (`CardId`/`EntryId`), reconciliación por contenido.
-- **Tests:** 190/190 verdes (`mvn test -DskipITs`). Nuevos: `TimelineTest`,
+- **Sincronización (plan detallado, no implementada):** ver
+  `docs/sync-design.md`. Enfoque Zotero: BD local (`kanban.db`) + outbox de
+  cambios y lápidas, conflictos LWW por campo, claves estables
+  (`CardId`/`EntryId`). Backends gratuitos comparados: Cloudflare D1,
+  Turso, Supabase, Firestore y Google Drive (blob). Recomendación: empezar
+  con Google Drive (JSON por tablero) y luego SQLite remoto (D1/Turso).
+- **Tests:** 191/191 verdes (`mvn test -DskipITs`). Nuevos: `TimelineTest`,
   `LabelConventionsTest`, `SqliteTimelineRoundTripTest`,
-  `SessionSixServiceTest`, caso '#' en `DialogsParseLabelsTest`.
+  `SessionSixServiceTest`, caso '#' en `DialogsParseLabelsTest`, y
+  export/import con timeline en `BoardServiceTest`.
 - **Pendiente:** notas por flecha en la vista de procesos (hoy la flecha
   enlaza/desenlaza), implementación real del sync, y prueba manual de la
   vista de procesos y del cronómetro.

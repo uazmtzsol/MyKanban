@@ -37,8 +37,12 @@ import com.personalkanban.application.command.RemoveTimeEntryCommand;
 import com.personalkanban.application.command.SetChecklistFromLinesCommand;
 import com.personalkanban.application.command.StartTimeTrackingCommand;
 import com.personalkanban.application.command.StopTimeTrackingCommand;
+import com.personalkanban.application.command.SetColumnBackgroundCommand;
+import com.personalkanban.application.command.SetColumnDoneCommand;
 import com.personalkanban.application.command.SortColumnByPriorityCommand;
+import com.personalkanban.application.command.UnassignFromProcessCommand;
 import com.personalkanban.application.command.UnlinkCardsCommand;
+import com.personalkanban.application.command.BulkAssignProcessCommand;
 import com.personalkanban.application.port.BoardRepository;
 import com.personalkanban.application.port.SettingsStore;
 import com.personalkanban.application.port.UndoHistory;
@@ -91,6 +95,7 @@ public final class BoardService {
     private final BoardRepository repository;
     private final UndoHistory history;
     private final SettingsStore settings;
+    private final StylePrefs stylePrefs;
 
     private final List<BoardDescriptor> catalog = new ArrayList<>();
     private Board activeBoard;
@@ -103,6 +108,7 @@ public final class BoardService {
         this.repository = Objects.requireNonNull(repository);
         this.history = Objects.requireNonNull(history);
         this.settings = Objects.requireNonNull(settings);
+        this.stylePrefs = new StylePrefs(this.settings);
         this.mapper = BoardJsonMapper.create();
         this.catalog.addAll(repository.listBoards());
         this.activeBoard = selectInitialBoard();
@@ -196,8 +202,79 @@ public final class BoardService {
         execute(new RenameColumnCommand(columnId, newTitle));
     }
 
+    /**
+     * Edits description, color and WIP limit, keeping the current
+     * "done" flag and background color (the legacy 4-field form
+     * must not silently reset them).
+     */
     public void editColumn(ColumnId columnId, String description, BoardColor color, WipLimit wipLimit) {
-        execute(new EditColumnCommand(columnId, description, color, wipLimit));
+        BoardColumn column = activeBoard.columnOrThrow(columnId);
+        execute(new EditColumnCommand(columnId, description, color, wipLimit,
+                column.isDone(), column.backgroundColor()));
+    }
+
+    /** Edits description, color, WIP limit, done flag and background in one undoable step. */
+    public void editColumn(ColumnId columnId, String description, BoardColor color, WipLimit wipLimit,
+                             boolean done, String backgroundColor) {
+        execute(new EditColumnCommand(columnId, description, color, wipLimit, done, backgroundColor));
+    }
+
+    /** Marks (or unmarks) a column as the board's "done" column, undoable. */
+    public void setColumnDone(ColumnId columnId, boolean done) {
+        execute(new SetColumnDoneCommand(columnId, done));
+    }
+
+    // ------------------------------------------------------------------
+    // Style preferences (highlight + label colors, per theme)
+    // ------------------------------------------------------------------
+
+    /** Effective highlight colors of a flag state ("important", "urgent", "urgent-important"). */
+    public StylePrefs.StyleColors priorityStyle(String state, boolean dark) {
+        return stylePrefs.priority(state, dark);
+    }
+
+    /** Developer defaults of one flag state and theme (no storage read). */
+    public StylePrefs.StyleColors defaultPriority(String state, boolean dark) {
+        return stylePrefs.defaultPriority(state, dark);
+    }
+
+    /** Persists one flag-state color pair for one theme (null fields reset to defaults). */
+    public void setPriorityStyle(String state, boolean dark, String background, String text) {
+        stylePrefs.setPriority(state, dark, background, text);
+    }
+
+    /** Saved colors of one label/combination key and theme, if any. */
+    public Optional<StylePrefs.StyleColors> labelStyle(String key, boolean dark) {
+        return stylePrefs.labelColors(key, dark);
+    }
+
+    /** Persists one label/combination color pair for one theme (null fields clear). */
+    public void setLabelStyle(String key, boolean dark, String background, String text) {
+        stylePrefs.setLabelColors(key, dark, background, text);
+    }
+
+    /** Clears every customization of one label/combination key. */
+    public void clearLabelStyle(String key) {
+        stylePrefs.clearLabelColors(key);
+    }
+
+    /**
+     * Resolves the effective colors of a card's label set: exact
+     * combination first, then the first customized single label.
+     * Empty when nothing is customized (system colors apply).
+     */
+    /** Encoded keys of every customized label/combination color rule. */
+    public List<String> labelStyleRuleKeys() {
+        return stylePrefs.labelRuleKeys();
+    }
+
+    public Optional<StylePrefs.StyleColors> resolvedLabelStyle(List<String> labels, boolean dark) {
+        return stylePrefs.resolveLabelColors(labels, dark);
+    }
+
+    /** Sets the column background color (hex) or null to clear it, undoable. */
+    public void setColumnBackground(ColumnId columnId, String backgroundColor) {
+        execute(new SetColumnBackgroundCommand(columnId, backgroundColor));
     }
 
     public void removeColumn(ColumnId columnId) {
@@ -384,6 +461,18 @@ public final class BoardService {
     /** Assigns one card to a process (null = unassign). */
     public void assignCardToProcess(CardId cardId, ProcessId processId) {
         execute(new AssignProcessCommand(cardId, processId));
+    }
+    /**
+     * Removes a card from its process AND deletes every precedence
+     * link touching it, undoable (card dialog "Ninguno").
+     */
+    public void unassignCardFromProcess(CardId cardId) {
+        execute(new UnassignFromProcessCommand(cardId));
+    }
+
+    /** Bulk: assigns the cards to a process (null = unassign, links kept). */
+    public void assignProcessToCards(List<CardId> cardIds, ProcessId processId) {
+        execute(new BulkAssignProcessCommand(cardIds, processId));
     }
 
     // ------------------------------------------------------------------

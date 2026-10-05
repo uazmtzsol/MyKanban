@@ -82,6 +82,28 @@ public final class Board {
         columnOrThrow(columnId).limitTo(wipLimit);
     }
 
+    /**
+     * Marks (or unmarks) a column as the board's "done" column.
+     * Invariant: at most one column per board carries the flag, so
+     * marking one column unmarks any previously marked column.
+     */
+    public void markColumnDone(ColumnId columnId, boolean done) {
+        BoardColumn target = columnOrThrow(columnId);
+        if (done) {
+            for (BoardColumn column : columns) {
+                if (!column.id().equals(columnId)) {
+                    column.markDone(false);
+                }
+            }
+        }
+        target.markDone(done);
+    }
+
+    /** Sets the column background color (hex) or null to clear it. */
+    public void setColumnBackground(ColumnId columnId, String backgroundColor) {
+        columnOrThrow(columnId).setBackground(backgroundColor);
+    }
+
     public void removeColumn(ColumnId columnId) {
         columns.removeIf(column -> column.id().equals(columnId));
     }
@@ -477,6 +499,19 @@ public final class Board {
             processOrThrow(processId); // must exist
         }
         card.assignTo(processId);
+    }
+
+    /**
+     * Removes a card from its process AND deletes every precedence
+     * link touching it (incoming and outgoing), so the neighbors
+     * stop pointing at it and it stops pointing at them. Example:
+     * A → X → B becomes A and B with no relation once X is
+     * unassigned.
+     */
+    public void unassignCardFromProcess(CardId cardId) {
+        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+        card.assignTo(null);
+        detachCard(cardId);
     }
 
     public Process processOrThrow(ProcessId processId) {

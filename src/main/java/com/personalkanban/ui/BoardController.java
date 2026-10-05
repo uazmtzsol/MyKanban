@@ -98,8 +98,16 @@ public final class BoardController {
     // Card view preferences of the active board (UI preference, per board).
     private CardViewSettings cardViewSettings = new CardViewSettings();
 
-    // Process filter of the active board: null = show all cards.
+    // Process filter of the active board: null = no specific process
+    // (either every card is shown, or — with processFilterNone — only
+    // the cards that belong to no process at all).
     private com.personalkanban.domain.board.ProcessId activeProcessFilter;
+
+    // "None" process filter: true = only cards outside every process.
+    private boolean processFilterNone;
+
+    // The process filter combo of the filter bar (rebuilt on rebuilds).
+    private ComboBox<String> processFilterCombo;
 
     // Background customization (session 4): "path|dim" or null = none.
     private String backgroundSpec;
@@ -186,11 +194,23 @@ public final class BoardController {
         // is cheap reassurance even though every change is already committed.
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+S"),
                 this::onSaveNow);
+        // Process filter: focus and open the filter combo, like Ctrl+F
+        // does for the label filter.
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+P"),
+                this::onFocusProcessFilter);
     }
 
     private void onFocusFilter() {
         if (labelFilterField != null) {
             labelFilterField.requestFocus();
+        }
+    }
+
+    /** Focuses the process filter combo and opens it (Ctrl+P). */
+    private void onFocusProcessFilter() {
+        if (processFilterCombo != null) {
+            processFilterCombo.requestFocus();
+            processFilterCombo.show();
         }
     }
 
@@ -218,6 +238,9 @@ public final class BoardController {
 
         boardScroller = new ScrollPane(columnsRow);
         boardScroller.setFitToHeight(true);
+        // Transparent scroller: the board background image (or the
+        // plain fallback) must show through the scroll area.
+        boardScroller.getStyleClass().add("board-scroller");
         VBox.setVgrow(boardScroller, Priority.ALWAYS);
 
         buildSelectionBar();
@@ -316,6 +339,11 @@ public final class BoardController {
             labelFilterMode.setValue(null);
             activeFilterLabels = "";
             activeFilterMode = null;
+            activeProcessFilter = null;
+            processFilterNone = false;
+            if (processFilterCombo != null) {
+                processFilterCombo.setValue(i18n.text("filter.process.all"));
+            }
             refresh();
         });
 
@@ -324,10 +352,12 @@ public final class BoardController {
         javafx.scene.control.ToggleButton urgentFilter = quickFlagFilterButton(
                 "!", com.personalkanban.domain.board.Card.LABEL_URGENT, "filter.flag.urgent");
 
-        // Process filter (session 4.6): shows only the cards of one process.
-        // Note: only cards assigned to the chosen process remain visible.
+        // Process filter: "All" and "None" are explicit entries, so the
+        // filter is a real tri-state — a chosen process can be undone again
+        // and the cards that belong to no process at all can be shown
+        // (user request). Every entry is reachable by keyboard.
         ComboBox<String> processFilter = new ComboBox<>();
-        processFilter.setPromptText(i18n.text("filter.process.all"));
+        processFilterCombo = processFilter;
         processFilter.setPrefWidth(150);
         processFilter.setTooltip(new Tooltip(i18n.text("filter.process.tooltip")));
         var processes = service.processes();
@@ -335,7 +365,10 @@ public final class BoardController {
         if (activeProcessFilter != null && processes.stream()
                 .noneMatch(process -> process.id().equals(activeProcessFilter))) {
             activeProcessFilter = null;
+            processFilterNone = false;
         }
+        processFilter.getItems().add(i18n.text("filter.process.all"));
+        processFilter.getItems().add(i18n.text("filter.process.none"));
         for (var process : processes) {
             processFilter.getItems().add(process.name());
         }
@@ -344,15 +377,22 @@ public final class BoardController {
                     .filter(process -> process.id().equals(activeProcessFilter))
                     .findFirst()
                     .ifPresent(process -> processFilter.setValue(process.name()));
+        } else {
+            processFilter.setValue(i18n.text(
+                    processFilterNone ? "filter.process.none" : "filter.process.all"));
         }
         processFilter.setOnAction(e -> {
             String selected = processFilter.getValue();
-            activeProcessFilter = selected == null ? null : processes.stream()
-                    .filter(process -> process.name().equals(selected))
-                    .findFirst()
-                    .map(p -> p.id())
-                    .orElse(null);
-            refresh();
+            if (selected == null || selected.equals(i18n.text("filter.process.all"))) {
+                onFilterProcessAll();
+            } else if (selected.equals(i18n.text("filter.process.none"))) {
+                onFilterProcessNone();
+            } else {
+                processes.stream()
+                        .filter(process -> process.name().equals(selected))
+                        .findFirst()
+                        .ifPresent(process -> onFilterProcess(process.id()));
+            }
         });
 
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
@@ -449,6 +489,13 @@ public final class BoardController {
             Button colorButton = toolButton("\uD83C\uDFA8", "bulk.color");
             colorButton.setOnAction(e -> onBulkColor());
 
+            // The ⬫ glyph alone is not recognizable, so the
+            // process action also carries a text label — bulk
+            // actions must be discoverable without hovering.
+            Button processButton = toolButton("\u26AD", "bulk.process");
+            processButton.setText("\u26AD " + i18n.text("card.process.label"));
+            processButton.setOnAction(e -> onBulkProcess());
+
             Button moveButton = toolButton("\u27A1", "bulk.move");
             moveButton.setOnAction(e -> onBulkMove());
 
@@ -460,7 +507,7 @@ public final class BoardController {
             Region spacer = new Region();
             HBox.setHgrow(spacer, Priority.ALWAYS);
             selectionBar.getChildren().setAll(
-                    exit, labelButton, colorButton, moveButton, removeButton,
+                    exit, labelButton, colorButton, processButton, moveButton, removeButton,
                     spacer, count);
         } else {
             selectionBar.getChildren().setAll();
@@ -519,6 +566,18 @@ public final class BoardController {
             service.recolorCards(ids, color);
             exitSelectionMode();
         }));
+    }
+
+    private void onBulkProcess() {
+        List<CardId> ids = List.copyOf(selectedCards);
+        // "Ninguno" (null) takes the cards out of their process
+        // without touching their arrow relations — bulk actions
+        // must never destroy links silently.
+        dialogs.bulkProcessDialog(ids.size(), service.processes()).ifPresent(form ->
+                guarded(() -> {
+                    service.assignProcessToCards(ids, form.processId());
+                    exitSelectionMode();
+                }));
     }
 
     private void onBulkMove() {
@@ -692,11 +751,34 @@ public final class BoardController {
         }
         processMenu.getItems().setAll(
                 itemOf("process.new", this::onNewProcess));
+        // Process filter (user request): reachable from the menu — and
+        // therefore from the keyboard (Alt opens the menu bar) — with the
+        // two special states on accelerators. The active filter is marked
+        // like the active board in the boards menu.
+        MenuItem filterHeader = new MenuItem(i18n.text("menu.process.filter"));
+        filterHeader.setDisable(true);
+        MenuItem allProcesses = new MenuItem(
+                (activeProcessFilter == null && !processFilterNone ? "\u25CF " : "\u25CB ")
+                        + i18n.text("filter.process.all"));
+        allProcesses.setAccelerator(
+                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+P"));
+        allProcesses.setOnAction(e -> onFilterProcessAll());
+        MenuItem noProcess = new MenuItem(
+                (processFilterNone ? "\u25CF " : "\u25CB ") + i18n.text("filter.process.none"));
+        noProcess.setAccelerator(
+                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+N"));
+        noProcess.setOnAction(e -> onFilterProcessNone());
+        processMenu.getItems().addAll(filterHeader, allProcesses, noProcess,
+                new SeparatorMenuItem());
         for (com.personalkanban.domain.board.Process process : service.processes()) {
+            boolean filtered = activeProcessFilter != null
+                    && activeProcessFilter.equals(process.id());
+            MenuItem pick = new MenuItem((filtered ? "\u25CF " : "\u25CB ") + process.name());
+            pick.setOnAction(e -> onFilterProcess(process.id()));
             MenuItem rename = itemOf("process.rename", () -> onRenameProcess(process.id()));
             MenuItem delete = itemOf("process.delete", () -> onDeleteProcess(process.id()));
             processMenu.getItems().addAll(new SeparatorMenuItem(),
-                    new MenuItem("\u25CF " + process.name()), rename, delete);
+                    pick, rename, delete);
         }
     }
 
@@ -853,8 +935,17 @@ public final class BoardController {
             }
             BoardId id = service.createBoard(n);
             service.openBoard(id);
+            java.util.List<ColumnId> createdColumns = new java.util.ArrayList<>();
             for (String title : columnTitles) {
-                service.addColumn(title, "", BoardColor.DEFAULT, WipLimit.unlimited());
+                createdColumns.add(
+                        service.addColumn(title, "", BoardColor.DEFAULT, WipLimit.unlimited()));
+            }
+            if (choice.get() == Dialogs.NewBoardColumns.STANDARD
+                    && !createdColumns.isEmpty()) {
+                // The standard template ends with "Hecho": that is
+                // the board's single "finalizado" column (user
+                // request; the service keeps the one-column invariant).
+                service.setColumnDone(createdColumns.getLast(), true);
             }
             rebuildAll();
             dialogs.info(i18n.text("board.columns.created", columnTitles.size(), n));
@@ -1040,10 +1131,11 @@ public final class BoardController {
         }
     }
 
-    /** Preferences: board background image + legibility dim. */
+    /** Preferences: background image, priority and label colors. */
     private void onShowPreferences() {
         java.io.File seed = initialDirectory();
-        var choice = new PreferencesDialog(i18n).show(seed, backgroundSpec);
+        var choice = new PreferencesDialog(i18n, service, themeManager.isDark())
+                .show(seed, backgroundSpec);
         choice.ifPresent(selected -> {
             String stored = selected.path() == null
                     ? null
@@ -1062,7 +1154,7 @@ public final class BoardController {
      */
     private void applyBoardBackground() {
         if (backgroundSpec == null || backgroundSpec.isBlank()) {
-            root.setBackground(null);
+            paintPlainBackground();
             return;
         }
         String[] parts = backgroundSpec.split("\\|", 2);
@@ -1077,7 +1169,7 @@ public final class BoardController {
         }
         java.io.File file = new java.io.File(path);
         if (!file.isFile()) {
-            root.setBackground(null);
+            paintPlainBackground();
             return;
         }
         try {
@@ -1095,8 +1187,23 @@ public final class BoardController {
                                     false, false, true, true)))); // cover
         } catch (RuntimeException e) {
             // A bad image file is a cosmetic problem only.
-            root.setBackground(null);
+            paintPlainBackground();
         }
+    }
+
+    /**
+     * Solid fallback behind the columns. The stylesheet's
+     * .board-root color used to win over the programmatic
+     * background (hiding the image), so both the plain state and
+     * the "image missing" state are painted here instead.
+     */
+    private void paintPlainBackground() {
+        root.setBackground(new javafx.scene.layout.Background(
+                new javafx.scene.layout.BackgroundFill(
+                        javafx.scene.paint.Color.web(
+                                themeManager.isDark() ? "#16181d" : "#f5f6f8"),
+                        javafx.scene.layout.CornerRadii.EMPTY,
+                        javafx.geometry.Insets.EMPTY)));
     }
 
     /**
@@ -1159,6 +1266,7 @@ public final class BoardController {
         if (dialogs.confirm(i18n.text("process.delete.confirm"))) {
             if (activeProcessFilter != null && activeProcessFilter.equals(processId)) {
                 activeProcessFilter = null; // filter would dangle
+                processFilterNone = false;
             }
             guarded(() -> {
                 service.removeProcess(processId);
@@ -1179,8 +1287,31 @@ public final class BoardController {
 
     /** True when the card passes the active process filter (null = all pass). */
     boolean matchesProcessFilter(com.personalkanban.domain.board.Card card) {
-        return activeProcessFilter == null
-                || activeProcessFilter.equals(card.processId());
+        if (activeProcessFilter != null) {
+            return activeProcessFilter.equals(card.processId());
+        }
+        return !processFilterNone || card.processId() == null;
+    }
+
+    /** Process filter intent: every card is visible again (no filter). */
+    void onFilterProcessAll() {
+        activeProcessFilter = null;
+        processFilterNone = false;
+        refresh();
+    }
+
+    /** Process filter intent: only the cards outside every process. */
+    void onFilterProcessNone() {
+        activeProcessFilter = null;
+        processFilterNone = true;
+        refresh();
+    }
+
+    /** Process filter intent: only the cards of the given process. */
+    void onFilterProcess(com.personalkanban.domain.board.ProcessId processId) {
+        activeProcessFilter = processId;
+        processFilterNone = false;
+        refresh();
     }
 
     /** Direct predecessors of a card, for the card-front badges. */
@@ -1451,7 +1582,15 @@ public final class BoardController {
                             service.setChecklistFromLines(cardId, f.checklistLines());
                         }
                         if (!java.util.Objects.equals(f.processId(), oldProcessId)) {
-                            service.assignCardToProcess(cardId, f.processId());
+                            if (f.processId() == null) {
+                                // "Ninguno": leaves the process AND
+                                // drops every arrow that touches this
+                                // card (TarjA→TarjX→TarjB becomes
+                                // TarjA … TarjB, unrelated).
+                                service.unassignCardFromProcess(cardId);
+                            } else {
+                                service.assignCardToProcess(cardId, f.processId());
+                            }
                         }
                         diffLinks(cardId, oldPredecessors, f.predecessors(), true);
                         diffLinks(cardId, oldSuccessors, f.successors(), false);
@@ -1521,12 +1660,48 @@ public final class BoardController {
     public void onEditColumn(com.personalkanban.domain.board.ColumnId columnId) {
         var column = service.column(columnId);
         var initial = new Dialogs.ColumnForm(column.title(), column.description(),
-                column.color(), column.wipLimit());
+                column.color(), column.wipLimit(), column.isDone(), column.backgroundColor());
         dialogs.columnDialog(initial).ifPresent(f -> guarded(() -> {
             service.renameColumn(columnId, f.title());
-            service.editColumn(columnId, f.description(), f.color(), f.wipLimit());
+            service.editColumn(columnId, f.description(), f.color(), f.wipLimit(),
+                    f.done(), f.backgroundColor());
             refresh();
         }));
+    }
+
+    /** Toggles the board's single "finalizado" column (service keeps the invariant). */
+    public void onSetColumnDone(com.personalkanban.domain.board.ColumnId columnId) {
+        var column = service.column(columnId);
+        guarded(() -> {
+            service.setColumnDone(columnId, !column.isDone());
+            refresh();
+        });
+    }
+
+    /** Column background color, separate from the card-tab color (null = default). */
+    public void onSetColumnBackground(com.personalkanban.domain.board.ColumnId columnId) {
+        dialogs.columnBackgroundDialog(service.column(columnId).backgroundColor())
+                .ifPresent(color -> guarded(() -> {
+                    service.setColumnBackground(columnId, color);
+                    refresh();
+                }));
+    }
+
+    /** Moves the column to a user-chosen 1-based board position. */
+    public void onReorderColumn(com.personalkanban.domain.board.ColumnId columnId) {
+        var columns = service.board().columns();
+        int current = 0;
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).id().equals(columnId)) {
+                current = i;
+                break;
+            }
+        }
+        dialogs.columnOrderDialog(current + 1, columns.size()).ifPresent(position ->
+                guarded(() -> {
+                    service.moveColumn(columnId, position - 1);
+                    refresh();
+                }));
     }
 
     public void onRemoveColumn(com.personalkanban.domain.board.ColumnId columnId) {

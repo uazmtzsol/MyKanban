@@ -18,15 +18,22 @@ public final class BoardColumn {
     private String description;
     private BoardColor color;
     private WipLimit wipLimit;
+    private boolean done;
+    private String backgroundColor;
     private final List<Card> cards = new ArrayList<>();
     private final Instant createdAt;
 
     BoardColumn(String title, String description, BoardColor color, WipLimit wipLimit) {
-        this(Ids.newColumnId(), title, description, color, wipLimit, Instant.now());
+        this(Ids.newColumnId(), title, description, color, wipLimit, Instant.now(), false, null);
     }
 
     BoardColumn(ColumnId id, String title, String description, BoardColor color,
                 WipLimit wipLimit, Instant createdAt) {
+        this(id, title, description, color, wipLimit, createdAt, false, null);
+    }
+
+    BoardColumn(ColumnId id, String title, String description, BoardColor color,
+                WipLimit wipLimit, Instant createdAt, boolean done, String backgroundColor) {
         if (id == null || color == null || wipLimit == null || createdAt == null) {
             throw new IllegalArgumentException("Column fields must not be null");
         }
@@ -35,12 +42,20 @@ public final class BoardColumn {
         setDescription(description);
         this.color = color;
         this.wipLimit = wipLimit;
+        this.done = done;
+        this.backgroundColor = normalizeColor(backgroundColor);
         this.createdAt = createdAt;
     }
 
     static BoardColumn restore(ColumnId id, String title, String description, BoardColor color,
                                WipLimit wipLimit, Instant createdAt) {
-        return new BoardColumn(id, title, description, color, wipLimit, createdAt);
+        return restore(id, title, description, color, wipLimit, createdAt, false, null);
+    }
+
+    static BoardColumn restore(ColumnId id, String title, String description, BoardColor color,
+                               WipLimit wipLimit, Instant createdAt, boolean done,
+                               String backgroundColor) {
+        return new BoardColumn(id, title, description, color, wipLimit, createdAt, done, backgroundColor);
     }
 
     // ------------------------------------------------------------------
@@ -57,6 +72,16 @@ public final class BoardColumn {
 
     void recolor(BoardColor newColor) {
         this.color = Objects.requireNonNull(newColor, "color");
+    }
+
+    /** Marks/unmarks the column as the board's "done" column. */
+    void markDone(boolean done) {
+        this.done = done;
+    }
+
+    /** Sets the column background color (hex string) or null to clear it. */
+    void setBackground(String backgroundColor) {
+        this.backgroundColor = normalizeColor(backgroundColor);
     }
 
     void limitTo(WipLimit newLimit) {
@@ -182,6 +207,16 @@ public final class BoardColumn {
         return wipLimit;
     }
 
+    /** True when this column is the board's "done" column. */
+    public boolean isDone() {
+        return done;
+    }
+
+    /** Column background color (hex), or null when none. */
+    public String backgroundColor() {
+        return backgroundColor;
+    }
+
     public Instant createdAt() {
         return createdAt;
     }
@@ -224,5 +259,12 @@ public final class BoardColumn {
 
     private void setDescription(String description) {
         this.description = description == null ? "" : description.strip();
+    }
+
+    private static String normalizeColor(String backgroundColor) {
+        if (backgroundColor == null || backgroundColor.isBlank()) {
+            return null;
+        }
+        return backgroundColor.strip();
     }
 }

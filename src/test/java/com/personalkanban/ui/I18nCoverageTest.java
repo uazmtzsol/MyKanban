@@ -31,9 +31,11 @@ class I18nCoverageTest {
     private static final Pattern TEXT_KEY =
             Pattern.compile("i18n\\.text\\(\"([^\"]+)\"");
 
-    /** Every bundle shipped with the app (base = English). */
+    /** Every bundle shipped with the app (base = English, plus the
+     *  explicit English copy that prevents JVM fallback to the system locale). */
     private static final List<String> BUNDLES = List.of(
             "messages.properties",
+            "messages_en.properties",
             "messages_de.properties",
             "messages_es.properties",
             "messages_fr.properties");

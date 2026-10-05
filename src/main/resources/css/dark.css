@@ -60,6 +60,7 @@
     -fx-font-size: 11px;
 }
 .wip-full { -fx-background-color: #4c1d1d; -fx-text-fill: #fca5a5; }
+.column-done-badge { -fx-background-color: #14532d; -fx-text-fill: #86efac; -fx-background-radius: 8; -fx-padding: 0 5 0 5; -fx-font-weight: bold; }
 
 .cards-scroll { -fx-background-color: transparent; }
 .cards-scroll > .viewport { -fx-background-color: transparent; }

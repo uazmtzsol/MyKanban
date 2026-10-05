@@ -65,6 +65,18 @@ final class ColorCss {
      * {@code setStyle} call.
      */
     static void applySurface(javafx.scene.layout.Region region, BoardColor color, boolean dark) {
+        String style = surfaceStyle(color, dark);
+        if (!style.isEmpty()) {
+            region.setStyle(style);
+        }
+    }
+
+    /**
+     * The inline style produced by {@link #applySurface}, as a string so
+     * callers can append more declarations (priority/label/column colors)
+     * before a single {@code setStyle} call.
+     */
+    static String surfaceStyle(BoardColor color, boolean dark) {
         StringBuilder style = new StringBuilder();
         String tint = backgroundTint(color, dark);
         if (!tint.isEmpty()) {
@@ -73,9 +85,7 @@ final class ColorCss {
         if (color.isCustom()) {
             style.append("-fx-border-color: ").append(color.hex()).append(";");
         }
-        if (style.length() > 0) {
-            region.setStyle(style.toString());
-        }
+        return style.toString();
     }
 
     /** Converts a JavaFX color to the {@code #rrggbb} form the domain expects. */

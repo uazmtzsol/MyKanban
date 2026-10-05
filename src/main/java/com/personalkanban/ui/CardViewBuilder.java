@@ -2,6 +2,7 @@ package com.personalkanban.ui;
 
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.CardViewSettings;
+import com.personalkanban.application.StylePrefs;
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.ui.markdown.MarkdownSummary;
@@ -46,7 +47,16 @@ final class CardViewBuilder {
 
         VBox view = new VBox(4);
         view.getStyleClass().addAll("card", ColorCss.styleClass(card.color()));
-        ColorCss.applySurface(view, card.color(), dark);
+        // One inline style: the surface tint first, then the custom
+        // flag/label colors (a later declaration wins), so the
+        // priority highlight and the label rules never overwrite
+        // each other or the card's own color.
+        StringBuilder style = new StringBuilder(ColorCss.surfaceStyle(card.color(), dark));
+        StylePrefs.StyleColors flagColors = flagColors(service, card, dark);
+        StylePrefs.StyleColors labelColors =
+                service.resolvedLabelStyle(card.labels(), dark).orElse(null);
+        appendColors(style, flagColors != null ? flagColors : labelColors);
+        view.setStyle(style.toString());
         // Quick-flag highlight classes (user request: (i)/(u)/(iu) must stand
         // out); CSS owns the look per theme.
         if (card.isUrgentAndImportantCard()) {
@@ -142,6 +152,33 @@ final class CardViewBuilder {
 
         installDragSource(view, card.id());
         return view;
+    }
+
+    /** Custom highlight colors of the card's quick-flag state, if any. */
+    private static StylePrefs.StyleColors flagColors(BoardService service, Card card, boolean dark) {
+        if (card.isUrgentAndImportantCard()) {
+            return service.priorityStyle(StylePrefs.URGENT_IMPORTANT, dark);
+        }
+        if (card.isUrgentOnlyCard()) {
+            return service.priorityStyle(StylePrefs.URGENT, dark);
+        }
+        if (card.isImportantOnlyCard()) {
+            return service.priorityStyle(StylePrefs.IMPORTANT, dark);
+        }
+        return null;
+    }
+
+    /** Appends background/text declarations; null fields are skipped. */
+    private static void appendColors(StringBuilder style, StylePrefs.StyleColors colors) {
+        if (colors == null) {
+            return;
+        }
+        if (colors.background() != null) {
+            style.append("-fx-background-color: ").append(colors.background()).append(";");
+        }
+        if (colors.text() != null) {
+            style.append("-fx-text-fill: ").append(colors.text()).append(";");
+        }
     }
 
     /** "☑ n/m" progress badge when the card carries a checklist. */

@@ -9,6 +9,7 @@ import com.personalkanban.domain.board.WipLimit;
 import javafx.collections.FXCollections;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ComboBox;
@@ -35,8 +36,22 @@ import java.util.Optional;
  */
 final class Dialogs {
 
-    /** Result of the column dialog. */
-    record ColumnForm(String title, String description, BoardColor color, WipLimit wipLimit) {
+    /** Result of the column dialog (done flag + background color added). */
+    record ColumnForm(String title, String description, BoardColor color, WipLimit wipLimit,
+                      boolean done, String backgroundColor) {
+
+        /** Shape without the done/background fields (defaults: off, none). */
+        ColumnForm(String title, String description, BoardColor color, WipLimit wipLimit) {
+            this(title, description, color, wipLimit, false, null);
+        }
+    }
+
+    /** Result of the bulk process dialog: null processId = "Ninguno". */
+    record BulkProcessForm(com.personalkanban.domain.board.ProcessId processId) {
+    }
+
+    /** Sentinel shown as the explicit "no process" entry of a process combo. */
+    private record NoProcess() {
     }
 
     /** Result of the card dialog (session 5: advanced fields added). */
@@ -83,6 +98,21 @@ final class Dialogs {
                 ? "" : String.valueOf(initial.wipLimit().asOptional().get()));
         wipField.setPromptText(i18n.text("dialog.wip.prompt"));
 
+        // "Finalizado" flag (at most one column per board keeps it on;
+        // the service enforces that invariant) and an optional background
+        // color for the column body (separate from the card-tab color).
+        CheckBox doneCheck = new CheckBox(i18n.text("dialog.column.done"));
+        doneCheck.setSelected(initial != null && initial.done());
+        CheckBox backgroundToggle = new CheckBox(i18n.text("dialog.column.background"));
+        backgroundToggle.setSelected(initial != null && initial.backgroundColor() != null);
+        ColorPicker backgroundPicker = new ColorPicker(
+                initial != null && initial.backgroundColor() != null
+                        ? Color.web(initial.backgroundColor())
+                        : Color.web("#64748b"));
+        backgroundPicker.setDisable(!backgroundToggle.isSelected());
+        backgroundToggle.selectedProperty().addListener((obs, old, selected) ->
+                backgroundPicker.setDisable(!selected));
+
         Dialog<ColumnForm> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("dialog.column.title"));
         dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
@@ -95,7 +125,11 @@ final class Dialogs {
         grid.add(colorPicker, 1, 2);
         grid.add(new Label(i18n.text("dialog.wip")), 0, 3);
         grid.add(wipField, 1, 3);
+        grid.add(doneCheck, 0, 4, 2, 1);
+        grid.add(backgroundToggle, 0, 5);
+        grid.add(backgroundPicker, 1, 5);
         dialog.getDialogPane().setContent(grid);
+        makeResizable(dialog, 480, 420);
 
         dialog.setResultConverter(button -> {
             if (button != ButtonType.OK) {
@@ -107,7 +141,8 @@ final class Dialogs {
             }
             WipLimit wipLimit = wip == 0 ? WipLimit.unlimited() : WipLimit.of(wip);
             return new ColumnForm(titleField.getText(), descriptionField.getText(),
-                    selectedColor(colorPicker), wipLimit);
+                    selectedColor(colorPicker), wipLimit, doneCheck.isSelected(),
+                    backgroundToggle.isSelected() ? ColorCss.toHex(backgroundPicker.getValue()) : null);
         });
 
         return dialog.showAndWait();
@@ -144,19 +179,23 @@ final class Dialogs {
         checklistArea.setPromptText(i18n.text("checklist.dialog.prompt"));
         checklistArea.setPrefRowCount(3);
         checklistArea.setWrapText(true);
-        javafx.scene.control.ComboBox<com.personalkanban.domain.board.Process> processCombo =
-                new javafx.scene.control.ComboBox<>(
-                        javafx.collections.FXCollections.observableArrayList(processes));
-        processCombo.setPromptText(i18n.text("card.process.none"));
+        // Process chooser with an explicit "Ninguno" entry (user request:
+        // deselecting must be possible, not only leaving the combo empty).
+        javafx.scene.control.ComboBox<Object> processCombo = new javafx.scene.control.ComboBox<>();
+        processCombo.getItems().add(new NoProcess());
+        processCombo.getItems().addAll(processes);
         processCombo.setMaxWidth(Double.MAX_VALUE);
         processCombo.setConverter(new javafx.util.StringConverter<>() {
             @Override
-            public String toString(com.personalkanban.domain.board.Process process) {
-                return process == null ? "" : process.name();
+            public String toString(Object item) {
+                if (item instanceof com.personalkanban.domain.board.Process process) {
+                    return process.name();
+                }
+                return item instanceof NoProcess ? i18n.text("card.process.none") : "";
             }
 
             @Override
-            public com.personalkanban.domain.board.Process fromString(String string) {
+            public Object fromString(String string) {
                 return null;
             }
         });
@@ -165,6 +204,10 @@ final class Dialogs {
                     .filter(process -> process.id().equals(initial.processId()))
                     .findFirst()
                     .ifPresent(processCombo.getSelectionModel()::select);
+        } else {
+            // "Ninguno" selected explicitly, so editing a card that has no
+            // process shows the deselected state instead of a blank prompt.
+            processCombo.getSelectionModel().selectFirst();
         }
 
         javafx.scene.control.Label notesCaption =
@@ -209,11 +252,6 @@ final class Dialogs {
                 .map(java.util.Map.Entry::getKey)
                 .findFirst()
                 .ifPresent(title -> predecessorsList.getSelectionModel().select(title)));
-        oldPredecessors.forEach(id -> candidates.entrySet().stream()
-                .filter(entry -> entry.getValue().equals(id))
-                .map(java.util.Map.Entry::getKey)
-                .findFirst()
-                .ifPresent(title -> predecessorsList.getSelectionModel().select(title)));
         javafx.scene.control.Label predecessorsCaption =
                 new javafx.scene.control.Label(i18n.text("card.links.predecessors"));
         javafx.scene.control.Label successorsCaption =
@@ -232,6 +270,7 @@ final class Dialogs {
         Dialog<CardForm> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("dialog.card.title"));
         dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        makeResizable(dialog, 760, 640);
         GridPane grid = formGrid();
         grid.add(new Label(i18n.text("dialog.title.label")), 0, 0);
         grid.add(titleField, 1, 0);
@@ -258,7 +297,8 @@ final class Dialogs {
             return new CardForm(title, descriptionEditor.text(), selectedColor(colorPicker),
                     dueDatePicker.getValue(), parseLabels(labelsField.getText()),
                     notesEditor.text(), parseChecklistLines(checklistArea.getText()),
-                    processCombo.getValue() == null ? null : processCombo.getValue().id(),
+                    processCombo.getValue() instanceof com.personalkanban.domain.board.Process process
+                            ? process.id() : null,
                     selectedIds(predecessorsList, candidates),
                     selectedIds(successorsList, candidates));
         });
@@ -371,6 +411,111 @@ final class Dialogs {
                 ? new BulkLabelsForm(mode.getSelectionModel().getSelectedIndex() == 0,
                         parseLabels(labelsField.getText()))
                 : null);
+        return dialog.showAndWait();
+    }
+
+    /**
+     * Process for N selected cards: any process, or the explicit
+     * "Ninguno" entry (null processId) to take them all out of
+     * their process — without touching their arrow relations.
+     */
+    Optional<BulkProcessForm> bulkProcessDialog(int selectedCount,
+                                                    List<com.personalkanban.domain.board.Process> processes) {
+        javafx.scene.control.ComboBox<Object> combo = new javafx.scene.control.ComboBox<>();
+        combo.getItems().add(new NoProcess());
+        combo.getItems().addAll(processes);
+        combo.getSelectionModel().selectFirst(); // "Ninguno" by default
+        combo.setMaxWidth(Double.MAX_VALUE);
+        combo.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(Object item) {
+                if (item instanceof com.personalkanban.domain.board.Process process) {
+                    return process.name();
+                }
+                return item instanceof NoProcess ? i18n.text("card.process.none") : "";
+            }
+
+            @Override
+            public Object fromString(String string) {
+                return null;
+            }
+        });
+
+        Dialog<BulkProcessForm> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("bulk.process.title"));
+        dialog.setHeaderText(i18n.text("bulk.process.header", selectedCount));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(new Label(i18n.text("card.process.label")), 0, 0);
+        grid.add(combo, 1, 0);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(button -> {
+            if (button != ButtonType.OK) {
+                return null;
+            }
+            return new BulkProcessForm(
+                    combo.getValue() instanceof com.personalkanban.domain.board.Process process
+                            ? process.id() : null);
+        });
+        return dialog.showAndWait();
+    }
+
+    /**
+     * Background color of one column (separate from the card-tab
+     * color). A checked "no color" box yields null (default surface).
+     */
+    Optional<String> columnBackgroundDialog(String currentHex) {
+        ColorPicker picker = new ColorPicker(currentHex == null
+                ? Color.web("#64748b") : Color.web(currentHex));
+        CheckBox none = new CheckBox(i18n.text("column.background.none"));
+        none.setSelected(currentHex == null);
+        picker.setDisable(currentHex == null);
+        none.selectedProperty().addListener((obs, old, selected) ->
+                picker.setDisable(selected));
+
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("column.background.title"));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(new Label(i18n.text("dialog.color")), 0, 0);
+        grid.add(picker, 1, 0);
+        grid.add(none, 0, 1, 2, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(button -> button == ButtonType.OK
+                ? (none.isSelected() ? null : ColorCss.toHex(picker.getValue()))
+                : null);
+        return dialog.showAndWait();
+    }
+
+    /**
+     * New 1-based position of a column; the answer is clamped to
+     * 1..columnCount so a typo can never produce an invalid index.
+     */
+    Optional<Integer> columnOrderDialog(int currentPosition, int columnCount) {
+        TextField positionField = new TextField(String.valueOf(currentPosition));
+        positionField.setPromptText("1 – " + columnCount);
+
+        Dialog<Integer> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("column.order.title"));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(new Label(i18n.text("column.order.label", columnCount)), 0, 0);
+        grid.add(positionField, 1, 0);
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(button -> {
+            if (button != ButtonType.OK) {
+                return null;
+            }
+            try {
+                int value = Integer.parseInt(positionField.getText().strip());
+                return Math.clamp(value, 1, columnCount);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        });
         return dialog.showAndWait();
     }
 
@@ -516,6 +661,23 @@ final class Dialogs {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    /**
+     * Dialogs are fixed-size by default, which hides the advanced
+     * fields of the card/column forms; this gives them a sensible
+     * initial size and lets the user resize them (user request).
+     */
+    /** Makes a dialog resizable and sizes it once shown (user request: no fixed tiny windows). */
+    static void makeResizable(Dialog<?> dialog, double width, double height) {
+        dialog.setOnShown(event -> {
+            javafx.stage.Window window = dialog.getDialogPane().getScene().getWindow();
+            if (window instanceof javafx.stage.Stage stage) {
+                stage.setResizable(true);
+                stage.setWidth(width);
+                stage.setHeight(height);
+            }
+        });
+    }
 
     private GridPane formGrid() {
         GridPane grid = new GridPane();
