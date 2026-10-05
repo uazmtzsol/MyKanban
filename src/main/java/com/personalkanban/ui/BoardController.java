@@ -17,6 +17,8 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
@@ -39,9 +41,11 @@ import javafx.stage.FileChooser;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Root controller (GRASP Controller): builds the board UI, owns all user
@@ -68,6 +72,10 @@ public final class BoardController {
     private ScrollPane boardScroller;
     // View mode: kanban (columns) or processes (one row per process).
     private boolean processView;
+    // The card the arrow keys move around in the processes view.
+    // Survives the rebuilds refresh() performs, so the keyboard
+    // workflow keeps working after a link changes.
+    private CardId processFocusId;
     private Menu boardMenu;
     private Menu databaseMenu;
     private Menu processMenu;
@@ -1495,6 +1503,54 @@ public final class BoardController {
                 }));
     }
 
+    /** The card with keyboard focus in the processes view, or null. */
+    public CardId processFocusId() {
+        return processFocusId;
+    }
+
+    /** Keyboard or mouse focus moved onto a card of the processes view. */
+    public void onProcessFocus(CardId id) {
+        processFocusId = id;
+        refreshProcessInspectors();
+    }
+
+    /** Escape in the processes view: drop the card focus. */
+    public void onClearProcessFocus() {
+        processFocusId = null;
+        refreshProcessInspectors();
+    }
+
+    /** Moves keyboard focus to a card of the processes view. */
+    public void focusProcessCard(CardId id) {
+        onProcessFocus(id);
+        findProcessCardNode(id).ifPresent(Node::requestFocus);
+    }
+
+    /** Removes every link of a process-view card, in both directions. */
+    public void onProcessUnlinkAll(CardId id) {
+        var board = service.board();
+        List<CardId> predecessors = new ArrayList<>(board.incomingPredecessorsOf(id));
+        List<CardId> successors = new ArrayList<>(board.outgoingSuccessorsOf(id));
+        int total = predecessors.size() + successors.size();
+        if (total == 0) {
+            dialogs.info(i18n.text("process.unlink.none"));
+            return;
+        }
+        if (!dialogs.confirm(i18n.text("process.unlink.all.confirm",
+                total, board.titleOf(id)))) {
+            return;
+        }
+        guarded(() -> {
+            for (CardId predecessor : predecessors) {
+                service.unlinkCards(predecessor, id);
+            }
+            for (CardId successor : successors) {
+                service.unlinkCards(id, successor);
+            }
+            refresh();
+        });
+    }
+
     /** Suggested order of a process: dialog with the topological order. */
     public void onShowSuggestedOrder(com.personalkanban.domain.board.ProcessId processId) {
         var board = service.board();
@@ -1778,6 +1834,62 @@ public final class BoardController {
         }
     }
 
+    /** Re-renders the relation inspectors of the processes view rows. */
+    private void refreshProcessInspectors() {
+        com.personalkanban.domain.board.Card focused = processFocusId == null
+                ? null
+                : service.board().findCard(processFocusId).orElse(null);
+        if (focused == null) {
+            processFocusId = null;
+        }
+        forEachInspector(box ->
+                ProcessViewBuilder.renderInspector(box, service, i18n, this, focused));
+    }
+
+    /** Applies an update to every relation inspector of the processes view. */
+    private void forEachInspector(Consumer<VBox> action) {
+        if (!processView) {
+            return;
+        }
+        Node content = boardScroller.getContent();
+        if (content instanceof Parent parent) {
+            collectInspectors(parent, action);
+        }
+    }
+
+    /** Recursively feeds every process-row inspector to the action. */
+    private void collectInspectors(Parent parent, Consumer<VBox> action) {
+        for (Node child : parent.getChildrenUnmodifiable()) {
+            if (child instanceof VBox box
+                    && child.getStyleClass().contains("process-inspector")) {
+                action.accept(box);
+            } else if (child instanceof Parent nested) {
+                collectInspectors(nested, action);
+            }
+        }
+    }
+
+    /** The node of a card in the processes view, if it is built. */
+    private Optional<Node> findProcessCardNode(CardId id) {
+        Node content = boardScroller.getContent();
+        return content == null ? Optional.empty() : findNodeWithData(content, id);
+    }
+
+    private Optional<Node> findNodeWithData(Node node, Object data) {
+        if (data.equals(node.getUserData())) {
+            return Optional.of(node);
+        }
+        if (node instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                Optional<Node> found = findNodeWithData(child, data);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
@@ -1788,6 +1900,9 @@ public final class BoardController {
         columnsRow.getChildren().setAll(
                 ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter, quickFilter,
                         selectionMode, collapsedColumns, themeManager.isDark(), columnWidths));
+        // The processes view always spans the full window width;
+        // the kanban view keeps content-sized columns.
+        boardScroller.setFitToWidth(processView);
         boardScroller.setContent(processView
                 ? ProcessViewBuilder.buildAll(service, i18n, this)
                 : columnsRow);
@@ -1796,6 +1911,14 @@ public final class BoardController {
         syncCardViewMenu();
         undoRedo.sync();
         updateSelectionBarState();
+        // Keep the processes-view keyboard focus across the rebuild.
+        if (processView && processFocusId != null) {
+            if (service.board().findCard(processFocusId).isEmpty()) {
+                processFocusId = null;
+            } else {
+                findProcessCardNode(processFocusId).ifPresent(Node::requestFocus);
+            }
+        }
     }
 
     /** Switches between the kanban and the processes view. */

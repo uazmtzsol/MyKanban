@@ -265,16 +265,35 @@
 .time-entry-delete:hover { -fx-background-color: #7f1d1d; }
 
 /* Session 6: process view */
-.process-row { -fx-padding: 6; }
+.process-panel {
+    -fx-background-color: #1f2229;
+    -fx-background-radius: 8;
+    -fx-border-color: #343947;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 6, 0.1, 0, 2);
+    -fx-padding: 10;
+}
 .process-header { -fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #93c5fd; }
 .process-row-scroll { -fx-background-color: transparent; }
+.process-row-scroll > .viewport { -fx-background-color: transparent; }
 .process-card {
     -fx-background-color: #262a33;
     -fx-border-color: #343947;
+    -fx-border-width: 1;
     -fx-border-radius: 6;
     -fx-background-radius: 6;
 }
+.process-card:focused { -fx-border-color: #93c5fd; -fx-border-width: 2; }
 .process-card-title { -fx-font-weight: bold; -fx-text-fill: #e5e7eb; }
+/* Relation inspector under the diagram: the links of the focused card. */
+.process-inspector { -fx-padding: 2; }
+.process-inspector-title { -fx-font-weight: bold; -fx-text-fill: #93c5fd; }
+.process-inspector-caption { -fx-font-size: 11px; -fx-text-fill: #9ca3af; }
+.process-inspector-relation { -fx-cursor: hand; -fx-padding: 1 3; -fx-background-radius: 3; }
+.process-inspector-relation:hover { -fx-background-color: #343947; }
+.process-inspector-remove { -fx-font-size: 11px; -fx-padding: 0 5; -fx-background-color: transparent; -fx-cursor: hand; }
+.process-inspector-remove:hover { -fx-background-color: #7f1d1d; }
 /* Drawn arrow buttons on each process card. Green arrows create
    a NEW card; blue arrows link an EXISTING card. */
 .process-arrow-button {

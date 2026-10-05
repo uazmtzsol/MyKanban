@@ -8,9 +8,11 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
@@ -58,6 +60,10 @@ final class ProcessViewBuilder {
     private static final double H_GAP = 72;
     private static final double V_GAP = 28;
     private static final double PAD = 12;
+    /** Smallest view height: one whole card plus the canvas padding. */
+    private static final double MIN_VIEW_H = CARD_H + 2 * PAD + 4;
+    /** Height cap; beyond it the panel scrolls instead of growing. */
+    private static final double MAX_VIEW_H = 4 * (CARD_H + V_GAP);
 
     private ProcessViewBuilder() {
     }
@@ -65,6 +71,7 @@ final class ProcessViewBuilder {
     static Node buildAll(BoardService service, I18n i18n, BoardController controller) {
         VBox rows = new VBox(18);
         rows.setPadding(new Insets(14));
+        rows.setMaxWidth(Double.MAX_VALUE);
 
         List<Process> processes = service.processes();
         long unassigned = service.board().allCards().stream()
@@ -101,17 +108,43 @@ final class ProcessViewBuilder {
         Node body = layout.hasEdges()
                 ? graphCanvas(service, i18n, controller, layout)
                 : linearFlow(service, i18n, controller, ordered);
+        Card focused = controller.processFocusId() == null
+                ? null
+                : service.board().findCard(controller.processFocusId()).orElse(null);
+
+        // The panel spans the full window width and its height
+        // follows the content: never less than one whole card, and
+        // capped so a very large process scrolls inside the panel
+        // instead of stretching it.
+        double contentHeight = layout.hasEdges()
+                ? layout.height
+                : CARD_H + 16; // plain row: card + its padding
+        double viewHeight = Math.min(Math.max(contentHeight, MIN_VIEW_H), MAX_VIEW_H);
 
         ScrollPane scroller = new ScrollPane(body);
+        scroller.setFitToWidth(true); // always fill the panel width
         scroller.setFitToHeight(false);
-        scroller.setFitToWidth(false);
-        scroller.setPrefHeight(200);
+        scroller.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroller.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scroller.setPannable(true);
+        scroller.setMinHeight(MIN_VIEW_H);
+        scroller.setPrefHeight(viewHeight);
+        scroller.setMaxHeight(MAX_VIEW_H);
+        scroller.setMaxWidth(Double.MAX_VALUE);
         scroller.getStyleClass().add("process-row-scroll");
 
-        VBox row = new VBox(4, header, scroller);
-        row.getStyleClass().add("process-row");
-        return row;
+        // Relation inspector of the process: the links of the card
+        // that has keyboard focus in the processes view.
+        VBox inspector = new VBox(4);
+        inspector.getStyleClass().add("process-inspector");
+        inspector.setUserData(process.id());
+        inspector.setMaxWidth(Double.MAX_VALUE);
+        renderInspector(inspector, service, i18n, controller, focused);
+
+        VBox panel = new VBox(6, header, scroller, inspector);
+        panel.getStyleClass().add("process-panel");
+        panel.setMaxWidth(Double.MAX_VALUE);
+        return panel;
     }
 
     // ------------------------------------------------------------------
@@ -121,9 +154,13 @@ final class ProcessViewBuilder {
     /** One card's cell: top-left corner on the canvas. */
     private record Cell(double x, double y) { }
 
+    /** Keyboard neighbors of a card: where each arrow key moves to. */
+    private record Nav(CardId left, CardId right, CardId up, CardId down) { }
+
     /** The computed graph layout of one process's cards. */
     private record Layout(List<CardId> ordered,
                           Map<CardId, Integer> layer,
+                          Map<CardId, List<CardId>> predecessors,
                           Map<CardId, List<CardId>> successors,
                           Map<CardId, Cell> cells,
                           double width, double height,
@@ -213,7 +250,7 @@ final class ProcessViewBuilder {
         }
         double width = PAD * 2 + (deepestColumn + 1) * (CARD_W + H_GAP) - H_GAP;
         double height = PAD * 2 + (deepestSlot + 1) * (CARD_H + V_GAP) - V_GAP;
-        return new Layout(ordered, layer, successors, cells, width, height, edges);
+        return new Layout(ordered, layer, predecessors, successors, cells, width, height, edges);
     }
 
     /** Mean slot of a card's already-placed predecessors (crossing reduction). */
@@ -229,6 +266,74 @@ final class ProcessViewBuilder {
             }
         }
         return placed == 0 ? 0 : total / placed;
+    }
+
+    // ------------------------------------------------------------------
+    // Keyboard navigation: arrow-key neighbors of every card
+    // ------------------------------------------------------------------
+
+    /** Arrow-key neighbors of every card; the diagram reads left to right. */
+    private static Map<CardId, Nav> navigation(Layout layout) {
+        Map<CardId, Nav> nav = new HashMap<>();
+        for (CardId id : layout.ordered) {
+            nav.put(id, new Nav(
+                    deepestClosest(layout.predecessors.get(id), id, layout),
+                    closestForward(layout.successors.get(id), id, layout),
+                    columnNeighbor(layout, id, -1),
+                    columnNeighbor(layout, id, 1)));
+        }
+        return nav;
+    }
+
+    /**
+     * The predecessor to move left to: the one on the deepest column
+     * (its connector arrives closest to the card's own row), nearest
+     * in height as a tie-break.
+     */
+    private static CardId deepestClosest(List<CardId> candidates, CardId self,
+                                           Layout layout) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        Cell selfCell = layout.cells.get(self);
+        return candidates.stream()
+                .filter(layout.cells::containsKey)
+                .min(Comparator
+                        .comparingInt((CardId c) -> -layout.layer.get(c))
+                        .thenComparingDouble(
+                                c -> Math.abs(layout.cells.get(c).y() - selfCell.y()))
+                        .thenComparingInt(layout.ordered::indexOf))
+                .orElse(null);
+    }
+
+    /** The successor to move right to: the one of the next column, nearest in height. */
+    private static CardId closestForward(List<CardId> candidates, CardId self,
+                                           Layout layout) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        Cell selfCell = layout.cells.get(self);
+        int selfLayer = layout.layer.get(self);
+        return candidates.stream()
+                .filter(layout.cells::containsKey)
+                .min(Comparator
+                        .comparingInt(
+                                (CardId c) -> Math.abs(layout.layer.get(c) - (selfLayer + 1)))
+                        .thenComparingDouble(
+                                c -> Math.abs(layout.cells.get(c).y() - selfCell.y()))
+                        .thenComparingInt(layout.ordered::indexOf))
+                .orElse(null);
+    }
+
+    /** The card directly above (step -1) or below (step +1) in the same column. */
+    private static CardId columnNeighbor(Layout layout, CardId self, int step) {
+        int layer = layout.layer.get(self);
+        List<CardId> column = layout.ordered.stream()
+                .filter(id -> layout.layer.get(id) == layer)
+                .sorted(Comparator.comparingDouble(id -> layout.cells.get(id).y()))
+                .toList();
+        int target = column.indexOf(self) + step;
+        return target >= 0 && target < column.size() ? column.get(target) : null;
     }
 
     // ------------------------------------------------------------------
@@ -274,9 +379,10 @@ final class ProcessViewBuilder {
                     target.x, target.y + CARD_H / 2, false));
         }
 
+        Map<CardId, Nav> nav = navigation(layout);
         for (CardId id : layout.ordered) {
             service.board().findCard(id).ifPresent(card -> {
-                Node node = cardNode(i18n, controller, card);
+                Node node = cardNode(i18n, controller, card, nav.get(id));
                 Cell cell = layout.cells.get(id);
                 node.setLayoutX(cell.x);
                 node.setLayoutY(cell.y);
@@ -361,8 +467,14 @@ final class ProcessViewBuilder {
                 flow.getChildren().add(linearConnector(service, i18n, controller,
                         ordered.get(i - 1), ordered.get(i)));
             }
+            // Left/right walk the suggested order; a plain row has
+            // no columns, so up/down have nowhere to go.
+            Nav nav = new Nav(
+                    i > 0 ? ordered.get(i - 1) : null,
+                    i + 1 < ordered.size() ? ordered.get(i + 1) : null,
+                    null, null);
             service.board().findCard(ordered.get(i))
-                    .ifPresent(card -> flow.getChildren().add(cardNode(i18n, controller, card)));
+                    .ifPresent(card -> flow.getChildren().add(cardNode(i18n, controller, card, nav)));
         }
         if (ordered.isEmpty()) {
             Label none = new Label(i18n.text("process.view.no.cards"));
@@ -392,7 +504,8 @@ final class ProcessViewBuilder {
     // ------------------------------------------------------------------
 
     /** One process card: title with its four drawn arrow affordances. */
-    private static Node cardNode(I18n i18n, BoardController controller, Card card) {
+    private static Node cardNode(I18n i18n, BoardController controller,
+                                    Card card, Nav nav) {
         // Top pair: a click creates a NEW card and links it to this one.
         // Predecessor arrows point left, successor arrows point right:
         // the tip (and its "+") faces the side of the diagram where
@@ -437,6 +550,16 @@ final class ProcessViewBuilder {
         node.setPrefSize(CARD_W, CARD_H);
         // Keep a long wrapped title from spilling out of the fixed cell.
         node.setClip(new Rectangle(CARD_W, CARD_H));
+        // The card is a keyboard citizen: a click (or Tab) gives it the
+        // focus, and the arrow keys move through the diagram or edit its
+        // links (see installKeys).
+        node.setFocusTraversable(true);
+        node.setUserData(card.id());
+        node.setOnMouseClicked(event -> {
+            controller.onProcessFocus(card.id());
+            node.requestFocus();
+        });
+        installKeys(node, card, nav, controller);
         return node;
     }
 
@@ -494,6 +617,167 @@ final class ProcessViewBuilder {
             glyph.getChildren().addAll(plusVertical, plusHorizontal);
         }
         return glyph;
+    }
+
+    /**
+     * Keyboard control of one card's links. Plain arrows move the focus
+     * through the diagram (left = predecessor, right = successor, up and
+     * down inside a column); with modifiers the same arrows edit the
+     * links: Ctrl creates a NEW card on that side, Shift links an
+     * EXISTING card, and Ctrl+Shift removes the link of that side.
+     * Delete asks before removing every link of the card; Escape drops
+     * the focus.
+     */
+    private static void installKeys(Node node, Card card, Nav nav,
+                                        BoardController controller) {
+        node.setOnKeyPressed(event -> {
+            KeyCode code = event.getCode();
+            boolean left = code == KeyCode.LEFT;
+            boolean right = code == KeyCode.RIGHT;
+            if ((left || right) && (event.isControlDown() || event.isShiftDown())) {
+                if (event.isControlDown() && event.isShiftDown()) {
+                    // Remove the link on that side, if there is one.
+                    CardId neighbor = left ? nav.left() : nav.right();
+                    if (neighbor != null) {
+                        if (left) {
+                            controller.onUnlinkCards(neighbor, card.id());
+                        } else {
+                            controller.onUnlinkCards(card.id(), neighbor);
+                        }
+                    }
+                } else if (event.isControlDown()) {
+                    controller.onProcessAddNewRelation(card.id(), left);
+                } else {
+                    controller.onProcessLinkExisting(card.id(), left);
+                }
+                event.consume();
+            } else if (!event.isControlDown() && !event.isShiftDown()
+                    && !event.isAltDown() && !event.isMetaDown()) {
+                boolean consumed = true;
+                switch (code) {
+                    case LEFT -> moveFocus(controller, nav.left());
+                    case RIGHT -> moveFocus(controller, nav.right());
+                    case UP -> moveFocus(controller, nav.up());
+                    case DOWN -> moveFocus(controller, nav.down());
+                    case DELETE, BACK_SPACE -> controller.onProcessUnlinkAll(card.id());
+                    case ESCAPE -> controller.onClearProcessFocus();
+                    default -> consumed = false;
+                }
+                if (consumed) {
+                    event.consume();
+                }
+            }
+        });
+    }
+
+    private static void moveFocus(BoardController controller, CardId target) {
+        if (target != null) {
+            controller.focusProcessCard(target);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Relation inspector: the links of the focused card
+    // ------------------------------------------------------------------
+
+    /**
+     * Re-renders the relation inspector of one process row: the links
+     * of the card that has keyboard focus in the processes view, with
+     * per-link removal and the four add/link affordances. Empty (and
+     * collapsed) when this process holds no focused card.
+     */
+    static void renderInspector(VBox box, BoardService service, I18n i18n,
+                                    BoardController controller, Card focused) {
+        box.getChildren().clear();
+        if (focused == null) {
+            return;
+        }
+        CardId anchor = focused.id();
+
+        Rectangle swatch = new Rectangle(10, 10, Color.web(focused.color().hex()));
+        swatch.setArcWidth(3);
+        swatch.setArcHeight(3);
+        Label title = new Label(focused.title());
+        title.getStyleClass().add("process-inspector-title");
+        title.setOnMouseClicked(event -> controller.onOpenCardDetail(anchor));
+        Tooltip.install(title, new Tooltip(i18n.text("process.card.open")));
+        box.getChildren().add(new HBox(6, swatch, title));
+
+        HBox lists = new HBox(14);
+        lists.getChildren().addAll(
+                relationList(service, i18n, controller, anchor, true),
+                relationList(service, i18n, controller, anchor, false));
+        box.getChildren().add(lists);
+
+        // The same four affordances the card carries, as buttons.
+        HBox actions = new HBox(4,
+                drawnArrowButton(true, true, i18n.text("process.arrow.new.predecessor"),
+                        () -> controller.onProcessAddNewRelation(anchor, true)),
+                drawnArrowButton(false, true, i18n.text("process.arrow.new.successor"),
+                        () -> controller.onProcessAddNewRelation(anchor, false)),
+                drawnArrowButton(true, false, i18n.text("process.arrow.link.predecessor"),
+                        () -> controller.onProcessLinkExisting(anchor, true)),
+                drawnArrowButton(false, false, i18n.text("process.arrow.link.successor"),
+                        () -> controller.onProcessLinkExisting(anchor, false)));
+        actions.setAlignment(Pos.CENTER_LEFT);
+        box.getChildren().add(actions);
+
+        Label hint = new Label(i18n.text("process.inspector.hint"));
+        hint.getStyleClass().add("detail-caption");
+        hint.setWrapText(true);
+        box.getChildren().add(hint);
+    }
+
+    /** One column of the inspector: the links on one side of the anchor. */
+    private static Node relationList(BoardService service, I18n i18n,
+                                       BoardController controller, CardId anchor,
+                                       boolean predecessors) {
+        List<CardId> related = predecessors
+                ? new ArrayList<>(service.board().incomingPredecessorsOf(anchor))
+                : new ArrayList<>(service.board().outgoingSuccessorsOf(anchor));
+        VBox list = new VBox(2);
+        list.getStyleClass().add("process-inspector-list");
+        Label caption = new Label(i18n.text(predecessors
+                ? "process.inspector.predecessors" : "process.inspector.successors"));
+        caption.getStyleClass().add("process-inspector-caption");
+        list.getChildren().add(caption);
+        if (related.isEmpty()) {
+            Label none = new Label(i18n.text("process.inspector.none"));
+            none.getStyleClass().add("detail-caption");
+            list.getChildren().add(none);
+            return list;
+        }
+        for (CardId other : related) {
+            list.getChildren().add(
+                    relationRow(service, i18n, controller, anchor, other, predecessors));
+        }
+        return list;
+    }
+
+    /** One related card: click to focus it, button to unlink it. */
+    private static Node relationRow(BoardService service, I18n i18n,
+                                      BoardController controller, CardId anchor,
+                                      CardId other, boolean predecessors) {
+        Label label = new Label(service.board().titleOf(other));
+        label.getStyleClass().add("process-inspector-relation");
+        label.setOnMouseClicked(event -> controller.focusProcessCard(other));
+        Tooltip.install(label, new Tooltip(i18n.text("process.inspector.focus")));
+
+        Button remove = new Button("\u00d7");
+        remove.getStyleClass().add("process-inspector-remove");
+        remove.setFocusTraversable(false);
+        remove.setTooltip(new Tooltip(i18n.text("process.inspector.remove")));
+        remove.setOnMouseClicked(event -> {
+            if (predecessors) {
+                controller.onUnlinkCards(other, anchor);
+            } else {
+                controller.onUnlinkCards(anchor, other);
+            }
+        });
+
+        HBox row = new HBox(4, label, remove);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
     }
 
     private static Node buildUnassignedNote(I18n i18n, long count) {
