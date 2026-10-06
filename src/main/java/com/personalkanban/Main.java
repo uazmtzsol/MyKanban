@@ -39,9 +39,8 @@ public class Main extends Application {
             stage.getIcons().addAll(AppIcons.all());
             stage.setScene(scene);
             // Session 5 (user request): closing the window persists cleanly —
-            // the connection close folds the WAL into kanban.db and removes
-            // the -wal/-shm leftovers. Every mutation was already committed
-            // instantly; this is the final tidy-up, never a data save.
+            // every mutation is committed instantly (rollback journal mode),
+            // and the connection close is the final tidy-up, never a data save.
             stage.setOnCloseRequest(event -> {
                 controller.shutdown();
                 Platform.exit();

@@ -83,6 +83,10 @@ public final class BoardController {
     private Label boardNameLabel;
     private HBox toolbarReference;
 
+    // Non-modal sync feedback (design §4.1: a discreet notice, not a modal
+    // interruption). Rebuilt with the rest of the scene graph.
+    private Label syncNotice;
+
     // Label filter state; survives language-driven rebuilds of the controls.
     private String activeFilterLabels = "";
     private String activeFilterMode; // null (= show each, "AND" or "OR")
@@ -252,7 +256,13 @@ public final class BoardController {
         VBox.setVgrow(boardScroller, Priority.ALWAYS);
 
         buildSelectionBar();
-        root.getChildren().setAll(menuBar, toolbar, selectionBar, filterBar, boardScroller);
+        syncNotice = new Label();
+        syncNotice.getStyleClass().add("sync-notice");
+        syncNotice.setVisible(false);
+        syncNotice.setManaged(false);
+        syncNotice.setWrapText(true);
+        syncNotice.setPadding(new Insets(4, 12, 4, 12));
+        root.getChildren().setAll(menuBar, syncNotice, toolbar, selectionBar, filterBar, boardScroller);
         updateBoardIdentity();
         refresh();
     }
@@ -281,8 +291,8 @@ public final class BoardController {
         Button exportPdf = toolButton("\uD83D\uDCC4", "toolbar.export.pdf");
         exportPdf.setOnAction(e -> onExportBoardPdf());
 
-        // "Guardar" (session 5, user request): folds the WAL into the file
-        // right now; everything was already committed, this is reassurance.
+        // "Guardar" (session 5, user request): every mutation already
+        // commits instantly; this confirms the state to the user.
         Button save = toolButton("\uD83D\uDCBE", "toolbar.save");
         save.setOnAction(e -> onSaveNow());
 
@@ -705,9 +715,20 @@ public final class BoardController {
         MenuItem currentFile = new MenuItem(i18n.text("db.current") + " "
                 + context.databasePath());
         currentFile.setDisable(true);
+        // Online sync: status line (so the user sees at a glance
+        // whether this database syncs) and the configuration entry,
+        // which holds everything sync-related (URL, key, test,
+        // remote catalog).
+        MenuItem syncStatus = new MenuItem(
+                i18n.text("sync.menu.status") + " " + syncStatusText());
+        syncStatus.setDisable(true);
         databaseMenu.getItems().setAll(
                 itemOf("file.save", this::onSaveNow),
                 itemOf("prefs.title", this::onShowPreferences),
+                new SeparatorMenuItem(),
+                syncStatus,
+                itemOf("sync.now", this::onSyncNow),
+                itemOf("sync.config.title", this::onShowSyncConfig),
                 new SeparatorMenuItem(),
                 itemOf("db.new", this::onNewDatabase),
                 itemOf("db.open", this::onOpenDatabase),
@@ -1115,28 +1136,119 @@ public final class BoardController {
     }
 
     /**
-     * Persistence hygiene (user request): every mutation already commits
-     * instantly; this performs the final WAL checkpoint and closes the
-     * database so the -wal/-shm files are folded away and removed. Also
-     * wired to the window close (X) via {@code Main}.
+     * Clean shutdown (user request): every mutation already commits
+     * instantly (rollback journal mode), so closing the database is
+     * all the persistence there is. Also wired to the window close
+     * (X) via {@code Main}.
      */
     public void shutdown() {
-        try {
-            context.checkpointQuietly();
-        } catch (RuntimeException ignored) {
-            // Best-effort: closing below is the real guarantee.
-        }
         context.close();
     }
 
-    /** Ctrl+S / menu "Guardar": folds the WAL into the file right now. */
+    /** Ctrl+S / menu "Guardar": confirms the state; changes were already saved. */
     public void onSaveNow() {
-        boolean folded = context.saveCheckpoint();
-        if (folded) {
-            dialogs.info(i18n.text("file.save.confirm"));
-        } else {
-            dialogs.info(i18n.text("file.save.busy"));
+        dialogs.info(i18n.text("file.save.confirm"));
+    }
+
+    /** Whether this database syncs, and with which server. */
+    private String syncStatusText() {
+        return context.syncServerUrl().orElseGet(() -> i18n.text("sync.off"));
+    }
+
+    /**
+     * Reconciles the active board with the server on a background thread, so
+     * a slow server never freezes the UI. The outcome is reported as a
+     * discreet notice; conflicts additionally point at the preserved copy.
+     */
+    private void onSyncNow() {
+        java.util.Optional<com.personalkanban.application.sync.SyncService> syncService =
+                context.syncService();
+        if (syncService.isEmpty()) {
+            dialogs.info(i18n.text("sync.test.noconfig"));
+            return;
         }
+        showSyncNotice(i18n.text("sync.running"), 0);
+        javafx.concurrent.Task<com.personalkanban.application.sync.SyncReport> task =
+                new javafx.concurrent.Task<>() {
+                    @Override
+                    protected com.personalkanban.application.sync.SyncReport call() {
+                        return syncService.get().syncActiveBoard();
+                    }
+                };
+        task.setOnSucceeded(event -> {
+            refresh();
+            rebuildDatabaseMenu();
+            com.personalkanban.application.sync.SyncReport report = task.getValue();
+            showSyncNotice(syncNoticeText(report), report.hasConflicts() ? 12 : 5);
+        });
+        task.setOnFailed(event ->
+                showSyncNotice(syncFailureText(task.getException()), 12));
+        new Thread(task, "sync-run").start();
+    }
+
+    /** Localized, one-line summary of a finished sync. */
+    private String syncNoticeText(com.personalkanban.application.sync.SyncReport report) {
+        String base = i18n.text(switch (report.action()) {
+            case PUSHED_NEW -> "sync.done.pushed_new";
+            case PUSHED_LOCAL -> "sync.done.pushed_local";
+            case FAST_FORWARD -> "sync.done.pull";
+            case MERGED -> "sync.done.merged";
+        });
+        if (!report.hasConflicts()) {
+            return base;
+        }
+        String copy = report.conflictCopyReference()
+                .map(path -> " " + i18n.text("sync.conflict.copy", path))
+                .orElse("");
+        return base + " " + i18n.text("sync.conflict.notice", report.conflicts().size()) + copy;
+    }
+
+    /** Maps a sync failure to the localized, actionable message. */
+    private String syncFailureText(Throwable failure) {
+        if (failure instanceof com.personalkanban.application.sync.SyncException sync) {
+            return switch (sync.kind()) {
+                case NETWORK -> i18n.text("sync.error.network", failure.getMessage());
+                case UNAUTHORIZED -> i18n.text("sync.error.unauthorized");
+                case BAD_REQUEST -> i18n.text("sync.error.bad_request");
+                case TOO_LARGE -> i18n.text("sync.error.too_large");
+                case SERVER -> i18n.text("sync.error.server", sync.statusCode());
+            };
+        }
+        String message = failure == null || failure.getMessage() == null
+                ? String.valueOf(failure)
+                : failure.getMessage();
+        return i18n.text("sync.error.network", message);
+    }
+
+    /**
+     * Shows the non-modal sync notice; {@code seconds <= 0} keeps it visible
+     * until the next sync (used while a sync is running).
+     */
+    private void showSyncNotice(String message, int seconds) {
+        if (syncNotice == null) {
+            return;
+        }
+        syncNotice.setText(message);
+        syncNotice.setVisible(true);
+        syncNotice.setManaged(true);
+        if (seconds > 0) {
+            javafx.animation.PauseTransition hide =
+                    new javafx.animation.PauseTransition(javafx.util.Duration.seconds(seconds));
+            hide.setOnFinished(event -> {
+                syncNotice.setVisible(false);
+                syncNotice.setManaged(false);
+            });
+            hide.play();
+        }
+    }
+
+    /** Online-sync configuration: server URL, API key, connection test, catalog. */
+    private void onShowSyncConfig() {
+        new SyncConfigDialog(i18n, context).show()
+                .ifPresent(settings -> {
+                    context.configureSync(settings.url(), settings.key());
+                    rebuildDatabaseMenu(); // keep the status line current
+                });
     }
 
     /** Preferences: background image, priority and label colors. */

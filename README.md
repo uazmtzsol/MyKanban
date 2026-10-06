@@ -31,7 +31,7 @@ leaves your machine.
 - Dark mode toggle (persisted)
 - 4 languages: EN, FR, ES, DE (persisted, applied instantly)
 - **Undo / redo** (`Ctrl+Z` / `Ctrl+Shift+Z`) — persistent, survives restarts
-- Persistence: SQLite (WAL, foreign keys) with versioned schema migrations
+- Persistence: SQLite (rollback journal, foreign keys) with versioned schema migrations
 
 ## Requirements
 
@@ -101,7 +101,7 @@ reopens its last database — and since one database file plus its `history/`
 folder is the whole unit, moving or syncing that folder moves everything.
 
 > Tip for cloud use: close the app before switching computers so SQLite
-> finishes writing; the WAL journal checkpoints on close.
+> finishes writing; a clean close leaves a single, complete database file.
 
 Existing single-board databases from earlier versions are migrated
 automatically (schema versions V1→V4); your columns and cards become the

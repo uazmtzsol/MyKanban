@@ -1,10 +1,13 @@
 package com.personalkanban;
 
 import com.personalkanban.application.BoardService;
+import com.personalkanban.application.port.ConflictCopyStore;
 import com.personalkanban.application.port.SettingsStore;
 import com.personalkanban.application.port.SyncRepository;
+import com.personalkanban.application.sync.SyncService;
 import com.personalkanban.infrastructure.history.JsonUndoHistory;
 import com.personalkanban.infrastructure.sync.HttpSyncRepository;
+import com.personalkanban.infrastructure.sync.JsonConflictCopyStore;
 import com.personalkanban.infrastructure.sqlite.Database;
 import com.personalkanban.infrastructure.sqlite.SchemaMigrator;
 import com.personalkanban.infrastructure.sqlite.SqliteBoardRepository;
@@ -50,15 +53,8 @@ public final class AppContext implements AutoCloseable {
     private SettingsStore settings;
     private ThemeManager themeManager;
     private java.util.Optional<SyncRepository> syncRepository = java.util.Optional.empty();
+    private ConflictCopyStore conflictCopyStore;
     private Path databasePath;
-
-    /**
-     * Periodic checkpoint timer (user request: persist to the main file
-     * every N minutes). One daemon scheduler per context, ticking against
-     * whichever database is CURRENTLY open — safe across database switches.
-     * Daemon on purpose: a forgotten scheduler must never block JVM exit.
-     */
-    private java.util.concurrent.ScheduledExecutorService checkpointScheduler;
 
     private AppContext(Path configFile) {
         this.configFile = configFile;
@@ -185,6 +181,8 @@ public final class AppContext implements AutoCloseable {
                     .map(ThemeManager.Theme::valueOf)
                     .orElse(ThemeManager.Theme.LIGHT));
             java.util.Optional<SyncRepository> newSync = wireSyncRepository(newSettings);
+            ConflictCopyStore newCopyStore = new JsonConflictCopyStore(
+                    dbFile.getParent().resolve("conflicts"));
 
             // Commit point: everything built; now swap the live wiring.
             if (database != null) {
@@ -195,10 +193,10 @@ public final class AppContext implements AutoCloseable {
             settings = newSettings;
             themeManager = newTheme;
             syncRepository = newSync;
+            conflictCopyStore = newCopyStore;
             databasePath = dbFile;
             rememberRecent(dbFile);
             writeConfiguredDatabase(dbFile);
-            startPeriodicCheckpoint();
         } catch (RuntimeException failure) {
             try {
                 newDatabase.close();
@@ -304,6 +302,20 @@ public final class AppContext implements AutoCloseable {
         return syncRepository;
     }
 
+    /**
+     * A sync orchestrator wired to the current database, or empty when sync
+     * is not configured. Built on demand so it always reflects the live
+     * server URL/key (which the user can change at runtime).
+     */
+    public java.util.Optional<SyncService> syncService() {
+        if (syncRepository.isEmpty() || boardService == null
+                || settings == null || conflictCopyStore == null) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(new SyncService(
+                syncRepository.get(), boardService, settings, conflictCopyStore));
+    }
+
     /** The configured sync server URL, or empty when sync is off. */
     public java.util.Optional<String> syncServerUrl() {
         return syncSetting(SETTING_SYNC_URL);
@@ -337,8 +349,20 @@ public final class AppContext implements AutoCloseable {
 
     /** Builds the adapter from settings; sync stays off on bad input. */
     private java.util.Optional<SyncRepository> wireSyncRepository(SettingsStore store) {
-        String url = store.get(SETTING_SYNC_URL).orElse("").strip();
-        String key = store.get(SETTING_SYNC_KEY).orElse("").strip();
+        return syncRepositoryFor(store.get(SETTING_SYNC_URL).orElse(""),
+                store.get(SETTING_SYNC_KEY).orElse(""));
+    }
+
+    /**
+     * Builds an adapter for the given URL and API key without
+     * touching the stored settings — used by the sync configuration
+     * dialog to probe the values before saving them. Empty when
+     * either value is blank or the URL is malformed.
+     */
+    public java.util.Optional<SyncRepository> syncRepositoryFor(String serverUrl,
+                                                              String apiKey) {
+        String url = serverUrl == null ? "" : serverUrl.strip();
+        String key = apiKey == null ? "" : apiKey.strip();
         if (url.isEmpty() || key.isEmpty()) {
             return java.util.Optional.empty();
         }
@@ -365,46 +389,13 @@ public final class AppContext implements AutoCloseable {
     }
 
     // ------------------------------------------------------------------
-    // Persistence hygiene: periodic WAL checkpoint + clean shutdown
+    // Clean shutdown
     // ------------------------------------------------------------------
-
-    /** How often the WAL is folded into the main file (user asked ~5 min). */
-    private static final int CHECKPOINT_PERIOD_MINUTES = 5;
-
-    private void startPeriodicCheckpoint() {
-        if (checkpointScheduler == null) {
-            checkpointScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(runnable -> {
-                Thread thread = new Thread(runnable, "pk-checkpoint");
-                thread.setDaemon(true);
-                return thread;
-            });
-            checkpointScheduler.scheduleWithFixedDelay(
-                    this::checkpointQuietly,
-                    CHECKPOINT_PERIOD_MINUTES, CHECKPOINT_PERIOD_MINUTES,
-                    java.util.concurrent.TimeUnit.MINUTES);
-        }
-    }
-
-    /** Checkpoint whatever database is open; never throws. */
-    public void checkpointQuietly() {
-        if (database != null) {
-            database.checkpoint();
-        }
-    }
-
-    /** Ctrl+S / "Guardar": checkpoint that reports success to the UI. */
-    public boolean saveCheckpoint() {
-        return database != null && database.checkpoint();
-    }
 
     @Override
     public void close() {
-        if (checkpointScheduler != null) {
-            checkpointScheduler.shutdownNow();
-            checkpointScheduler = null;
-        }
-        // A clean connection close is itself the final checkpoint: SQLite
-        // folds the WAL into the file and deletes the -wal / -shm leftovers.
+        // Every mutation is already committed (rollback journal mode),
+        // so closing the connection is all the persistence there is.
         if (database != null) {
             database.close();
         }

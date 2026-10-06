@@ -31,6 +31,10 @@ MySQL donde puede subir scripts PHP) en vez de los BaaS de §5, con
   `java.net.http.HttpClient` del JDK (cero dependencias nuevas) +
   `BoardJsonMapper`; el payload es el mismo JSON del undo y del
   export/import. Traduce 401/400/413/409/5xx a excepciones tipadas.
+  Sigue redirecciones (`Redirect.NORMAL`) y `normalize()` conserva
+  un `/` final cuando la URL tiene ruta: la API vive en un directorio
+  (`index.php`), y sin ese slash Apache responde 301 — redirección
+  que el JDK convertiría en GET y rompería los push.
 - **Wiring** en `AppContext`: settings `sync.server.url` y
   `sync.api.key` por base de datos; `configureSync(url, key)` y
   `syncRepository()`. Sin URL o sin clave → sync desactivado y la app
@@ -38,7 +42,7 @@ MySQL donde puede subir scripts PHP) en vez de los BaaS de §5, con
 - **Tests:** `HttpSyncRepositoryTest` (9, con un servidor HTTP del JDK
   que imita el contrato de la API) y `PhpSyncApiEndpointTest` (e2e
   real contra PHP + MariaDB; se autosalta si el servidor no está).
-  Suite: **203/203 OK**.
+  Suite: **204/204 OK**.
 
 Camino a deltas (fase siguiente): migración V10 con `updated_at`,
 lápidas y token de sync; outbox por entidad (§3.1) y cursores
@@ -247,8 +251,10 @@ complica la reconciliación por campo y ata al proveedor.
 - Implementar el ciclo pull → merge → push con conflictos (§3.3, §4).
 - Botón **Sincronizar** + estado (última sync, pendientes, errores) en la UI.
 - Reusar `BoardJsonMapper` para el payload; `Board.restore` para aplicar.
-- Pendiente también: UI para pedir URL/clave (diálogo de preferencias)
-  y resolver el 409 (§4.1: copia de conflicto).
+- Hecho: UI para URL/clave — `SyncConfigDialog` (URL, clave,
+  prueba de conexión y catálogo remoto), abierto desde el menú
+  de base de datos junto a la línea de estado de sync.
+  Pendiente: resolver el 409 (§4.1: copia de conflicto).
 
 ### Fase 4 — Robustez
 - Reintentos con backoff, sync en segundo plano, detección de offline.
@@ -276,7 +282,8 @@ complica la reconciliación por campo y ata al proveedor.
 ## 8. Qué NO hacer
 
 - No sincronizar el `kanban.db` completo por archivo compartido (Drive/Dropbox
-  sobre el `.db`): con WAL y dos procesos se corrompe. Solo el archivo JSON de
+  sobre el `.db`): dos procesos escribiendo a la vez corrompen la base viva
+  (aunque el diario sea de rollback y no WAL). Solo el archivo JSON de
   intercambio, nunca la base viva.
 - No subir snapshots completos como única estrategia: pierde cambios
   concurrentes y no borra.

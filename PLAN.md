@@ -77,7 +77,8 @@ ordenamiento, sección avanzada plegable, botón de nota, soltar ARRIBA).
    con otro lector SQLite lo confirma) → cerrar la app → en la carpeta de
    datos SOLO queda `kanban.db` (sin `-wal`/`-shm`) y al reabrir todo
    está. Ctrl+S o 💾 en cualquier momento dan el mensaje "Todo está
-   guardado"; cada 5 min el diario se vacía solo.
+   guardado" — los cambios ya estaban guardados: cada mutación confirma
+   al instante en el diario de rollback.
 
 ---
 
@@ -314,3 +315,56 @@ Migraciones: crear `V<n>__desc.sql` **y** registrar en
 - **Pendiente:** notas por flecha en la vista de procesos (hoy la flecha
   enlaza/desenlaza), implementación real del sync, y prueba manual de la
   vista de procesos y del cronómetro.
+
+## Sesión 7 — WAL eliminado (pedido por el usuario)
+
+- **Diario de rollback (DELETE) en vez de WAL:** el usuario pidió quitar
+  el WAL — pocos cambios y datos pequeños, el fsync por commit es
+  aceptable. `Database.configure()` ahora usa `PRAGMA journal_mode =
+  DELETE`; ya no se crean archivos `kanban.db-wal`/`-shm`.
+- **Eliminado:** `Database.checkpoint()`, el scheduler de checkpoint
+  cada 5 min de `AppContext`, `checkpointQuietly()`/`saveCheckpoint()`
+  y el apagado del scheduler en `close()`. `shutdown()` ahora solo
+  cierra el contexto; Ctrl+S/💾 muestra el mensaje de confirmación
+  (los cambios ya estaban guardados al instante).
+- **Tests:** `CheckpointTest` reemplazado por `DurabilityTest` (2):
+  sin sidecars `-wal`/`-shm` con la conexión abierta ni tras cerrar,
+  y BD reabrible tras cierre limpio.
+- **Benchmark de latitud (`WriteLatencyBenchmarkTest`):** guardar un
+  tablero realista (4 columnas × 12 tarjetas con notas, etiquetas,
+  checklist, enlace y entrada de tiempo) cuesta **p50 ≈ 5-12 ms,
+  p95 ≈ 7-26 ms, máx ≈ 76 ms por commit** (aislado vs. suite
+  completa en disco ocupado). Es el fsync por transacción:
+  imperceptible para un humano (umbral ≈ 100 ms) con este
+  volumen de datos, como preveía el usuario.
+
+## Sesión 8 — Diálogo de configuración de la API + despliegue en XAMPP
+
+- **Menú (Base de datos):** línea de estado de sync (URL del
+  servidor o «sync off», desactivada) + entrada «Configuración
+  de la sincronización» (`sync.config.title`) que abre el
+  `SyncConfigDialog`.
+- **`SyncConfigDialog`** — todo lo configurable en un sitio:
+  URL del servidor, clave de API, botón **Probar conexión**
+  y catálogo de tableros remotos (nombre, versión, actualizado,
+  id). Las sondas HTTP corren en un hilo de fondo; OK guarda
+  vía `AppContext.configureSync` (re-wira el repositorio al
+  vuelo); «Limpiar» desactiva el sync. Nuevo seam de test
+  `AppContext.syncRepositoryFor(url, key)`.
+- **Despliegue local:** API copiada a `C:/xampp/htdocs/sync/`
+  (Apache + MariaDB `personalkanban`); `config.php` con una
+  clave de desarrollo generada — el `.bat` NO la sobreescribe.
+- **`deploy-sync-api.bat`** (raíz, CRLF): copia `index.php`,
+  `config.sample.php` y `setup.sql` a `C:\xampp\htdocs\sync\`,
+  acepta una carpeta destino como argumento y crea `config.php`
+  desde el sample solo si no existe.
+- **Fix del cliente (`HttpSyncRepository`):** `normalize()`
+  conserva un `/` final cuando la URL tiene ruta — sin él,
+  Apache 301-redirige `/sync` a `/sync/` y el JDK no seguía la
+  redirección (el E2E recibía HTML en vez de JSON); ahora el
+  cliente también sigue redirecciones (`Redirect.NORMAL`).
+  E2E contra Apache verificado: catálogo (13 boards), fetch,
+  push desfasado → 409 con el remoto, push forzado → Ok,
+  tablero nuevo → Ok.
+- **Tests:** 204/204 verdes. Docs: `docs/sync-design.md`
+  (adaptador, UI hecha, suite) y este PLAN.

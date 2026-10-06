@@ -52,11 +52,11 @@ public final class HttpSyncRepository implements SyncRepository {
     private final String apiKey;
     private final ObjectMapper mapper;
 
-    public HttpSyncRepository(String baseUrl, String apiKey) {
-        this(HttpClient.newBuilder()
+    public HttpSyncRepository(String baseUrl, String apiKey) {        this(HttpClient.newBuilder()
                 .connectTimeout(REQUEST_TIMEOUT)
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .build(),
-                baseUrl, apiKey, BoardJsonMapper.create());
+            baseUrl, apiKey, BoardJsonMapper.create());
     }
 
     /** Test seam: inject the client and the JSON mapper. */
@@ -197,7 +197,13 @@ public final class HttpSyncRepository implements SyncRepository {
         while (trimmed.endsWith("/")) {
             trimmed = trimmed.substring(0, trimmed.length() - 1);
         }
-        return URI.create(trimmed);
+        // The API lives in a directory served by index.php: keep exactly one
+        // trailing slash so requests never trigger a directory redirect (a 301
+        // the JDK client would answer by turning POSTs into GETs).
+        if (URI.create(trimmed).getPath().isEmpty()) {
+            return URI.create(trimmed);
+        }
+        return URI.create(trimmed + "/");
     }
 
     // ------------------------------------------------------------------

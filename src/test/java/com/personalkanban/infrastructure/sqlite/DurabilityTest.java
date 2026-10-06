@@ -11,43 +11,44 @@ import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Persistence hygiene (user request, session 5): the WAL folds into the
- * main file on checkpoint, and a clean connection close removes the
- * -wal/-shm leftovers. Every mutation is already committed instantly —
- * these tests prove the file-level tidy-up the user sees.
+ * Persistence hygiene (user request, session 5; WAL later removed by
+ * request): the database runs in the default rollback journal mode,
+ * so every mutation commits instantly to the single file and no
+ * -wal/-shm sidecars are ever created. A clean close leaves a
+ * complete, reopenable database behind.
  */
-class CheckpointTest {
+class DurabilityTest {
 
     @TempDir
     Path tempDir;
 
     @Test
-    void checkpointShrinksWalAfterMutations() {
+    void mutationsCommitWithoutWalSidecarFiles() {
         Path dbFile = tempDir.resolve("kanban.db");
         Database database = new Database(dbFile);
         new SchemaMigrator(database).migrate();
         var repository = new SqliteBoardRepository(database);
-        var boardId = repository.createBoard("Checkpoint").id();
+        var boardId = repository.createBoard("Durability").id();
         var column = new com.personalkanban.domain.board.ColumnSnapshot(
                 new com.personalkanban.domain.board.ColumnId("c1"),
                 "To Do", "", BoardColor.DEFAULT, WipLimit.unlimited(),
                 java.time.Instant.now(), java.util.List.of());
         repository.save(boardId, new BoardMemento(java.util.List.of(column)));
 
-        Path wal = tempDir.resolve("kanban.db-wal");
-        assertThat(wal).exists(); // WAL mode active while the connection is open
+        // Rollback journal mode: commits land in kanban.db directly and
+        // no sidecar files exist while the connection is open.
+        assertThat(tempDir.resolve("kanban.db-wal")).doesNotExist();
+        assertThat(tempDir.resolve("kanban.db-shm")).doesNotExist();
 
-        assertThat(database.checkpoint()).isTrue();
-        // After TRUNCATE the journal is folded in and the file reset to 0 bytes.
-        try {
-            assertThat(Files_size(wal)).isZero();
-        } finally {
-            database.close();
-        }
+        database.close();
+
+        // Still no leftovers: the data folder holds only kanban.db.
+        assertThat(tempDir.resolve("kanban.db-wal")).doesNotExist();
+        assertThat(tempDir.resolve("kanban.db-shm")).doesNotExist();
     }
 
     @Test
-    void cleanCloseRemovesWalAndShmLeftovers() {
+    void cleanCloseLeavesCompleteReopenableDatabase() {
         Path dbFile = tempDir.resolve("kanban.db");
         Database database = new Database(dbFile);
         new SchemaMigrator(database).migrate();
@@ -55,25 +56,13 @@ class CheckpointTest {
 
         database.close();
 
-        // The clean close checkpoints and deletes both side files: the data
-        // folder ends up holding only kanban.db (+ config/history files).
         assertThat(tempDir.resolve("kanban.db")).exists();
-        assertThat(tempDir.resolve("kanban.db-wal")).doesNotExist();
-        assertThat(tempDir.resolve("kanban.db-shm")).doesNotExist();
 
-        // And the folded file is a complete, openable database again.
+        // The single file is a complete, openable database again.
         Database reopened = new Database(dbFile);
         var repository = new SqliteBoardRepository(reopened);
         assertThat(repository.listBoards())
                 .anyMatch(descriptor -> descriptor.name().equals("Clean"));
         reopened.close();
-    }
-
-    private long Files_size(Path path) {
-        try {
-            return java.nio.file.Files.size(path);
-        } catch (java.io.IOException e) {
-            return -1;
-        }
     }
 }

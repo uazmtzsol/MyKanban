@@ -68,7 +68,7 @@ la causa raíz visible (`Dialogs.describeFailure`).
 ### infrastructure/sqlite/
 | Clase | Rol | Notas |
 |---|---|---|
-| `Database` | Dueño de LA única conexión JDBC. WAL + FK on. `inMemory()` para tests | driver xerial cargado en static-init |
+| `Database` | Dueño de LA única conexión JDBC. Diario de rollback (DELETE) + FK on. `inMemory()` para tests | driver xerial cargado en static-init |
 | `SchemaMigrator` | Migraciones versionadas `V<n>__desc.sql` de classpath, **lista explícita** en `REGISTERED_SCRIPTS` (añadir ahí las nuevas) | tabla `schema_version` |
 | `SqliteBoardRepository` | Implementa el puerto. `save()` = transacción: `deleteBoardContents` (borra tarjetas+columnas del tablero) + reinserta TODO (patrón **replaceAll**) | ⚠️ ver "escalabilidad" en decisiones |
 | `SqliteSettingsStore` | `app_setting` key/value | Preferencias no-dominio viven aquí: `ui.language`, `ui.theme`, `board.last`, `ui.columnstate.<boardId>` (columnas colapsadas, ids con `;`) |

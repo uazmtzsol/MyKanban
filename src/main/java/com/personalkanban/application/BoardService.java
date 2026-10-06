@@ -719,6 +719,38 @@ public final class BoardService {
     }
 
     // ------------------------------------------------------------------
+    // Online sync integration (design §4/§7)
+    // ------------------------------------------------------------------
+
+    /** The current snapshot of the active board (what a sync would push). */
+    public BoardMemento snapshotOf() {
+        return current;
+    }
+
+    /** Display name of the active board, or "board" when it is not catalogued. */
+    public String activeBoardName() {
+        return catalog.stream()
+                .filter(descriptor -> descriptor.id().equals(activeBoard.id()))
+                .findFirst()
+                .map(BoardDescriptor::name)
+                .orElse("board");
+    }
+
+    /**
+     * Applies a snapshot produced by a merge and persists it WITHOUT touching
+     * the undo history: sync is a background reconciliation, so it must not
+     * pollute the local undo/redo stack (design §7). The redo stack is left
+     * intact as well — sync never undoes a user action.
+     */
+    public void applySynced(BoardMemento memento) {
+        Objects.requireNonNull(memento);
+        activeBoard.restore(memento);
+        current = memento;
+        repository.save(activeBoard.id(), current);
+        activeBoard.drainEvents();
+    }
+
+    // ------------------------------------------------------------------
     // JSON export / import
     // ------------------------------------------------------------------
 
