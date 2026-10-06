@@ -23,6 +23,8 @@ volver a explorar todo el código.
 | [`project-overview.md`](project-overview.md) | Qué es la app, stack, cómo compilar/correr/probar, estructura de carpetas, launchers portables, datos y configuración | Al inicio de cualquier sesión |
 | [`architecture.md`](architecture.md) | Arquitectura hexagonal capa por capa, mapa de clases clave con rutas, patrones, reglas de ArchUnit, esquema SQLite completo, flujo undo/redo, sistemas ya implementados (drag&drop, i18n, temas, markdown, colores) | Antes de tocar código: para saber DÓNDE va cada cambio |
 | [`roadmap-and-decisions.md`](roadmap-and-decisions.md) | Requisitos del usuario pendientes, hallazgos verificados (incluida la causa raíz del bug de guardado), decisiones de diseño con su porqué, preferencias del usuario, convenciones de trabajo en sesiones | Siempre: al planificar y antes de implementar |
+| [`manual-usuario.md`](manual-usuario.md) | Manual de usuario completo: qué es, cómo ejecutarla, anatomía de la ventana, tableros/columnas/tarjetas, detalle, lote, filtros, procesos, precedencias, tiempo, apariencia, atajos, datos/portabilidad, export/import, sync online y solución de problemas | Para entender la app como usuario o al documentar cambios visibles |
+| [`mejoras-propuestas.md`](mejoras-propuestas.md) | Mejoras propuestas (Sesión 9), priorizadas y **sin implementar**, con checkboxes para revisarlas durante las pruebas | Al probar el programa, para decidir el siguiente hito |
 | [`PLAN.md`](../PLAN.md) — *(raíz del repo)* | Roadmap por fases P0–P3 con estado de avance, checklist de pruebas manuales por fase | Al inicio de cada sesión para saber en qué fase vamos |
 
 ## Convenciones de esta documentación

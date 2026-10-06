@@ -666,6 +666,20 @@ public final class BoardController {
     }
 
     /** Builds the domain filter from the current UI state (Translator). */
+    /**
+     * Filters by one label when its chip is clicked; clicking the very same
+     * label again clears the filter, so a chip works as a toggle.
+     */
+    void onFilterByLabel(String label) {
+        if (labelFilterField == null || label == null || label.isBlank()) {
+            return;
+        }
+        labelFilterField.setText(LabelChipFilter.toggle(labelFilterField.getText(), label));
+        if (labelFilterMode != null) {
+            labelFilterMode.setValue(null);
+        }
+    }
+
     private LabelFilter currentLabelFilter() {
         var labels = Dialogs.parseLabels(activeFilterLabels);
         if (labels.isEmpty()) {

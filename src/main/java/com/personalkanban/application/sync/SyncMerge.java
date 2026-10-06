@@ -133,6 +133,20 @@ public final class SyncMerge {
             CardSnapshot merged = mergeCard(b, l, r, conflicts);
             ColumnId target = targetColumn(localCardColumn.get(id), remoteCardColumn.get(id),
                     keptColumnOrder);
+            if (target == null) {
+                // The card survived (its edit beat a delete) but every column
+                // that could hold it was dropped. Keep its home column too, so
+                // the edit is not lost and no orphan card is assembled.
+                ColumnId home = localCardColumn.get(id) != null
+                        ? localCardColumn.get(id) : remoteCardColumn.get(id);
+                if (!mergedColumns.containsKey(home)) {
+                    mergedColumns.put(home, mergeColumn(baseCols.get(home), localCols.get(home),
+                            remoteCols.get(home), conflicts));
+                    keptColumnOrder.add(home);
+                    cardsByColumn.put(home, new ArrayList<>());
+                }
+                target = home;
+            }
             cardsByColumn.get(target).add(merged);
         }
         for (ColumnId id : keptColumnOrder) {

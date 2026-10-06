@@ -4,10 +4,13 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Última actualización: 2026-09-30 · **Sesión 5 completa**: 5 refinamientos
-sobre la Sesión 4 (modo oscuro legible, resaltes (i)/(u)/(iu), botón de
-ordenamiento, sección avanzada plegable, botón de nota, soltar ARRIBA).
-169/169 tests OK. Pendiente: prueba manual del usuario.*
+*Última actualización: 2026-10-05 · **Sesión 9**: política de conflictos y UI
+de conflictos del sync (§4/§4.1 de `docs/sync-design.md`) implementadas
+(`SyncMerge`, `SyncService`, copias de conflicto) — **230/230 tests OK**.
+Añadidos el **manual de usuario** (`docs/manual-usuario.md`) y las
+**mejoras propuestas** (`docs/mejoras-propuestas.md`, con B6/D1/D3 ya
+implementadas). Corregido un **NPE latente** del merge (columna huérfana).
+Pendiente: prueba manual del usuario.*
 
 ---
 
@@ -368,3 +371,40 @@ Migraciones: crear `V<n>__desc.sql` **y** registrar en
   tablero nuevo → Ok.
 - **Tests:** 204/204 verdes. Docs: `docs/sync-design.md`
   (adaptador, UI hecha, suite) y este PLAN.
+
+## Sesión 9 — conflictos de sync + documentación
+
+- **Política de conflictos (§4) y UI de conflictos con copia (§4.1)** de
+  `docs/sync-design.md`: implementados merge 3-vías (`SyncMerge`),
+  orquestador `SyncService` (base guardada, fast-forward, merge, push y
+  reintento sin `force`), puerto `ConflictCopyStore` + adaptador
+  `JsonConflictCopyStore` (escribe `<bdDir>/conflicts/<boardId>-<epoch>.json`)
+  y acción **Archivo → Sincronizar ahora** con aviso discreto en la UI.
+  Conflictos resueltos por campo; **la edición gana al borrado**; se preserva
+  la versión perdedora en la copia. Deudas documentadas: desempate sin
+  `device_id` (comparación canónica), orden posicional (falta *fractional
+  index*).
+- **Tests:** 221/221 verdes (17 nuevos: `SyncMergeTest`, `SyncServiceTest`,
+  `JsonConflictCopyStoreTest` + dobles `InMemorySyncRepository`,
+  `RecordingConflictCopyStore`).
+- **Documentación nueva:** [`docs/manual-usuario.md`](docs/manual-usuario.md)
+  (manual de usuario completo) y
+  [`docs/mejoras-propuestas.md`](docs/mejoras-propuestas.md) (mejoras
+  priorizadas, **sin implementar**, con checkboxes para revisarlas al probar).
+- **Blindaje del sync + B6 (misma sesión):**
+  - `SyncMergePropertyTest` (9 tests, sin dependencias nuevas — el build es
+    offline): sobre 150 tableros aleatorios sembrados verifica determinismo,
+    idempotencia, invariancia ("un cambio de un solo lado nunca se pierde"),
+    punto fijo, simetría del desempate y validez estructural (nunca campos
+    null).
+  - **Bug real encontrado y corregido** en `SyncMerge`: borrar la única
+    columna en un lado y editar una tarjeta suya en el otro dejaba la tarjeta
+    huérfana → `NullPointerException`. Ahora la columna que aloja a una
+    tarjeta superviviente también se conserva ("la edición gana al borrado"
+    se extiende al contenedor). Test de regresión incluido.
+  - **B6:** clic en el chip de etiqueta filtra por ella (clic de nuevo lo
+    quita); clave `card.label.chip.tip` en los 5 bundles.
+  - **D3:** workflow `.github/workflows/ci.yml` (`mvn -B test`, JDK 21).
+- **Pendiente:** prueba manual del usuario (sync con dos equipos, copias de
+  conflicto, chip de etiqueta) y decidir qué mejoras de
+  `docs/mejoras-propuestas.md` entran en la próxima sesión.

@@ -91,7 +91,7 @@ final class CardViewBuilder {
         addNotesIndicatorIfPresent(i18n, card, view);
         addProcessChipIfPresent(board, card, view);
         addRelationBadgesIfPresent(i18n, board, card, view);
-        addLabelChipsIfPresent(card, view);
+        addLabelChipsIfPresent(i18n, board, card, view);
 
         HBox actions = new HBox(4,
                 cardButton(i18n, "\u270E", "card.edit", board, card.id(), true),
@@ -256,7 +256,7 @@ final class CardViewBuilder {
      * pane. Color is deterministic (hash of the label) over the chip
      * palette, so the same label always looks the same everywhere.
      */
-    private static void addLabelChipsIfPresent(Card card, VBox view) {
+    private static void addLabelChipsIfPresent(I18n i18n, BoardController board, Card card, VBox view) {
         if (card.labels().isEmpty()) {
             return;
         }
@@ -264,6 +264,14 @@ final class CardViewBuilder {
         for (String label : card.labels()) {
             Label chip = new Label(label);
             chip.getStyleClass().addAll("card-label-chip", chipColorClass(label));
+            // Clicking a chip filters the board by that label; clicking the
+            // same chip again clears the filter (user request).
+            chip.setTooltip(new Tooltip(i18n.text("card.label.chip.tip")));
+            chip.setCursor(javafx.scene.Cursor.HAND);
+            chip.setOnMouseClicked(event -> {
+                board.onFilterByLabel(label);
+                event.consume();
+            });
             chips.getChildren().add(chip);
         }
         view.getChildren().add(chips);
