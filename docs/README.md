@@ -25,6 +25,8 @@ volver a explorar todo el código.
 | [`roadmap-and-decisions.md`](roadmap-and-decisions.md) | Requisitos del usuario pendientes, hallazgos verificados (incluida la causa raíz del bug de guardado), decisiones de diseño con su porqué, preferencias del usuario, convenciones de trabajo en sesiones | Siempre: al planificar y antes de implementar |
 | [`manual-usuario.md`](manual-usuario.md) | Manual de usuario completo: qué es, cómo ejecutarla, anatomía de la ventana, tableros/columnas/tarjetas, detalle, lote, filtros, procesos, precedencias, tiempo, apariencia, atajos, datos/portabilidad, export/import, sync online y solución de problemas | Para entender la app como usuario o al documentar cambios visibles |
 | [`mejoras-propuestas.md`](mejoras-propuestas.md) | Mejoras propuestas (Sesión 9), priorizadas y **sin implementar**, con checkboxes para revisarlas durante las pruebas | Al probar el programa, para decidir el siguiente hito |
+| [`plan-sesiones.md`](plan-sesiones.md) | Plan por sesiones para implementar las mejoras recomendadas: fases, criterios de avance, checklist y condición de reanudación | Para saber qué se va a hacer, en qué orden, y por dónde quedó si se interrumpe |
+| [`adiciones-propuestas.md`](adiciones-propuestas.md) | Mejoras adicionales recomendadas (nueva sesión, **sin implementar**), priorizadas y con criterio de cuándo valen, para decidir qué entra después | Para elegir la siguiente mejora desde una visión más ampla |
 | [`PLAN.md`](../PLAN.md) — *(raíz del repo)* | Roadmap por fases P0–P3 con estado de avance, checklist de pruebas manuales por fase | Al inicio de cada sesión para saber en qué fase vamos |
 
 ## Convenciones de esta documentación

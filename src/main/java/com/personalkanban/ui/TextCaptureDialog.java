@@ -51,7 +51,8 @@ final class TextCaptureDialog {
         dialog.getDialogPane().setContent(box);
 
         dialog.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if (!event.isControlDown() && !event.isMetaDown() && !event.isAltDown()) {
+            if (!event.isControlDown() && !event.isMetaDown() && !event.isAltDown()
+                    && !event.isShortcutDown()) {
                 // Letters without modifier are also legitimate shortcuts; we accept them
                 // as long as they are not navigation keys the dialog itself needs.
             }
@@ -59,8 +60,18 @@ final class TextCaptureDialog {
                     || event.getCode() == KeyCode.TAB) {
                 return;
             }
-            KeyCombination combination = buildCombination(event);
-            captured = renderKeyCombination(combination);
+            String name = buildNameFromEvent(event);
+            if (name == null) {
+                return;
+            }
+            try {
+                KeyCombination combination = KeyCombination.valueOf(name);
+                captured = renderKeyCombination(combination);
+            } catch (IllegalArgumentException e) {
+                // If the current press does not correspond to a valid KeyCombination
+                // name (e.g. an unrecognised key), just ignore it.
+                return;
+            }
         });
 
         dialog.setResultConverter(button -> {
@@ -76,23 +87,6 @@ final class TextCaptureDialog {
         return dialog.showAndWait();
     }
 
-    private KeyCombination buildCombination(KeyEvent event) {
-        KeyCode code = event.getCode();
-        KeyCombination.Modifier[] modifiers;
-        if (event.isControlDown() || event.isMetaDown()) {
-            modifiers = new KeyCombination.Modifier[]{
-                    KeyCombination.Modifier.SHORTCUT,
-                    KeyCombination.Modifier.SHIFT,
-                    KeyCombination.Modifier.ALT
-            };
-        } else {
-            modifiers = new KeyCombination.Modifier[]{
-                    KeyCombination.Modifier.SHIFT,
-                    KeyCombination.Modifier.ALT
-            };
-        }
-        return new KeyCodeCombination(code, modifiers);
-    }
 
     private String renderKeyCombination(KeyCombination combination) {
         KeyCode code = ((KeyCodeCombination) combination).getCode();
@@ -111,6 +105,39 @@ final class TextCaptureDialog {
             sb.append("Shift+");
         }
         if (hasAlt && !isMeta) {
+            sb.append("Alt+");
+        }
+        sb.append(code.getName());
+        return sb.toString();
+    }
+
+    /**
+     * Builds a KeyCombination name from a KeyEvent without relying on
+     * KeyEvent.getCombination() or on KeyCombination.Modifier constants,
+     * which are not available in this JavaFX version. The produced names
+     * look like "Ctrl+A", "Ctrl+Shift+A", "Alt+Tab" or "A", which is what
+     * KeyCombination.valueOf() already accepts elsewhere in the app.
+     */
+    private String buildNameFromEvent(KeyEvent event) {
+        KeyCode code = event.getCode();
+        if (code == KeyCode.UNDEFINED) {
+            return null;
+        }
+        boolean ctrl = event.isControlDown();
+        boolean meta = event.isMetaDown();
+        boolean alt = event.isAltDown();
+        boolean shift = event.isShiftDown();
+        boolean shortcut = event.isShortcutDown();
+        StringBuilder sb = new StringBuilder();
+        if (meta) {
+            sb.append("Meta+");
+        } else if (ctrl || shortcut) {
+            sb.append("Ctrl+");
+        }
+        if (shift) {
+            sb.append("Shift+");
+        }
+        if (alt) {
             sb.append("Alt+");
         }
         sb.append(code.getName());

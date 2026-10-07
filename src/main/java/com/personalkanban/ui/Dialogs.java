@@ -86,6 +86,20 @@ final class Dialogs {
         this.i18n = i18n;
     }
 
+    /** Whether any modal Dialog shown by this Dialogs instance is currently open. */
+    boolean modalActive() {
+        return dialogStack
+                .stream()
+                .anyMatch(d -> d.getDialogPane().getScene() != null);
+    }
+
+    /** After a bulk labels dialog, the add-vs-remove choice the user made. */
+    Boolean lastBulkLabelsAdd() {
+        return lastBulkLabelsAdd;
+    }
+
+    private final java.util.List<Dialog<?>> dialogStack = new java.util.ArrayList<>();
+
     // ------------------------------------------------------------------
     // Column dialog
     // ------------------------------------------------------------------
@@ -131,6 +145,7 @@ final class Dialogs {
         dialog.getDialogPane().setContent(grid);
         makeResizable(dialog, 480, 420);
 
+        track(dialog);
         dialog.setResultConverter(button -> {
             if (button != ButtonType.OK) {
                 return null;
@@ -286,6 +301,7 @@ final class Dialogs {
         grid.add(advancedBox, 0, 6, 2, 1);
         dialog.getDialogPane().setContent(grid);
 
+        track(dialog);
         dialog.setResultConverter(button -> {
             if (button != ButtonType.OK) {
                 return null;
@@ -381,6 +397,7 @@ final class Dialogs {
         dialog.setTitle(i18n.text("dialog.card.choice.title"));
         dialog.setHeaderText(header);
         dialog.setContentText(i18n.text("dialog.card.choice.label"));
+        track(dialog);
         return dialog.showAndWait().map(byLabel::get);
     }
 
@@ -407,6 +424,7 @@ final class Dialogs {
         grid.add(labelsField, 1, 0);
         dialog.getDialogPane().setContent(grid);
 
+        track(dialog);
         dialog.setResultConverter(button -> button == ButtonType.OK
                 ? new BulkLabelsForm(mode.getSelectionModel().getSelectedIndex() == 0,
                         parseLabels(labelsField.getText()))
@@ -450,6 +468,7 @@ final class Dialogs {
         grid.add(combo, 1, 0);
         dialog.getDialogPane().setContent(grid);
 
+        track(dialog);
         dialog.setResultConverter(button -> {
             if (button != ButtonType.OK) {
                 return null;
@@ -483,6 +502,7 @@ final class Dialogs {
         grid.add(none, 0, 1, 2, 1);
         dialog.getDialogPane().setContent(grid);
 
+        track(dialog);
         dialog.setResultConverter(button -> button == ButtonType.OK
                 ? (none.isSelected() ? null : ColorCss.toHex(picker.getValue()))
                 : null);
@@ -495,7 +515,7 @@ final class Dialogs {
      */
     Optional<Integer> columnOrderDialog(int currentPosition, int columnCount) {
         TextField positionField = new TextField(String.valueOf(currentPosition));
-        positionField.setPromptText("1 – " + columnCount);
+        positionField.setPromptText("1 - " + columnCount);
 
         Dialog<Integer> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("column.order.title"));
@@ -505,6 +525,7 @@ final class Dialogs {
         grid.add(positionField, 1, 0);
         dialog.getDialogPane().setContent(grid);
 
+        track(dialog);
         dialog.setResultConverter(button -> {
             if (button != ButtonType.OK) {
                 return null;
@@ -535,6 +556,7 @@ final class Dialogs {
         grid.add(picker, 1, 0);
         dialog.getDialogPane().setContent(grid);
 
+        track(dialog);
         dialog.setResultConverter(button ->
                 button == ButtonType.OK ? selectedColor(picker) : null);
         return dialog.showAndWait();
@@ -570,12 +592,16 @@ final class Dialogs {
         grid.add(combo, 1, 0);
         dialog.getDialogPane().setContent(grid);
 
+        track(dialog);
         dialog.setResultConverter(button ->
                 button == ButtonType.OK && combo.getValue() != null
                         ? combo.getValue().id()
                         : null);
         return dialog.showAndWait();
     }
+
+    // ------------------------------------------------------------------
+    // Prompts, confirmations, messages
 
     // ------------------------------------------------------------------
     // Color selection: named palette + free custom color in one control
@@ -610,7 +636,7 @@ final class Dialogs {
         return promptText(header, i18n.text("dialog.title.label"), initial);
     }
 
-    /** Free-text prompt with a custom content label. */
+    /** Prompt de texto libre con una etiqueta de contenido personalizada. */
     Optional<String> promptText(String header, String contentText, String initial) {
         TextInputDialog dialog = new TextInputDialog(initial == null ? "" : initial);
         dialog.setHeaderText(header);
@@ -639,7 +665,7 @@ final class Dialogs {
     /**
      * A single-line failure summary for error dialogs. Plain messages often
      * hide the real cause (e.g. a generic save failure wrapping a SQLite
-     * constraint violation), so the deepest root cause is appended — that is
+     * constraint violation), so the deepest root cause is appended - that is
      * usually the actionable part.
      */
     static String describeFailure(RuntimeException failure) {
@@ -665,7 +691,7 @@ final class Dialogs {
     /**
      * Dialogs are fixed-size by default, which hides the advanced
      * fields of the card/column forms; this gives them a sensible
-     * initial size and lets the user resize them (user request).
+     * initial size and lets el usuario redimensionarlas (user request).
      */
     /** Makes a dialog resizable and sizes it once shown (user request: no fixed tiny windows). */
     static void makeResizable(Dialog<?> dialog, double width, double height) {
@@ -679,12 +705,20 @@ final class Dialogs {
         });
     }
 
+    private void track(Dialog<?> dialog) {
+        dialogStack.add(dialog);
+        dialog.setOnHidden(e -> dialogStack.remove(dialog));
+    }
+
     private GridPane formGrid() {
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
         return grid;
     }
+
+    private Boolean lastBulkLabelsAdd;
+
 
     /**
      * Splits labels separated by commas OR whitespace, in any mix and

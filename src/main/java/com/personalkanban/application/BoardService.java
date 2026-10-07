@@ -91,6 +91,21 @@ public final class BoardService {
     private static final String CARD_VIEW_PREFIX = "ui.cardview.";
     private static final String BACKGROUND_KEY = "ui.background"; // "path|opacity"
     private static final String UI_BACKGROUND_PREFIX = "ui.background.";
+    private static final String UI_SHORTCUTS_KEY = "ui.shortcuts";
+
+    /**
+     * Global keyboard shortcuts that the user can customize. Loaded/saved
+     * through {@link GlobalShortcuts} so the UI layer never touches
+     * {@link SettingsStore} directly.
+     */
+    public GlobalShortcuts globalShortcuts() {
+        return GlobalShortcuts.fromJson(settings.get(UI_SHORTCUTS_KEY).orElse(""));
+    }
+
+    /** Persists the current global shortcuts. */
+    public void saveGlobalShortcuts(GlobalShortcuts shortcuts) {
+        settings.put(UI_SHORTCUTS_KEY, shortcuts.toJson());
+    }
 
     private final BoardRepository repository;
     private final UndoHistory history;

@@ -27,7 +27,7 @@ import java.util.Optional;
  */
 final class KeyboardShortcutsDialog {
 
-    private record RowItem(GlobalShortcuts.Action action,
+    private record RowItem(String actionName,
                            String currentKey,
                            String storageKey,
                            String displayKey) {
@@ -48,9 +48,10 @@ final class KeyboardShortcutsDialog {
     Optional<GlobalShortcuts> show() {        GlobalShortcuts locator = new GlobalShortcuts();
         for (GlobalShortcuts.Action action : GlobalShortcuts.Action.values()) {
             String current = shortcuts.get(action);
-            items.add(new RowItem(action, current,
-                    GlobalShortcuts.Action.isKnownActionName(action.name()) ? locator.storageLabelKey(action)
-                            : action.name(),
+            String actionName = GlobalShortcuts.Action.isKnownActionName(action.name())
+                    ? locator.storageLabelKey(action)
+                    : action.name();
+            items.add(new RowItem(actionName, current, actionName,
                     buildRowLabel(action, current)));
         }
 
@@ -68,9 +69,10 @@ final class KeyboardShortcutsDialog {
                 }
             }
             for (int i = 0; i < items.size(); i++) {
-                GlobalShortcuts.Action action = items.get(i).action();
+                String actionName = items.get(i).actionName();
+                GlobalShortcuts.Action action = GlobalShortcuts.Action.fromStorageNameOrThrow(actionName);
                 String key = shortcuts.get(action);
-                items.set(i, new RowItem(action, key,
+                items.set(i, new RowItem(actionName, key,
                         items.get(i).storageKey,
                         buildRowLabel(action, key)));
             }
@@ -86,12 +88,17 @@ final class KeyboardShortcutsDialog {
             if (proposed.isBlank()) {
                 return;
             }
-            if (GlobalShortcuts.Action.isKnownActionName(selected.action())) {
-                shortcuts.set(GlobalShortcuts.Action.fromStorageNameOrThrow(selected.action()), proposed);
+            String selectedActionName = selected.actionName();
+            if (GlobalShortcuts.Action.isKnownActionName(selectedActionName)) {
+                shortcuts.set(GlobalShortcuts.Action.fromStorageNameOrThrow(selectedActionName), proposed);
             }
             int idx = items.indexOf(selected);
-            items.set(idx, new RowItem(selected.action(), proposed,
-                    selected.storageKey, buildRowLabel(selected.action(), proposed)));
+            GlobalShortcuts.Action selectedAction = GlobalShortcuts.Action.fromStorageNameOrThrow(selectedActionName);
+            items.set(idx, new RowItem(
+                    selectedActionName,
+                    proposed,
+                    selected.storageKey,
+                    buildRowLabel(selectedAction, proposed)));
             list.refresh();
         });
 
@@ -147,7 +154,8 @@ final class KeyboardShortcutsDialog {
                 setText(null);
                 setGraphic(null);
             } else {
-                String actionLabel = i18n.text(locator.storageLabelKey(item.action()));
+                GlobalShortcuts.Action action = GlobalShortcuts.Action.fromStorageNameOrThrow(item.actionName());
+                String actionLabel = i18n.text(locator.storageLabelKey(action));
                 String keyLabel = item.currentKey.isBlank()
                         ? i18n.text("shortcut.key.unset")
                         : item.currentKey;

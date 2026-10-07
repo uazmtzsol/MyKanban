@@ -4,13 +4,7 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Última actualización: 2026-10-05 · **Sesión 9**: política de conflictos y UI
-de conflictos del sync (§4/§4.1 de `docs/sync-design.md`) implementadas
-(`SyncMerge`, `SyncService`, copias de conflicto) — **230/230 tests OK**.
-Añadidos el **manual de usuario** (`docs/manual-usuario.md`) y las
-**mejoras propuestas** (`docs/mejoras-propuestas.md`, con B6/D1/D3 ya
-implementadas). Corregido un **NPE latente** del merge (columna huérfana).
-Pendiente: prueba manual del usuario.*
+*Última actualización: 2026-10-07 · **Sesión 9 (continuación):** mejoras adicionales recomendadas documentadas en [`docs/adiciones-propuestas.md`](docs/adiciones-propuestas.md) (**sin implementar**, para revisar al probar); plan de trabajo formalizado en [`docs/plan-sesiones.md`](docs/plan-sesiones.md) con fases A-B-C-D y checklist para continuar si se interrumpe; suite **236/236 tests OK** (1 skipped: `PhpSyncApiEndpointTest`, salta si no hay servidor PHP). Mejoras ya hechas en Sesión 9: sync §4/§4.1 (`SyncMerge`, `SyncService`, copias de conflicto), `SyncMergePropertyTest` (9 propiedades), B6 (clic en chip = filtrar) + `LabelChipFilterTest`, D3 (CI `.github/workflows/ci.yml`), manual de usuario y mejoras propuestas. Corregido un **NPE latente** del merge (columna huérfana). Pendiente: planificación y desarrollo de las mejoras recommendadas por fases (primero la Fase A).*
 
 ---
 

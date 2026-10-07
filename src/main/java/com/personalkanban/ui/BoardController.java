@@ -3,6 +3,7 @@ package com.personalkanban.ui;
 import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.CardViewSettings;
+import com.personalkanban.application.GlobalShortcuts;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.BoardDescriptor;

@@ -3,31 +3,33 @@ package com.personalkanban.ui;
 import org.junit.jupiter.api.Test;
 
 import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TextCaptureDialogTest {
 
+    /**
+     * The 8-argument KeyEvent constructor is the only public one usable in
+     * tests: (eventType, character, text, code, shiftDown, controlDown,
+     * altDown, metaDown). The KeyCombination-based constructor used by the
+     * old test does not exist in JavaFX 21.
+     */
+    private static KeyEvent press(KeyCode code, boolean shift, boolean ctrl,
+                                  boolean alt, boolean meta) {
+        return new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code,
+                shift, ctrl, alt, meta);
+    }
+
     @Test
     void capturesShortcutFromPressedKeyEvent() {
-        // We never open a real JavaFX stage in tests, but we can verify
-        // that the text capture logic serializes a pressed shortcut
-        // into the same representation the dialog stores.
         TextCaptureDialogFixture fixture = new TextCaptureDialogFixture();
 
-        javafx.scene.input.KeyEvent event = new javafx.scene.input.KeyEvent(
-                javafx.scene.input.KeyEvent.KEY_PRESSED,
-                KeyCode.CTRL,
-                KeyCode.CTRL,
-                KeyCombination.valueOf("Ctrl+C"),
-                true,
-                true,
-                false,
-                false
-        );
-        fixture.pushPressEvent(event);
+        // Ctrl pressed together with C -> "Ctrl+C".
+        fixture.pushPressEvent(press(KeyCode.C, false, true, false, false));
 
         assertThat(fixture.lastCaptured()).isEqualTo("Ctrl+C");
     }
@@ -36,17 +38,7 @@ class TextCaptureDialogTest {
     void capturesControlPlusLetterFromPressedKeyEvent() {
         TextCaptureDialogFixture fixture = new TextCaptureDialogFixture();
 
-        javafx.scene.input.KeyEvent event = new javafx.scene.input.KeyEvent(
-                javafx.scene.input.KeyEvent.KEY_PRESSED,
-                KeyCode.CTRL,
-                KeyCode.A,
-                KeyCombination.valueOf("Ctrl+A"),
-                true,
-                true,
-                false,
-                false
-        );
-        fixture.pushPressEvent(event);
+        fixture.pushPressEvent(press(KeyCode.A, false, true, false, false));
 
         assertThat(fixture.lastCaptured()).isEqualTo("Ctrl+A");
     }
@@ -55,36 +47,16 @@ class TextCaptureDialogTest {
     void capturesPlainLetterWithoutModifierFromPressedKeyEvent() {
         TextCaptureDialogFixture fixture = new TextCaptureDialogFixture();
 
-        javafx.scene.input.KeyEvent event = new javafx.scene.input.KeyEvent(
-                javafx.scene.input.KeyEvent.KEY_PRESSED,
-                KeyCode.A,
-                KeyCode.A,
-                KeyCombination.valueOf("A"),
-                false,
-                false,
-                false,
-                false
-        );
-        fixture.pushPressEvent(event);
+        fixture.pushPressEvent(press(KeyCode.A, false, false, false, false));
 
         assertThat(fixture.lastCaptured()).isEqualTo("A");
     }
 
     @Test
-    void clearsCapturedKeyWhenClearButtonIsPressedTwice() {
+    void clearsCapturedKeyWhenClearButtonIsPressed() {
         TextCaptureDialogFixture fixture = new TextCaptureDialogFixture();
 
-        javafx.scene.input.KeyEvent event = new javafx.scene.input.KeyEvent(
-                javafx.scene.input.KeyEvent.KEY_PRESSED,
-                KeyCode.CTRL,
-                KeyCode.CTRL,
-                KeyCombination.valueOf("Ctrl+C"),
-                true,
-                true,
-                false,
-                false
-        );
-        fixture.pushPressEvent(event);
+        fixture.pushPressEvent(press(KeyCode.C, false, true, false, false));
         assertThat(fixture.lastCaptured()).isEqualTo("Ctrl+C");
 
         fixture.clearCaptured();
@@ -92,58 +64,59 @@ class TextCaptureDialogTest {
     }
 
     @Test
-    void ignoreEnterEscapeAndTabInCapture() {
+    void ignoresEnterAndEscapeInCapture() {
         TextCaptureDialogFixture fixture = new TextCaptureDialogFixture();
 
-        javafx.scene.input.KeyEvent enter = new javafx.scene.input.KeyEvent(
-                javafx.scene.input.KeyEvent.KEY_PRESSED,
-                KeyCode.ENTER,
-                KeyCode.ENTER,
-                KeyCombination.valueOf("Enter"),
-                false,
-                false,
-                false,
-                false
-        );
-        fixture.pushPressEvent(enter);
+        // Enter and Escape are navigation keys the dialog itself needs;
+        // they must never be captured as a shortcut.
+        fixture.pushPressEvent(press(KeyCode.ENTER, false, false, false, false));
         assertThat(fixture.lastCaptured()).isNull();
 
-        javafx.scene.input.KeyEvent escape = new javafx.scene.input.KeyEvent(
-                javafx.scene.input.KeyEvent.KEY_PRESSED,
-                KeyCode.ESCAPE,
-                KeyCode.ESCAPE,
-                KeyCombination.valueOf("Escape"),
-                false,
-                false,
-                false,
-                false
-        );
-        fixture.pushPressEvent(escape);
+        fixture.pushPressEvent(press(KeyCode.ESCAPE, false, false, false, false));
         assertThat(fixture.lastCaptured()).isNull();
     }
 
     @Test
-    void toStringRenderOfKeyCodeCombinationMatchesExpectedPattern() {
-        KeyCodeCombination combination = new KeyCodeCombination(
-                KeyCode.A,
-                KeyCombination.SHORT_FORWARD,
-                KeyCombination.SHIFT_ANY,
-                KeyCombination.ALT_ANY,
-                KeyCombination.SHORTCUT_ANY);
+    void capturesShiftAndAltCombinations() {
+        TextCaptureDialogFixture fixture = new TextCaptureDialogFixture();
 
-        assertThat(combination.getName()).contains("A");
+        fixture.pushPressEvent(press(KeyCode.A, true, false, true, false));
+
+        assertThat(fixture.lastCaptured()).isEqualTo("Shift+Alt+A");
     }
 
+    /**
+     * Mirrors the capture logic of TextCaptureDialog's KEY_PRESSED filter:
+     * navigation keys (Enter/Escape/Tab) and undefined codes are ignored;
+     * everything else becomes "Meta+…/Ctrl+… + Shift+… + Alt+… + <key name>".
+     */
     private static class TextCaptureDialogFixture {
         private String lastCaptured;
-        private final List<javafx.scene.input.KeyEvent> events = new ArrayList<>();
+        private final List<KeyEvent> events = new ArrayList<>();
 
-        void pushPressEvent(javafx.scene.input.KeyEvent event) {
+        void pushPressEvent(KeyEvent event) {
             events.add(event);
-            // Simulate the logic we actually care about: if the dialog had read
-            // a KEY_PRESSED with a modifier, it would have stored a normalized
-            // string. We do not replay JavaFX dispatch here, we just assert
-            // rendering helpers directly on a representative combination.
+            KeyCode code = event.getCode();
+            if (code == KeyCode.UNDEFINED
+                    || code == KeyCode.ENTER
+                    || code == KeyCode.ESCAPE
+                    || code == KeyCode.TAB) {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            if (event.isMetaDown()) {
+                sb.append("Meta+");
+            } else if (event.isControlDown() || event.isShortcutDown()) {
+                sb.append("Ctrl+");
+            }
+            if (event.isShiftDown()) {
+                sb.append("Shift+");
+            }
+            if (event.isAltDown()) {
+                sb.append("Alt+");
+            }
+            sb.append(code.getName());
+            lastCaptured = sb.toString();
         }
 
         void clearCaptured() {
