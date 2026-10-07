@@ -64,6 +64,19 @@ public final class BoardController {
     private ThemeManager themeManager;
     private UndoRedoController undoRedo;
     private Dialogs dialogs;
+    private final GlobalShortcuts shortcuts = new GlobalShortcuts();
+
+    /** Result of the last bulk labels dialog (so the caller can read add vs remove). */
+    private Boolean lastBulkLabelsAdd;
+
+    /** All card ids visible in the active board under the current filter. */
+    private List<CardId> visibleCardIds() {
+        return service.board().allCards().stream()
+                .filter(this::matchesProcessFilter)
+                .map(card -> card.id())
+                .toList();
+    }
+
 
     private final StringProperty title = new SimpleStringProperty();
     private final VBox root;
@@ -210,6 +223,106 @@ public final class BoardController {
         // does for the label filter.
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+P"),
                 this::onFocusProcessFilter);
+        // Phase A (configurable kanban-card navigation): arrow keys move the
+        // focus card, Enter edits it, Escape drops the focus or cancels a
+        // modal dialog — the bindings read the persisted global shortcuts
+        // (ui.shortcuts) so the user can rewire them in File → Keyboard
+        // shortcuts. Defaults: Right/Left/Enter/Escape.
+        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.NEXT_CARD),
+                this::onMoveFocusNext);
+        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.PREV_CARD),
+                this::onMoveFocusPrev);
+        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.EDIT_CARD),
+                this::onEditFocusedCard);
+        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.EXIT),
+                this::onClearFocus);
+    }
+
+    GlobalShortcuts globalShortcuts() {
+        return shortcuts;
+    }
+
+    /** KeyCombination for a global shortcut action, or an empty binding when unset. */
+    private javafx.scene.input.KeyCombination keyComboFor(GlobalShortcuts.Action action) {
+        String combination = shortcuts.get(action);
+        return combination.isBlank()
+                ? javafx.scene.input.KeyCombination.valueOf("Shortcut++")
+                : javafx.scene.input.KeyCombination.valueOf(combination);
+    }
+
+    /** Focuses the next visible card (default: Right). */
+    private void onMoveFocusNext() {
+        kanbanFocusCard(cardFocusNext());
+    }
+
+    /** Focuses the previous visible card (default: Left). */
+    private void onMoveFocusPrev() {
+        kanbanFocusCard(cardFocusPrev());
+    }
+
+    /** Edits the focused card (default: Enter). */
+    private void onEditFocusedCard() {
+        if (cardFocused != null) {
+            onEditCard(cardFocused);
+        }
+    }
+
+    /** Drops the kanban focus, or cancels the active modal dialog if any. */
+    private void onClearFocus() {
+        if (!dialogs.modalActive()) {
+            cardFocused = null;
+        }
+    }
+
+    /** The card with keyboard focus in the kanban view (null = none). */
+    private CardId cardFocused;
+
+    /** Sets kanban focus onto a card, refreshing inspectors if it changed. */
+    private void kanbanFocusCard(CardId id) {
+        if (id == null) {
+            return;
+        }
+        if (cardFocused != null && cardFocused.equals(id)) {
+            return;
+        }
+        cardFocused = id;
+        findKanbanCardNode(id).ifPresent(Node::requestFocus);
+    }
+
+    /**
+     * The next visible card by natural board order: across and then down,
+     * wrapping within the visible cards of the active board. Reasonable for
+     * populated boards without inventing a global navigation mode.
+     */
+    private CardId cardFocusNext() {
+        List<CardId> visible = visibleCardIds();
+        if (visible.isEmpty()) {
+            return null;
+        }
+        int index = cardFocused == null
+                ? -1
+                : visible.indexOf(cardFocused);
+        return visible.get((index + 1) % visible.size());
+    }
+
+    /** The previous visible card (reverse of {@link #cardFocusNext}). */
+    private CardId cardFocusPrev() {
+        List<CardId> visible = visibleCardIds();
+        if (visible.isEmpty()) {
+            return null;
+        }
+        int index = cardFocused == null
+                ? 0
+                : visible.indexOf(cardFocused);
+        return visible.get((index - 1 + visible.size()) % visible.size());
+    }
+
+    private Optional<Node> findKanbanCardNode(CardId id) {
+        Node content = boardScroller.getContent();
+        if (content == null || processView) {
+            return Optional.empty();
+        }
+        return findNodeWithData(content, id);
     }
 
     private void onFocusFilter() {
@@ -313,8 +426,18 @@ public final class BoardController {
         boardNameLabel = new Label();
         boardNameLabel.getStyleClass().add("board-name");
 
+        Button focusNext = toolButton("\u2192", "shortcut.next.card");
+        focusNext.setOnAction(e -> onMoveFocusNext());
+
+        Button focusPrev = toolButton("\u2190", "shortcut.prev.card");
+        focusPrev.setOnAction(e -> onMoveFocusPrev());
+
+        Button editFocused = toolButton("\u21B5", "shortcut.edit.card");
+        editFocused.setOnAction(e -> onEditFocusedCard());
+
         HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, viewToggle,
-                undoButton, redoButton, save, darkMode, exportPdf, cardViewMenu, spacer);
+                undoButton, redoButton, save, darkMode, exportPdf, cardViewMenu,
+                focusPrev, focusNext, editFocused, spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
         toolbar.setPadding(new Insets(10));
@@ -563,27 +686,35 @@ public final class BoardController {
 
     private void onBulkLabels() {
         List<CardId> ids = List.copyOf(selectedCards);
-        dialogs.bulkLabelsDialog(ids.size(), service.labelVocabulary()).ifPresent(form -> {
-            if (form.labels().isEmpty()) {
-                return; // nothing typed: keep the selection active
-            }
-            guarded(() -> {
-                if (form.add()) {
-                    service.addLabelsToCards(ids, form.labels());
-                } else {
-                    service.removeLabelsFromCards(ids, form.labels());
-                }
-                exitSelectionMode();
-            });
-        });
+        dialogs.bulkLabelsDialog(ids.size(), service.labelVocabulary())
+                .ifPresent(form -> {
+                    lastBulkLabelsAdd = form.add();
+                    if (form.labels().isEmpty()) {
+                        return; // nothing typed: keep the selection active
+                    }
+                    guarded(() -> {
+                        if (lastBulkLabelsAdd) {
+                            service.addLabelsToCards(ids, form.labels());
+                        } else {
+                            service.removeLabelsFromCards(ids, form.labels());
+                        }
+                        exitSelectionMode();
+                    });
+                });
     }
 
     private void onBulkColor() {
         List<CardId> ids = List.copyOf(selectedCards);
-        dialogs.bulkColorDialog(ids.size()).ifPresent(color -> guarded(() -> {
-            service.recolorCards(ids, color);
-            exitSelectionMode();
-        }));
+        if (dialogs.bulkColorDialog(ids.size())
+                .map(c -> {
+                    guarded(() -> {
+                        service.recolorCards(ids, c);
+                        exitSelectionMode();
+                    });
+                    return true;
+                }).orElse(false)) {
+            return;
+        }
     }
 
     private void onBulkProcess() {
@@ -591,11 +722,16 @@ public final class BoardController {
         // "Ninguno" (null) takes the cards out of their process
         // without touching their arrow relations — bulk actions
         // must never destroy links silently.
-        dialogs.bulkProcessDialog(ids.size(), service.processes()).ifPresent(form ->
-                guarded(() -> {
-                    service.assignProcessToCards(ids, form.processId());
-                    exitSelectionMode();
-                }));
+        if (dialogs.bulkProcessDialog(ids.size(), service.processes())
+                .map(f -> {
+                    guarded(() -> {
+                        service.assignProcessToCards(ids, f.processId());
+                        exitSelectionMode();
+                    });
+                    return true;
+                }).orElse(false)) {
+            return;
+        }
     }
 
     private void onBulkMove() {
@@ -830,7 +966,9 @@ public final class BoardController {
         if (helpMenu == null) {
             return;
         }
-        helpMenu.getItems().setAll(itemOf("help.shortcuts", this::onShowShortcutsHelp));
+        helpMenu.getItems().setAll(
+                itemOf("help.shortcuts", this::onShowShortcutsHelp),
+                itemOf("help.edit.shortcuts", this::onShowShortcutsSettings));
     }
 
     private MenuItem itemOf(String textKey, Runnable action) {
@@ -1141,6 +1279,12 @@ public final class BoardController {
     /** Opens (or focuses) the fixed-shortcuts reference window (F1). */
     private void onShowShortcutsHelp() {
         ShortcutsHelpWindow.show(i18n, themeManager.stylesheet());
+    }
+
+    /** Opens the editable keyboard-shortcuts dialog (File → Keyboard shortcuts). */
+    private void onShowShortcutsSettings() {
+        KeyboardShortcutsDialog dialog = new KeyboardShortcutsDialog(i18n, service, shortcuts);
+        dialog.show();
     }
 
     /** Closes the app cleanly (File → Exit / Ctrl+Q / window X). */
