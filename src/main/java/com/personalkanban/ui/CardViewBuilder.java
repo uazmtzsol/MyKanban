@@ -136,6 +136,11 @@ final class CardViewBuilder {
             reset.setVisible(settings.hasOverride(card.id().value()));
             reset.setOnAction(e -> board.onSetCardViewMode(card.id(), null));
             viewMenu.getItems().add(reset);
+            viewMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
+            javafx.scene.control.MenuItem transfer = new javafx.scene.control.MenuItem(
+                    i18n.text("card.transfer.menu"));
+            transfer.setOnAction(e -> board.onTransferCardToBoard(card.id()));
+            viewMenu.getItems().add(transfer);
             view.setOnContextMenuRequested(event -> {
                 CardViewSettings.Mode effective = settings.effectiveMode(card.id().value());
                 for (javafx.scene.control.MenuItem item : viewMenu.getItems()) {

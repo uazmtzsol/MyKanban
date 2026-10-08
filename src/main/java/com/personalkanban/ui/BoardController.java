@@ -1975,6 +1975,36 @@ public final class BoardController {
         }
     }
 
+    /**
+     * Move-or-copy one card to another board (user request): the transfer
+     * dialog lists every other board and its columns; "mover" removes the
+     * card from this board after copying it to the target.
+     */
+    public void onTransferCardToBoard(com.personalkanban.domain.board.CardId cardId) {
+        var sourceCard = service.board().findCard(cardId);
+        if (sourceCard.isEmpty()) {
+            return;
+        }
+        var otherBoards = service.boards().stream()
+                .filter(descriptor -> !descriptor.id().equals(service.activeBoardId()))
+                .toList();
+        if (otherBoards.isEmpty()) {
+            dialogs.info(i18n.text("card.transfer.no.other"));
+            return;
+        }
+        dialogs.cardTransferDialog(1, otherBoards, service.activeBoardId(), service::columnsOf)
+                .ifPresent(form -> guarded(() -> {
+                    if (form.copy()) {
+                        service.copyCardToBoard(cardId, form.targetBoardId(),
+                                form.targetColumn().id());
+                    } else {
+                        service.moveCardToBoard(cardId, form.targetBoardId(),
+                                form.targetColumn().id());
+                    }
+                    refresh();
+                }));
+    }
+
     public void onClearColumn(com.personalkanban.domain.board.ColumnId columnId) {
         if (dialogs.confirm(i18n.text("confirm.clear.cards"))) {
             guarded(() -> {

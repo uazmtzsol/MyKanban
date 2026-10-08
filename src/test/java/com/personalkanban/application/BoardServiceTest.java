@@ -5,7 +5,11 @@ import com.personalkanban.application.port.InMemorySettingsStore;
 import com.personalkanban.application.port.InMemoryUndoHistory;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardDescriptor;
+import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.BoardId;
+import com.personalkanban.domain.board.Card;
+import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.WipLimit;
 import com.personalkanban.domain.exception.WipLimitExceededException;
 import org.junit.jupiter.api.Test;
@@ -446,5 +450,145 @@ class BoardServiceTest {
         assertThat(service.boards()).extracting(BoardDescriptor::name)
                 .contains(originalName, originalName + " (2)", originalName + " (3)");
         assertThat(first).isNotEqualTo(second);
+    }
+
+    // ------------------------------------------------------------------
+    // Cross-board card transfer (move / copy)
+    // ------------------------------------------------------------------
+
+    private ColumnId equivalentColumnOn(BoardId targetBoardId) {
+        // Each test board is created with exactly one working column.
+        return service.columnsOf(targetBoardId).get(0).id();
+    }
+
+    @Test
+    void copyCardToBoardKeepsCardFieldsAndSourceIntact() {
+        BoardId home = addBoard("Home");
+        ColumnId homeColumn = service.addColumn("Todo", "", BoardColor.BLUE,
+                WipLimit.unlimited());
+        LocalDate due = LocalDate.of(2026, 10, 15);
+        CardId copied = service.addCard(homeColumn, "Task", "desc", BoardColor.RED,
+                due, List.of("urgent"), "notes", null, null);
+
+        BoardId archive = addBoard("Archive");
+        service.addColumn("Inbox", "", BoardColor.GREEN, WipLimit.unlimited());
+        service.openBoard(home); // transfers read the SOURCE card from the active board
+
+        CardId createdId = service.copyCardToBoard(copied, archive,
+                equivalentColumnOn(archive));
+
+        // The source card is still on the home board.
+        assertThat(service.board().findCard(copied)).isPresent();
+
+        // The target board has the copy with every field transferred.
+        List<BoardColumn> targetColumns = service.columnsOf(archive);
+        assertThat(targetColumns.get(0).cards()).hasSize(1);
+        Card copy = targetColumns.get(0).cards().get(0);
+        assertThat(copy.id()).isEqualTo(createdId);
+        assertThat(copy.title()).isEqualTo("Task");
+        assertThat(copy.description()).isEqualTo("desc");
+        assertThat(copy.color()).isEqualTo(BoardColor.RED);
+        assertThat(copy.dueDate()).isEqualTo(LocalDate.of(2026, 10, 15));
+        assertThat(copy.labels()).containsExactly("urgent");
+        assertThat(copy.notes()).isEqualTo("notes");
+    }
+
+    @Test
+    void moveCardToBoardRemovesCardFromSourceBoard() {
+        BoardId home = addBoard("Home");
+        ColumnId homeColumn = service.addColumn("Todo", "", BoardColor.BLUE,
+                WipLimit.unlimited());
+        CardId moved = service.addCard(homeColumn, "Fly", "", BoardColor.BLUE);
+
+        BoardId work = addBoard("Work");
+        service.addColumn("Backlog", "", BoardColor.GREEN, WipLimit.unlimited());
+        service.openBoard(home);
+
+        service.moveCardToBoard(moved, work, equivalentColumnOn(work));
+
+        assertThat(service.board().findCard(moved)).isEmpty();
+        assertThat(service.columnsOf(work).get(0).cards())
+                .extracting(Card::title)
+                .containsExactly("Fly");
+    }
+
+    @Test
+    void copyCardToBoardPersistsTheTargetBoard() {
+        BoardId home = addBoard("Home");
+        ColumnId homeColumn = service.addColumn("Todo", "", BoardColor.BLUE,
+                WipLimit.unlimited());
+        CardId cardId = service.addCard(homeColumn, "Persist", "", BoardColor.BLUE);
+
+        BoardId archive = addBoard("Archive");
+        service.addColumn("Inbox", "", BoardColor.GREEN, WipLimit.unlimited());
+        service.openBoard(home);
+        ColumnId inbox = equivalentColumnOn(archive);
+
+        service.copyCardToBoard(cardId, archive, inbox);
+
+        // A fresh service (no in-memory state) must see the copied card.
+        BoardService reopened = new BoardService(repository, history, settings);
+        reopened.openBoard(archive);
+        assertThat(reopened.board().findCard(createdCardIdIn(reopened, "Persist")))
+                .isPresent();
+    }
+
+    /** Finds the first card of the reopened archive board's first column. */
+    private CardId createdCardIdIn(BoardService reopened, String title) {
+        return reopened.board().columns().get(0).cards().stream()
+                .filter(card -> card.title().equals(title))
+                .findFirst()
+                .orElseThrow()
+                .id();
+    }
+
+    @Test
+    void copyCardToBoardRejectsTheActiveBoardAsTarget() {
+        BoardId home = addBoard("Home");
+        ColumnId homeColumn = service.addColumn("Todo", "", BoardColor.BLUE,
+                WipLimit.unlimited());
+        CardId cardId = service.addCard(homeColumn, "Self", "", BoardColor.BLUE);
+
+        assertThatThrownBy(() -> service.copyCardToBoard(cardId, home, homeColumn))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.moveCardToBoard(cardId, home, homeColumn))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void copyCardToBoardRejectsWipOverflowOnTheTargetColumn() {
+        BoardId home = addBoard("Home");
+        ColumnId homeColumn = service.addColumn("Todo", "", BoardColor.BLUE,
+                WipLimit.unlimited());
+        CardId moving = service.addCard(homeColumn, "Over", "", BoardColor.BLUE);
+
+        BoardId tight = addBoard("Tight");
+        ColumnId capped = service.addColumn("Full", "", BoardColor.GREEN, WipLimit.of(1));
+        service.addCard(capped, "Occupant", "", BoardColor.GREEN);
+        service.openBoard(home);
+
+        assertThatThrownBy(() -> service.moveCardToBoard(moving, tight, capped))
+                .isInstanceOf(WipLimitExceededException.class);
+        // The source card survives the failed transfer.
+        assertThat(service.board().findCard(moving)).isPresent();
+    }
+
+    @Test
+    void columnsOfHydratesOtherBoardsWithoutSwitchingTheActiveBoard() {
+        BoardId home = addBoard("Home");
+        service.addColumn("Todo", "", BoardColor.BLUE, WipLimit.unlimited());
+
+        BoardId archive = addBoard("Archive");
+        service.addColumn("Inbox", "", BoardColor.GREEN, WipLimit.unlimited());
+        service.openBoard(home); // reading columnsOf must not reset the active board
+
+        List<BoardColumn> inbox = service.columnsOf(archive);
+        assertThat(inbox).extracting(BoardColumn::title).containsExactly("Inbox");
+
+        // Reading another board's columns must NOT switch the active board.
+        assertThat(service.activeBoardId()).isEqualTo(home);
+        assertThat(service.board().columns())
+                .extracting(BoardColumn::title)
+                .containsExactly("Todo");
     }
 }

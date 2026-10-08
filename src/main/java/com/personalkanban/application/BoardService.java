@@ -53,6 +53,7 @@ import com.personalkanban.domain.board.BoardDescriptor;
 import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
 import com.personalkanban.domain.board.Card;
+import com.personalkanban.domain.board.CardAdded;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
@@ -675,6 +676,73 @@ public final class BoardService {
     }
 
     // ------------------------------------------------------------------
+    // Cross-board card transfer (move / copy to another board)
+    // ------------------------------------------------------------------
+
+    /**
+     * Columns of any catalogued board, read-only. Boards other than the
+     * active one are hydrated into a private aggregate, never installed as
+     * the active board, so {@link #snapshotOf()} and the undo stacks stay
+     * untouched.
+     */
+    public List<BoardColumn> columnsOf(BoardId boardId) {
+        requireInCatalog(boardId);
+        if (boardId.equals(activeBoard.id())) {
+            return activeBoard.columns();
+        }
+        Board target = new Board(boardId);
+        target.restore(repository.load(boardId));
+        return target.columns();
+    }
+
+    /**
+     * Copies a card to ANOTHER board, keeping title, description, color,
+     * due date, labels, notes and checklist. The process is re-matched by
+     * name on the target board (processes are board-local); time entries
+     * and precedence links are not transferred. The target board records
+     * an undo entry, so undoing there removes the copied card.
+     *
+     * @throws com.personalkanban.domain.exception.WipLimitExceededException
+     *         when the target column's WIP limit is already full.
+     */
+    public CardId copyCardToBoard(CardId cardId, BoardId targetBoardId, ColumnId targetColumnId) {
+        requireInCatalog(targetBoardId);
+        if (targetBoardId.equals(activeBoard.id())) {
+            throw new IllegalArgumentException(
+                    "Target board must differ from the active board");
+        }
+        Card source = activeBoard.findCard(cardId)
+                .orElseThrow(() -> new IllegalStateException("Card not found: " + cardId));
+
+        Board target = new Board(targetBoardId);
+        target.restore(repository.load(targetBoardId));
+        BoardMemento before = BoardMemento.capture(target);
+
+        CardAdded created = target.addCard(targetColumnId, source.title(), source.description(),
+                source.color(), source.dueDate(), source.labels(), source.notes(),
+                source.checklist(), matchedProcessIdOnTarget(source.processId(), target));
+        // Roll the aggregate back if persistence fails, like the
+        // regular commands do, so memory never diverges from storage.
+        try {
+            repository.save(targetBoardId, BoardMemento.capture(target));
+        } catch (RuntimeException failure) {
+            target.restore(before);
+            throw failure;
+        }
+        history.push(targetBoardId, before); // undo on the target board removes the copy
+        return created.cardId();
+    }
+
+    /**
+     * Moves a card to another board: copy to the target (undoable there)
+     * plus an undoable removal from the source board.
+     */
+    public void moveCardToBoard(CardId cardId, BoardId targetBoardId, ColumnId targetColumnId) {
+        copyCardToBoard(cardId, targetBoardId, targetColumnId);
+        removeCard(cardId);
+    }
+
+    // ------------------------------------------------------------------
     // Queries (read model for the UI)
     // ------------------------------------------------------------------
 
@@ -816,6 +884,21 @@ public final class BoardService {
     // ------------------------------------------------------------------
     // Internals
     // ------------------------------------------------------------------
+
+    /** Re-matches a process by name on the target board (processes are board-local). */
+    private ProcessId matchedProcessIdOnTarget(ProcessId sourceProcessId, Board target) {
+        if (sourceProcessId == null) {
+            return null;
+        }
+        return activeBoard.processList().stream()
+                .filter(process -> process.id().equals(sourceProcessId))
+                .findFirst()
+                .flatMap(sourceProcess -> target.processList().stream()
+                        .filter(candidate -> candidate.name().equals(sourceProcess.name()))
+                        .findFirst())
+                .map(Process::id)
+                .orElse(null);
+    }
 
     private void applySnapshot(BoardMemento target) {
         activeBoard.restore(target);

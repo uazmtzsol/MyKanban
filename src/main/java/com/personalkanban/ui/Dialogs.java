@@ -1,6 +1,8 @@
 package com.personalkanban.ui;
 
 import com.personalkanban.domain.board.BoardColor;
+import com.personalkanban.domain.board.BoardDescriptor;
+import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.LabelConventions;
@@ -596,6 +598,82 @@ final class Dialogs {
         dialog.setResultConverter(button ->
                 button == ButtonType.OK && combo.getValue() != null
                         ? combo.getValue().id()
+                        : null);
+        return dialog.showAndWait();
+    }
+
+    /** Result of the cross-board transfer dialog: mode + target board + column. */
+    record CardTransferForm(boolean copy, BoardId targetBoardId, BoardColumn targetColumn) {
+    }
+
+    /**
+     * Move-or-copy-to-another-board dialog: one action selector (move /
+     * copy), a board combo (every other board) and a column combo fed by
+     * the chosen board. Columns are lazy: switching the board refills the
+     * column list from {@code columnsProvider}.
+     */
+    Optional<CardTransferForm> cardTransferDialog(int selectedCount,
+                                                  List<BoardDescriptor> boards,
+                                                  BoardId activeBoardId,
+                                                  java.util.function.Function<BoardId, List<BoardColumn>> columnsProvider) {
+        ComboBox<BoardDescriptor> boardCombo = new ComboBox<>(
+                FXCollections.observableArrayList(boards));
+        boardCombo.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(BoardDescriptor descriptor) {
+                return descriptor == null ? "" : descriptor.name();
+            }
+
+            @Override
+            public BoardDescriptor fromString(String string) {
+                return null;
+            }
+        });
+        boards.stream()
+                .filter(descriptor -> !descriptor.id().equals(activeBoardId))
+                .findFirst()
+                .ifPresent(descriptor -> boardCombo.getSelectionModel().select(descriptor));
+
+        ComboBox<BoardColumn> columnCombo = new ComboBox<>();
+        columnCombo.setMaxWidth(Double.MAX_VALUE);
+        Runnable refillColumns = () -> {
+            BoardDescriptor chosen = boardCombo.getValue();
+            columnCombo.getItems().setAll(chosen == null
+                    ? List.<BoardColumn>of()
+                    : columnsProvider.apply(chosen.id()));
+            if (!columnCombo.getItems().isEmpty()) {
+                columnCombo.getSelectionModel().selectFirst();
+            }
+        };
+        refillColumns.run();
+        boardCombo.getSelectionModel().selectedItemProperty()
+                .addListener((obs, old, value) -> refillColumns.run());
+
+        ComboBox<String> actionCombo = new ComboBox<>();
+        actionCombo.getItems().addAll(i18n.text("card.transfer.move"),
+                i18n.text("card.transfer.copy"));
+        actionCombo.getSelectionModel().selectFirst();
+
+        Dialog<CardTransferForm> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("card.transfer.title"));
+        dialog.setHeaderText(i18n.text("card.transfer.header", selectedCount));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(new Label(i18n.text("card.transfer.action")), 0, 0);
+        grid.add(actionCombo, 1, 0);
+        grid.add(new Label(i18n.text("card.transfer.board")), 0, 1);
+        grid.add(boardCombo, 1, 1);
+        grid.add(new Label(i18n.text("card.transfer.column")), 0, 2);
+        grid.add(columnCombo, 1, 2);
+        dialog.getDialogPane().setContent(grid);
+
+        track(dialog);
+        dialog.setResultConverter(button ->
+                button == ButtonType.OK
+                        && boardCombo.getValue() != null && columnCombo.getValue() != null
+                        ? new CardTransferForm(
+                                actionCombo.getSelectionModel().getSelectedIndex() == 1,
+                                boardCombo.getValue().id(), columnCombo.getValue())
                         : null);
         return dialog.showAndWait();
     }
