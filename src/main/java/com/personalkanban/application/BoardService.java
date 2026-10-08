@@ -696,6 +696,61 @@ public final class BoardService {
     }
 
     /**
+     * Full-text card search on ANY catalogued board: case-insensitive
+     * substring match against title, description, notes, labels and
+     * checklist texts. Read-only — other boards are hydrated into a
+     * private aggregate and never become the active board. A blank query
+     * yields an empty list, so an empty filter field shows nothing instead
+     * of the whole board.
+     */
+    public List<Card> findCards(BoardId boardId, String query) {
+        requireInCatalog(boardId);
+        String needle = query == null ? "" : query.trim().toLowerCase();
+        if (needle.isEmpty()) {
+            return List.of();
+        }
+        Board board = boardId.equals(activeBoard.id())
+                ? activeBoard
+                : restoredPrivateBoard(boardId);
+        List<Card> hits = new ArrayList<>();
+        for (Card card : board.allCards()) {
+            if (matches(card, needle)) {
+                hits.add(card);
+            }
+        }
+        return hits;
+    }
+
+    private Board restoredPrivateBoard(BoardId boardId) {
+        Board target = new Board(boardId);
+        target.restore(repository.load(boardId));
+        return target;
+    }
+
+    private boolean matches(Card card, String needle) {
+        if (containsIgnoreCase(card.title(), needle)
+                || containsIgnoreCase(card.description(), needle)
+                || containsIgnoreCase(card.notes(), needle)) {
+            return true;
+        }
+        for (String label : card.labels()) {
+            if (containsIgnoreCase(label, needle)) {
+                return true;
+            }
+        }
+        for (ChecklistItem item : card.checklist()) {
+            if (containsIgnoreCase(item.text(), needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsIgnoreCase(String haystack, String needle) {
+        return haystack != null && haystack.toLowerCase().contains(needle);
+    }
+
+    /**
      * Copies a card to ANOTHER board, keeping title, description, color,
      * due date, labels, notes and checklist. The process is re-matched by
      * name on the target board (processes are board-local); time entries

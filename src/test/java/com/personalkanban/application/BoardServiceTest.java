@@ -591,4 +591,80 @@ class BoardServiceTest {
                 .extracting(BoardColumn::title)
                 .containsExactly("Todo");
     }
+
+    // ------------------------------------------------------------------
+    // Card search (phase B groundwork)
+    // ------------------------------------------------------------------
+
+    @Test
+    void findCardsMatchesTitlesNotesAndChecklistsCaseInsensitively() {
+        BoardId home = addBoard("Home");
+        ColumnId todo = service.addColumn("Todo", "", BoardColor.BLUE, WipLimit.unlimited());
+
+        CardId titled = service.addCard(todo, "Buy groceries", "", BoardColor.BLUE);
+        CardId noted = service.addCard(todo, "Call dentist", "", BoardColor.BLUE);
+        service.setCardNotes(noted, "mention the INVOICE number");
+        CardId checked = service.addCard(todo, "Plan trip", "", BoardColor.BLUE);
+        service.addChecklistItem(checked, "Renew passport");
+        service.addCard(todo, "Nothing here", "", BoardColor.BLUE);
+
+        assertThat(service.findCards(home, "inVoi")).extracting(Card::title)
+                .containsExactly("Call dentist");
+        assertThat(service.findCards(home, "GROCE")).extracting(Card::title)
+                .containsExactly("Buy groceries");
+        assertThat(service.findCards(home, "passPORT")).extracting(Card::title)
+                .containsExactly("Plan trip");
+        assertThat(service.findCards(home, "zebra")).isEmpty();
+    }
+
+    @Test
+    void findCardsMatchesLabelsAndDescriptions() {
+        BoardId home = addBoard("Home");
+        ColumnId todo = service.addColumn("Todo", "", BoardColor.BLUE, WipLimit.unlimited());
+
+        service.addCard(todo, "Tagged", "", BoardColor.BLUE, null, List.of("Reporte"));
+        service.addCard(todo, "Described", "yearly tax filing", BoardColor.BLUE);
+        service.addCard(todo, "Unrelated", "", BoardColor.BLUE);
+
+        assertThat(service.findCards(home, "reporte")).extracting(Card::title)
+                .containsExactly("Tagged");
+        assertThat(service.findCards(home, "Tax")).extracting(Card::title)
+                .containsExactly("Described");
+    }
+
+    @Test
+    void findCardsSearchesOtherBoardsWithoutSwitchingTheActiveBoard() {
+        BoardId home = addBoard("Home");
+        ColumnId todo = service.addColumn("Todo", "", BoardColor.BLUE, WipLimit.unlimited());
+        service.addCard(todo, "Home card", "", BoardColor.BLUE);
+
+        BoardId archive = addBoard("Archive");
+        ColumnId inbox = service.addColumn("Inbox", "", BoardColor.GREEN, WipLimit.unlimited());
+        service.addCard(inbox, "Ancient invoice", "", BoardColor.GREEN);
+        service.openBoard(home);
+
+        List<Card> hits = service.findCards(archive, "invoice");
+        assertThat(hits).extracting(Card::title).containsExactly("Ancient invoice");
+        // Searching must NOT switch the active board.
+        assertThat(service.activeBoardId()).isEqualTo(home);
+    }
+
+    @Test
+    void findCardsWithBlankQueryYieldsNoResults() {
+        BoardId home = addBoard("Home");
+        ColumnId todo = service.addColumn("Todo", "", BoardColor.BLUE, WipLimit.unlimited());
+        service.addCard(todo, "Anything", "", BoardColor.BLUE);
+
+        assertThat(service.findCards(home, "")).isEmpty();
+        assertThat(service.findCards(home, "   ")).isEmpty();
+        assertThat(service.findCards(home, null)).isEmpty();
+    }
+
+    @Test
+    void findCardsRejectsUnknownBoards() {
+        addBoard("Home");
+
+        assertThatThrownBy(() -> service.findCards(new BoardId("nope"), "x"))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }
