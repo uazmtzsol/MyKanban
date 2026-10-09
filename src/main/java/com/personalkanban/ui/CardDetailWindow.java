@@ -120,7 +120,7 @@ final class CardDetailWindow {
         layout.setPadding(new Insets(10));
 
         Scene scene = new Scene(layout, 920, 620);
-        scene.getStylesheets().add(themeManager.stylesheet());
+        scene.getStylesheets().addAll(themeManager.stylesheets());
         stage.setScene(scene);
         stage.setTitle(i18n.text("card.detail.title") + " \u2014 " + card.title());
 
@@ -553,7 +553,7 @@ final class CardDetailWindow {
         sheetLayout.setTop(caption);
         sheetLayout.getStyleClass().add("detail-window");
         Scene sheetScene = new Scene(sheetLayout, 640, 560);
-        sheetScene.getStylesheets().add(themeManager.stylesheet());
+        sheetScene.getStylesheets().addAll(themeManager.stylesheets());
         sheet.setScene(sheetScene);
         sheet.show();
     }

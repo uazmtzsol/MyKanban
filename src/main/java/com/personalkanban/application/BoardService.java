@@ -291,6 +291,39 @@ public final class BoardService {
         execute(new SetColumnBackgroundCommand(columnId, backgroundColor));
     }
 
+    // ------------------------------------------------------------------
+    // Color scheme (session 11, S11-2): user-overridable board colors
+    // ------------------------------------------------------------------
+
+    /**
+     * The effective color scheme: stored overrides merged over the
+     * developer defaults (missing slots keep the default).
+     */
+    public ThemeColors themeColors() {
+        java.util.Map<String, String> stored = new java.util.LinkedHashMap<>();
+        for (ThemeColors.Slot slot : ThemeColors.Slot.values()) {
+            for (boolean dark : new boolean[]{false, true}) {
+                String key = ThemeColors.storageKey(slot, dark);
+                settings.get(key).ifPresent(value -> stored.put(key, value));
+            }
+        }
+        return ThemeColors.of(stored);
+    }
+
+    /** Persists one scheme slot (null or blank clears it back to the default). */
+    public void setThemeColor(ThemeColors.Slot slot, boolean dark, String hex) {
+        settings.put(ThemeColors.storageKey(slot, dark), hex == null ? "" : hex);
+    }
+
+    /** Restores every scheme slot of both themes to the developer defaults. */
+    public void resetThemeColors() {
+        for (ThemeColors.Slot slot : ThemeColors.Slot.values()) {
+            for (boolean dark : new boolean[]{false, true}) {
+                settings.put(ThemeColors.storageKey(slot, dark), "");
+            }
+        }
+    }
+
     public void removeColumn(ColumnId columnId) {
         execute(new RemoveColumnCommand(columnId));
     }

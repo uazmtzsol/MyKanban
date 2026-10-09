@@ -96,7 +96,7 @@ final class AttachmentsWindow {
         layout.getStyleClass().add("detail-window");
 
         Scene scene = new Scene(layout, 680, 460);
-        scene.getStylesheets().add(themeManager.stylesheet());
+        scene.getStylesheets().addAll(themeManager.stylesheets());
         stage.setScene(scene);
         stage.setTitle(i18n.text("attachments.title", cardTitle));
 

@@ -49,7 +49,7 @@ final class ShortcutsHelpWindow {
             new Row("Ctrl+Q", "help.exit"),
             new Row("F1", "help.show.shortcuts"));
 
-    static void show(I18n i18n, String stylesheet) {
+    static void show(I18n i18n, java.util.List<String> stylesheets) {
         if (openWindow != null) {
             openWindow.toFront();
             openWindow.requestFocus();
@@ -92,13 +92,13 @@ final class ShortcutsHelpWindow {
         layout.getStyleClass().add("detail-window");
 
         javafx.scene.Scene scene = new javafx.scene.Scene(layout, 460, 420);
-        scene.getStylesheets().add(stylesheet);
+        scene.getStylesheets().addAll(stylesheets);
         stage.setScene(scene);
         stage.setTitle(i18n.text("help.shortcuts.title"));
         stage.show();
     }
 
-    static void showGlobalShortcuts(GlobalShortcuts shortcuts, I18n i18n, String stylesheet) {
+    static void showGlobalShortcuts(GlobalShortcuts shortcuts, I18n i18n, java.util.List<String> stylesheets) {
         if (openWindow != null) {
             openWindow.toFront();
             openWindow.requestFocus();
@@ -142,7 +142,7 @@ final class ShortcutsHelpWindow {
         layout.getStyleClass().add("detail-window");
 
         javafx.scene.Scene scene = new javafx.scene.Scene(layout, 460, 420);
-        scene.getStylesheets().add(stylesheet);
+        scene.getStylesheets().addAll(stylesheets);
         stage.setScene(scene);
         stage.setTitle(i18n.text("shortcut.settings.title"));
         stage.show();

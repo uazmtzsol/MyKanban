@@ -29,7 +29,7 @@ public class Main extends Application {
             BoardController controller = new BoardController(context);
 
             Scene scene = new Scene(controller.root(), 1200, 720);
-            scene.getStylesheets().add(context.themeManager().stylesheet());
+            scene.getStylesheets().addAll(context.themeManager().stylesheets());
             controller.bindScene(scene);
 
             stage.titleProperty().bind(controller.titleProperty());

@@ -4,6 +4,7 @@ import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.CardViewSettings;
 import com.personalkanban.application.GlobalShortcuts;
+import com.personalkanban.application.ThemeColors;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.BoardDescriptor;
@@ -231,6 +232,7 @@ public final class BoardController {
 
     public void bindScene(Scene scene) {
         undoRedo.bindScene(scene);
+        applyThemeOverride();
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+1"),
                 () -> onSetBoardCardViewMode(CardViewSettings.Mode.TITLE_ONLY));
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+2"),
@@ -1292,10 +1294,7 @@ public final class BoardController {
         // A new database carries its own ui.shortcuts value.
         this.shortcuts = service.globalShortcuts();
         rebuildAll();
-        Scene scene = root.getScene();
-        if (scene != null) {
-            scene.getStylesheets().setAll(themeManager.stylesheet());
-        }
+        applyThemeOverride();
     }
 
     private void onNewDatabase() {
@@ -1566,9 +1565,22 @@ public final class BoardController {
     private void onToggleDarkMode() {
         themeManager.toggle();
         context.saveTheme(themeManager.theme());
+        applyThemeOverride();
+    }
+
+    /**
+     * Session 11 (S11-2): (re)generates the user color-scheme override for
+     * the active theme and re-applies the full stylesheet list to the scene.
+     * A write failure only means the built-in theme keeps rendering.
+     */
+    private void applyThemeOverride() {
+        ThemeColors colors = service.themeColors();
+        boolean dark = themeManager.isDark();
+        themeManager.overrideStylesheet(ThemeOverride.write(
+                com.personalkanban.Main.dataDirectory(), colors, dark));
         Scene scene = root.getScene();
         if (scene != null) {
-            scene.getStylesheets().setAll(themeManager.stylesheet());
+            scene.getStylesheets().setAll(themeManager.stylesheets());
         }
     }
 
@@ -1584,7 +1596,7 @@ public final class BoardController {
 
     /** Opens (or focuses) the fixed-shortcuts reference window (F1). */
     private void onShowShortcutsHelp() {
-        ShortcutsHelpWindow.show(i18n, themeManager.stylesheet());
+        ShortcutsHelpWindow.show(i18n, themeManager.stylesheets());
     }
 
     /** Opens the editable keyboard-shortcuts dialog (File → Keyboard shortcuts). */
@@ -1715,9 +1727,12 @@ public final class BoardController {
                 });
     }
 
-    /** Preferences: color schemes, priority and label colors. */
+    /** Preferences: color scheme, priority and label colors. */
     private void onShowPreferences() {
         new PreferencesDialog(i18n, service, themeManager.isDark()).show();
+        // The dialog may have changed the scheme: repaint with the new colors.
+        applyThemeOverride();
+        refresh();
     }
 
     // ------------------------------------------------------------------
