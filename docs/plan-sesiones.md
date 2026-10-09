@@ -1,8 +1,9 @@
 # Plan por sesiones — mejoras adicionales de Personal Kanban
 
-> Estado: **Sesión 10 en curso — 4 características nuevas pedidas por el usuario
-> (ver más abajo) tienen prioridad sobre las fases B/C/D, que quedan en espera**.
-> Fase A ya está completada y verificada (suite verde, 305 tests).
+> Estado: **Sesión 10 completada — las 4 características pedidas están hechas,
+> testeadas y con push (una por commit); solo falta tu prueba manual**.
+> Las fases B/C/D siguen en espera. Suite **367/367 OK** (1 skip: endpoint
+> PHP sin servidor). Detalle y hallazgos en [`PLAN.md`](../PLAN.md) → «Sesión 10».
 > Este documento es la cinta de progreso del trabajo: explica qué se va a hacer,
 > en qué orden, con qué criterio, y sirve para reanudar si la sesión se
 > interrumpe.
@@ -378,10 +379,10 @@ Criterios de hecho:
 
 | Fase | Planificada | En desarrollo | Hecha | Pendiente para revisión | Notas |
 |---|---|---|---|---|---|
-| **S10-F1 — Navegación con teclado** | sí | sí | no | sí | prioridad actual; reemplaza los botones de la toolbar |
-| **S10-F2 — Resumen vs. extensa** | sí | no | no | sí | causa raíz localizada en `MarkdownSummary` (cuenta bloques, no líneas) |
-| **S10-F3 — Exportar tarjeta** | sí | no | no | sí | txt/markdown/pdf con secciones opcionales |
-| **S10-F4 — Archivar/borrar tarjetas** | sí | no | no | sí | incluye limpieza de adjuntos huérfanos |
+| **S10-F1 — Navegación con teclado** | sí | sí | **sí** (`c0ed25f`) | prueba manual | filtros de escena, `CardNavigator`, botones fuera; +20 tests |
+| **S10-F2 — Resumen vs. extensa** | sí | sí | **sí** (`5193d63`) | prueba manual | `LineBudget` (líneas+caracteres) y `\n` entre bloques; +17 tests |
+| **S10-F3 — Exportar tarjeta** | sí | sí | **sí** (`ac5c62a`) | prueba manual | `CardExporter` + `CardPdfWriter`; diálogo con secciones/notas/formato; +14 tests |
+| **S10-F4 — Archivar/borrar tarjetas** | sí | sí | **sí** (`5dc2882`) | prueba manual | etiqueta `Archivada` + papelera de adjuntos + limpieza; +11 tests |
 | Fase A — Navegación por teclado | sí | sí | **sí** (commit `6225456` + `e948e44`, suite verde) | no | completada y verificada en la sesión 9/10 |
 | Fase B — Búsqueda en tablero activo | sí | no | no | sí | depende de que A esté revisada y aprobada |
 | Fase C — Visor de copias de conflicto | sí | no | no | sí | después de B |

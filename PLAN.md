@@ -4,7 +4,9 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Última actualización: 2026-10-07 · **Sesión 9 (continuación):** mejoras adicionales recomendadas documentadas en [`docs/adiciones-propuestas.md`](docs/adiciones-propuestas.md) (**sin implementar**, para revisar al probar); plan de trabajo formalizado en [`docs/plan-sesiones.md`](docs/plan-sesiones.md) con fases A-B-C-D y checklist para continuar si se interrumpe; suite **236/236 tests OK** (1 skipped: `PhpSyncApiEndpointTest`, salta si no hay servidor PHP). Mejoras ya hechas en Sesión 9: sync §4/§4.1 (`SyncMerge`, `SyncService`, copias de conflicto), `SyncMergePropertyTest` (9 propiedades), B6 (clic en chip = filtrar) + `LabelChipFilterTest`, D3 (CI `.github/workflows/ci.yml`), manual de usuario y mejoras propuestas. Corregido un **NPE latente** del merge (columna huérfana). Pendiente: planificación y desarrollo de las mejoras recommendadas por fases (primero la Fase A).*
+*Última actualización: 2026-10-09 · **Sesión 10:** cuatro características nuevas pedidas de golpe por el usuario (navegación con teclado, resumen vs. extensa de la tarjeta, exportar tarjeta, limpieza/archivado) — **las 4 hechas**, una por commit con push; ver la sección «Sesión 10» al final. Suite **367/367 OK** (1 skip: endpoint PHP sin servidor).*
+
+*Sesión 9 (2026-10-07): mejoras adicionales recomendadas documentadas en [`docs/adiciones-propuestas.md`](docs/adiciones-propuestas.md) (**sin implementar**, para revisar al probar); plan de trabajo formalizado en [`docs/plan-sesiones.md`](docs/plan-sesiones.md) con fases A-B-C-D y checklist para continuar si se interrumpe; suite **236/236 tests OK** (1 skipped: `PhpSyncApiEndpointTest`, salta si no hay servidor PHP). Mejoras ya hechas en Sesión 9: sync §4/§4.1 (`SyncMerge`, `SyncService`, copias de conflicto), `SyncMergePropertyTest` (9 propiedades), B6 (clic en chip = filtrar) + `LabelChipFilterTest`, D3 (CI `.github/workflows/ci.yml`), manual de usuario y mejoras propuestas. Corregido un **NPE latente** del merge (columna huérfana). Pendiente: planificación y desarrollo de las mejoras recommendadas por fases (primero la Fase A).*
 
 ---
 
@@ -402,3 +404,74 @@ Migraciones: crear `V<n>__desc.sql` **y** registrar en
 - **Pendiente:** prueba manual del usuario (sync con dos equipos, copias de
   conflicto, chip de etiqueta) y decidir qué mejoras de
   `docs/mejoras-propuestas.md` entran en la próxima sesión.
+
+## Sesión 10 — las 4 características pedidas (2026-10-09)
+
+> El usuario mandó de golpe cuatro peticiones. Se planificaron en
+> [`docs/plan-sesiones.md`](docs/plan-sesiones.md) (sección «Sesión 10») y se
+> desarrollaron **una por una, con commit + push por característica**.
+
+1. **F1 — Navegación completa con teclado, sin botones** (`c0ed25f`).
+   Fuera los tres botones de navegación de la toolbar. El mapa completo vive
+   en un **filtro de eventos de la escena** (`onBoardKeyPressed`), no en
+   aceleradores: un acelerador de JavaFX se evalúa *después* de que el
+   control con foco trate la tecla, y esa es la razón por la que «con el
+   teclado no se tenía esa funcionalidad» mientras los botones
+   funcionaban. Teclas: `↓/↑` dentro de la columna (con vuelta),
+   `Alt+←/→` entre columnas (ignora columnas vacías), `Ctrl+←/→` entre
+   tableros, `1`–`9` = posición en la columna actual, `Enter` edita,
+   `Alt+I`/`Alt+U` = flags ★/!, `Delete` = borrar con confirmación (el
+   foco queda en la tarjeta que ocupa su lugar). La política está en
+   **`ui/CardNavigator`** (Java puro, 13 tests) y el cableado en
+   `KeyboardNavigationTest` (7). Al escribir en un campo o dentro de
+   listas/combos las teclas no se secuestran; la vista de procesos
+   conserva sus teclas propias.
+2. **F2 — El resumen de 3 renglones y la extensa se veían iguales**
+   (`5193d63`). Causa raíz: `MarkdownSummary` contaba **bloques** del AST,
+   no líneas — un párrafo de 10 saltos era «1 bloque» y se pintaba entero.
+   Ahora el presupuesto es de **líneas y caracteres** (`ui/markdown/
+   LineBudget`, 8 tests) con corte y `…`, y los bloques/viñetas se
+   separan con `\n` explícito: **`TextFlow` coloca a sus hijos en línea**,
+   así que sin ese `\n` dos párrafos o dos viñetas salían pegados en UNA
+   fila. Preview = 3 filas ≈ 120 caracteres; `FULL` sin límites.
+3. **F3 — Exportar tarjeta txt/markdown/pdf** (`ac5c62a`). Diálogo con
+   secciones (datos, lista de tareas, notas, registros de tiempo), notas
+   seleccionables (**todas por defecto**) y formato. Contenido generado por
+   **`ui/CardExporter`** (puro, 8 tests); el PDF es **texto seleccionable**
+   paginado en A4 (`ui/pdf/CardPdfWriter`, PDFBox puro, 6 tests) — no una
+   captura. Acceso: menú contextual → «Exportar tarjeta…».
+4. **F4 — Limpieza de tableros** (`5dc2882`). **Archivar** = etiqueta
+   reservada `Archivada` + casilla «Mostrar archivadas» en la barra de
+   filtro (sin migración; el gate está en `matchesProcessFilter`, el único
+   filtro por el que pasan render y teclado). **Borrar** = cada ruta de
+   borrado (tarjeta, selección múltiple, vaciar/borrar columna, borrar
+   tablero) mueve los adjuntos a `attachments-trash/<id>` ANTES de borrar
+   la fila, y `refresh()` los **restaura si la tarjeta vuelve (Ctrl+Z)** —
+   un borrado directo habría perdido archivos al deshacer. **Archivo →
+   Limpiar archivos adjuntos huérfanos…** borra las carpetas cuya tarjeta
+   no existe en ningún tablero (y no toca nada si un tablero no se lee).
+   Notas y checklist van con la fila (ya estaban en la BD).
+
+**Hallazgos de la sesión (todos corregidos salvo el último):**
+
+- Los atajos guardados (`ui.shortcuts`) **se escribían pero nunca se
+  leían**: `BoardService.globalShortcuts()` no tenía ningún llamante, así
+  que reiniciar la app devolvía todo a los valores por defecto.
+- El bucle de visibilidad del menú contextual de tarjeta ocultaba **todos**
+  los ítems «plain» — incluido «Mover/copiar a otro tablero» y los
+  separadores — hasta que la tarjeta tenía un override de vista.
+- `TextFlow` fluye en línea: los bloques de la tarjeta sin `\n` explícito
+  se dibujaban pegados (visible desde F2).
+- Un `"\R"` escrito como `"\R"` en Java no compila (el separador de
+  líneas del PDF tiene que ser `"\\R"`).
+- **Conocido, sin tocar:** en la **vista de procesos** las archivadas siguen
+  visibles (el grafo se calcula con todas las tarjetas); las teclas fijas
+  nuevas no están listadas en la ayuda F1 (solo las configurables); el
+  toggle «mostrar archivadas» es de sesión, no persiste.
+
+**Estado:** suite **367/367 OK** (1 skip), ArchitectureTest e I18nCoverage
+en verde, 22 claves i18n nuevas en los 5 bundles, todo commiteado y
+push-eado (`a049298` plan, `c0ed25f`, `5193d63`, `ac5c62a`, `5dc2882`).
+**Pendiente:** la prueba manual del usuario de las 4 características (la
+suite no puede arrancar el toolkit JavaFX ni el diálogo real); las fases
+B/C/D del plan de sesión siguen en espera.
