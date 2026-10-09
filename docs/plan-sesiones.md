@@ -1,9 +1,100 @@
 # Plan por sesiones — mejoras adicionales de Personal Kanban
 
-> Estado: **plan activo; código de la Fase A hecho en esta sesión; pendiente compilar y probar en tu entorno**.
+> Estado: **Sesión 10 en curso — 4 características nuevas pedidas por el usuario
+> (ver más abajo) tienen prioridad sobre las fases B/C/D, que quedan en espera**.
+> Fase A ya está completada y verificada (suite verde, 305 tests).
 > Este documento es la cinta de progreso del trabajo: explica qué se va a hacer,
 > en qué orden, con qué criterio, y sirve para reanudar si la sesión se
 > interrumpe.
+
+## Sesión 10 — cuatro características nuevas (pedido del usuario, prioridad actual)
+
+> Pedidas el 2026-10-09. Tienen prioridad sobre las fases B/C/D de este plan
+> (que siguen documentadas más abajo, sin empezar). Cada una se desarrolla,
+> se prueba, se hace commit + push y se documenta su estado antes de pasar a
+> la siguiente.
+
+### F1 — Navegación con teclado completa (y fuera los botones de la toolbar)
+
+Motivo del usuario: con los **botones** de la barra de herramientas la
+navegación funciona (la tarjeta se resalta y se edita), pero esos botones no
+se quieren; se quiere **teclado**, y hoy el teclado no da esa funcionalidad.
+
+Teclas a implementar:
+
+| Tecla | Acción |
+|---|---|
+| `↓` | Siguiente tarjeta de la columna actual (si estaba en la última, la primera) |
+| `↑` | Tarjeta anterior (si estaba en la primera, la última) |
+| `Alt+→` | Primera tarjeta de la siguiente columna (si estaba en la última, la primera) |
+| `Alt+←` | Primera tarjeta de la columna anterior (si estaba en la primera, la última) |
+| `Ctrl+→` | Primera tarjeta de la primera columna del **siguiente tablero** |
+| `Ctrl+←` | Primera tarjeta de la primera columna del tablero anterior |
+| `1`…`9` | Selecciona la tarjeta en esa posición de la columna actual |
+| `Enter` | Edita la tarjeta seleccionada |
+| `Alt+I` | Alterna la etiqueta «importante» en la tarjeta seleccionada |
+| `Alt+U` | Alterna la etiqueta «urgente» en la tarjeta seleccionada |
+| `Delete` | Borra la tarjeta seleccionada **con confirmación** |
+
+Criterios de hecho:
+
+- Quitar los tres botones de navegación de la toolbar (`←`, `→`, `↵`).
+- El manejo pasa a un **filtro de eventos de la escena** (no solo
+  aceleradores): así las teclas funcionan **sin importar qué control tenga
+  el foco**, salvo cuando se está escribiendo en un campo de texto (ahí no
+  se secuestran las teclas).
+- `←`/`→` siguen existiendo como atajo configurable (siguiente/anterior
+  tarjeta visible del tablero completo), coexistiendo con las teclas nuevas.
+- No romper el diálogo de atajos (Ayuda → Atajos de teclado) ni el guardado
+  de atajos (`ui.shortcuts`).
+- Tests: lógica de navegación testeable sin JavaFX + comprobaciones de
+  cableado (source-level, como `CardKeyboardFocusTest`).
+- i18n en los 4 idiomas para cualquier texto nuevo.
+
+### F2 — Las tarjetas en modo «resumen (3 renglones)» y «extensa» se ven iguales
+
+Causa raíz encontrada durante la planificación: `MarkdownSummary.render(md,
+maxLines)` cuenta **bloques** del AST, no líneas visibles. Una descripción
+de un solo párrafo con 10 saltos de línea es *un* bloque → el modo
+`TITLE_PREVIEW` (3 líneas) la pinta entera, idéntico a `FULL`.
+
+Corrección: contar líneas visibles (saltos `\n` incluidos), cortar en 3 y
+marcar el corte con `…` en el modo resumen. `FULL` sigue pintando todo.
+Tests unitarios nuevos sobre `MarkdownSummary`.
+
+### F3 — Exportar una tarjeta (txt, markdown, pdf)
+
+Exporta una tarjeta con las secciones marcadas por el usuario:
+
+1. **Datos**: título, descripción, fecha límite, etiquetas.
+2. **Lista de tareas** (checklist con estado `[x]`/`[ ]`).
+3. **Notas** — con selección de *qué* notas exportar (por defecto todas).
+   Las notas son un texto plano; se permite elegir rango/líneas.
+4. **Registros de tiempo**: `inicio – fin : nota`.
+
+Formatos: **txt**, **markdown** y **pdf** (reutilizando PDFBox, como el
+exportador de tablero). Diálogo de opciones (secciones + formato), guardado
+con `FileChooser` (carpeta recordada `io.lastdir`). Accesible desde el menú
+de la tarjeta y/o el diálogo de detalle.
+
+Criterios de hecho: generación de txt/md testeable sin JavaFX (clase
+pura en `application` o `ui` sin dependencias de escena), i18n completa,
+ArchitectureTest en verde.
+
+### F4 — Limpieza de tableros: archivar y borrar tarjetas
+
+- **Archivar**: revisar la viabilidad de ocultar tarjetas que ya no interesan
+  (p. ej. terminadas) sin borrarlas. Decisión de diseño documentada aquí
+  antes de implementar (posible etiqueta `#archivado` + filtro, o campo
+  nuevo; sin migración de esquema si se puede evitar).
+- **Borrado real**: borrar tarjetas que ya no sirven, **incluidos sus
+  archivos adjuntos** (carpeta de adjuntos del programa) y sus notas —
+  comprobar que `AttachmentStore` limpia los archivos al borrar la tarjeta
+  y arreglarlo si no lo hace.
+- Herramienta de mantenimiento: revisar/borrar adjuntos huérfanos
+  (archivos en la carpeta de adjuntos sin tarjeta que los referencie).
+
+## Fases originales (en espera hasta que el usuario diga lo contrario)
 
 ## Qué vamos a hacer
 
@@ -170,7 +261,11 @@ Criterios de hecho:
 
 | Fase | Planificada | En desarrollo | Hecha | Pendiente para revisión | Notas |
 |---|---|---|---|---|---|
-| Fase A — Navegación por teclado | sí | sí | no (código + i18n hechos; compile/test/manual pendientes) | sí | navegación por teclado, diálogo de atajos habilitado desde Ayuda, claves completas; pendiente compilar, ejecutar tests (incl. I18nCoverageTest) y probar manualmente |
+| **S10-F1 — Navegación con teclado** | sí | sí | no | sí | prioridad actual; reemplaza los botones de la toolbar |
+| **S10-F2 — Resumen vs. extensa** | sí | no | no | sí | causa raíz localizada en `MarkdownSummary` (cuenta bloques, no líneas) |
+| **S10-F3 — Exportar tarjeta** | sí | no | no | sí | txt/markdown/pdf con secciones opcionales |
+| **S10-F4 — Archivar/borrar tarjetas** | sí | no | no | sí | incluye limpieza de adjuntos huérfanos |
+| Fase A — Navegación por teclado | sí | sí | **sí** (commit `6225456` + `e948e44`, suite verde) | no | completada y verificada en la sesión 9/10 |
 | Fase B — Búsqueda en tablero activo | sí | no | no | sí | depende de que A esté revisada y aprobada |
 | Fase C — Visor de copias de conflicto | sí | no | no | sí | después de B |
 | Fase D — Backup simple | sí | no | no | sí | después de C |
