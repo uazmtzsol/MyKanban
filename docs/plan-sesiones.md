@@ -1,19 +1,116 @@
+> Estado: **Sesión 11 en curso** (pedido del usuario el 2026-10-09). Sesión 10
+> completada y documentada abajo. Este documento es la cinta de progreso:
+> qué se hará, en qué orden, con qué criterio, y sirve para reanudar si la
+> sesión se interrumpe.
+
 # Plan por sesiones — mejoras adicionales de Personal Kanban
 
-> Estado: **Sesión 10 completada — las 4 características pedidas están hechas,
-> testeadas y con push (una por commit); solo falta tu prueba manual**.
-> Las fases B/C/D siguen en espera. Suite **367/367 OK** (1 skip: endpoint
-> PHP sin servidor). Detalle y hallazgos en [`PLAN.md`](../PLAN.md) → «Sesión 10».
-> Este documento es la cinta de progreso del trabajo: explica qué se va a hacer,
-> en qué orden, con qué criterio, y sirve para reanudar si la sesión se
-> interrumpe.
+## Sesión 11 — seis correcciones/mejoras (pedido del usuario, prioridad actual)
 
-## Sesión 10 — cuatro características nuevas (pedido del usuario, prioridad actual)
+> Pedidas el 2026-10-09. Cada punto se desarrolla, se prueba, se documenta su
+> estado y se hace commit + push **antes** de pasar al siguiente.
 
-> Pedidas el 2026-10-09. Tienen prioridad sobre las fases B/C/D de este plan
-> (que siguen documentadas más abajo, sin empezar). Cada una se desarrolla,
-> se prueba, se hace commit + push y se documenta su estado antes de pasar a
-> la siguiente.
+### S11-1 — Quitar la imagen de fondo (toda la funcionalidad)
+
+El usuario no la va a usar: eliminar completamente.
+
+- `ui/BackgroundFiles` (+ test `BackgroundFilesTest`).
+- En `BoardController`: `backgroundSpec`, `applyBoardBackground`,
+  `paintBoardRoot`, `paintPlainBoardRoot`, `dimmedImageUri`, la migración de
+  arranque (`repairSpec`) y el manejo en `onShowPreferences`. Sin la imagen
+  inline, el color del `.root` vuelve a gobernar el CSS del tema (como antes
+  de la sesión 4).
+- `PreferencesDialog`: pestaña «Fondo» completa + `BackgroundChoice` +
+  firma `show(seed, spec)` → `show()` sin parámetros ni retorno.
+- `BoardService`: `background()/setBackground()` y
+  `boardBackgroundOf/setBoardBackground` (+ claves `ui.background*`).
+- i18n: `prefs.background.*`, `prefs.tab.background` (5 bundles).
+- Tests: `BackgroundFilesTest`, `BoardBackgroundCssTest`,
+  `SessionFourServiceTest.backgroundPreferenceRoundTripsAndClears`.
+- **NO tocar** el color de fondo de columna (`column.background`, otra
+  característica).
+
+### S11-2 — Esquema de colores: arreglo del modo obscuro + personalización
+
+Motivo del usuario: en modo obscuro «el texto es gris sobre un fondo muy
+obscuro». Arreglar contraste **y** hacer el esquema editable.
+
+1. **Contraste del tema obscuro** (dark.css): aclarar los grises de texto
+   (#9ca3af → #c3cbd6/#b6bec9, banderas apagadas #4c5568 → #6b768c).
+2. **Esquema personalizable** con valores por defecto:
+   - Nuevo modelo puro `application/ThemeColors`: slots `bg`, `column`,
+     `card`, `text`, `selected` × dos temas; almacenamiento
+     `ui.scheme.<slot>.<theme>`; vacío = default.
+   - `BoardService`: `schemeColor`, `setSchemeColor`, `resetScheme`.
+   - UI: sección «Esquema de colores» en Preferencias → Apariencia, con
+     pickers por slot y tema, **vista previa en vivo** (mini-tablero con una
+     tarjeta «seleccionada») y botón **Restaurar valores por defecto**.
+   - El color `selected` personaliza el resaltado de la **tarjeta actualmente
+     seleccionada** (confirmado con el usuario: es la tarjeta, que con S11-5
+     se marca al hacer clic).
+   - Aplicación: CSS generado (`ui/ThemeOverride`, puro y testeable)
+     sobreañadido a la hoja del tema en la escena principal y en las
+     ventanas secundarias.
+3. Tests puros de `ThemeColors`/`ThemeOverride` + comprobación de cableado.
+
+### S11-3 — Bug: markdown en una nota crea varias notas
+
+Causa raíz: `CardNotes` usa `## ` como separador de notas; un `## ` del
+cuerpo (markdown) crea una nota nueva. Decisión de diseño: **marcador nuevo
+que el markdown ignora** — `<!--pk-note: Título-->` — con parseo
+retrocompatible: si el texto no tiene marcadores nuevos, se usa el split
+legado por `## `; `serialize()` siempre escribe el formato nuevo. Los cuerpos
+con subtítulos `## ` sobreviven intactos. Tests en `CardNotesTest`.
+
+### S11-4 — Gestión de etiquetas (alcance: TODOS los tableros, confirmado)
+
+- Listar etiquetas en uso (todos los tableros) + predefinidas
+  (Urgente/Importante/Archivada) marcadas como no editables/no borrables.
+- **Renombrar**: propagado a todas las tarjetas de todos los tableros
+  (identidad sin distinguir mayúsculas: «et1» = «ET1»); validaciones: nombre
+  válido, sin colisión (case-insensitive) con existente ni con predefinida;
+  migra la regla de colores de la etiqueta si existe.
+- **Borrar**: quita la etiqueta de todas las tarjetas de todos los tableros,
+  con confirmación; borra su regla de colores.
+- Dominio: `Board.renameLabel/removeLabelEverywhere` + comandos
+  `RenameLabelCommand`/`RemoveLabelCommand`; servicio itera los tableros del
+  catálogo (el activo vía `execute()` = deshacerable; el resto cargando,
+  mutando y guardando cada tablero — el deshacer no cubre los no activos,
+  decisión aceptada por el usuario).
+- Diálogo «Gestionar etiquetas…» desde el menú Tablero.
+- **Atajo sugerido e implementado: `Alt+E`** (E de etiquetas; libre respecto a
+  Alt+I/Alt+U/Alt+←/→): abre un menú emergente sobre la tarjeta con foco con
+  todas las etiquetas del vocabulario en casillas de verificación
+  (añadir/quitar sin entrar a la edición). Fijo como Alt+I/Alt+U.
+
+### S11-5 — Clic en una tarjeta = tarjeta «actualmente seleccionada»
+
+Un clic simple (fuera del modo selección múltiple) marca la tarjeta como
+seleccionada/enfocada (`cardFocused` + `requestFocus` → resaltado
+`.card:focused`, con el color de S11-2). Así el teclado (Enter, Delete,
+Alt+I/U/E) actúa sobre la tarjeta en la que se hizo clic.
+
+### S11-6 — Excepción al abrir «Ayuda → Personalizar atajos de teclado»
+
+Causa raíz encontrada: `KeyboardShortcutsDialog` construye las filas con el
+nombre i18n de la acción, y la celda de la lista llama
+`GlobalShortcuts.Action.fromStorageNameOrThrow(...)`, que solo reconoce los
+nombres de almacenamiento («next», «prev»…) y **revienta** con el nombre de
+enum («NEXT_CARD») o la clave i18n al pintar. Arreglo en dos frentes:
+`fromStorageNameOrThrow/isKnownActionName` aceptan nombre de enum O de
+almacenamiento (tolerante, con tests), y el diálogo se reescribe para llevar
+el enum directamente en la fila sin re-parsear nombres.
+
+### Criterios comunes de la sesión
+
+- i18n completa (5 bundles) para textos nuevos; ArchitectureTest e
+  I18nCoverageTest en verde; commit + push por punto; documentar estado y
+  hallazgos tras cada uno.
+
+## Sesión 10 — cuatro características nuevas (pedido del usuario)
+
+> Pedidas el 2026-10-09. Completadas: navegación con teclado, resumen de 3
+> renglones, exportar tarjeta, archivar/borrar. Detalle abajo.
 
 ### F1 — Navegación con teclado completa (y fuera los botones de la toolbar)
 
@@ -93,7 +190,7 @@ Criterios de hecho:
 Causa raíz encontrada durante la planificación: `MarkdownSummary.render(md,
 maxLines)` cuenta **bloques** del AST, no líneas visibles. Una descripción
 de un solo párrafo con 10 saltos de línea es *un* bloque → el modo
-`TITLE_PREVIEW` (3 líneas) la pinta entera, idéntico a `FULL`.
+`TITLE_PREVIEW` (3 líneas) la pinta entera, idéntica a `FULL`.
 
 Corrección: contar líneas visibles (saltos `\n` incluidos), cortar en 3 y
 marcar el corte con `…` en el modo resumen. `FULL` sigue pintando todo.
@@ -178,7 +275,9 @@ ArchitectureTest en verde.
 
 **Decisión de diseño (archivar):** implementado como **etiqueta reservada
 `Archivada`** (`Card.LABEL_ARCHIVED`) + casilla «Mostrar tarjetas
-archivadas» en la barra de filtro. Sin migración de esquema: archivar esun toggle de etiqueta (deshacible, sincronizable, exportable) y lo que oculta es la vista. El gate vive en un solo sitio —
+archivadas» en la barra de filtro. Sin migración de esquema: archivar es
+un toggle de etiqueta (deshacible, sincronizable, exportable) y lo que oculta
+es la vista. El gate vive en un solo sitio —
 `BoardController.matchesProcessFilter` — por el que pasan tanto el
 renderizado como el navegador por teclado, así que las flechas y los
 dígitos no aterrizan en una tarjeta oculta.
@@ -265,9 +364,10 @@ que ya existe:
 
 ### Fase A — Navegación por teclado básica
 
-Objetivo: que sea posible movirse por las tarjetas del tablero con el teclado
-(sin depender solo del ratón), editar la tarjeta con foco y salir del modo de
-edición, sin que la app se olvide de dónde está el foco.
+Objetivo: que sea posible movirse por las tarjetas del tablero activo con
+flechas (una dirección a la vez, comportamiento razonable si el tablero está
+muy poblado), editar la tarjeta con foco y salir del modo de edición, sin que
+la app se olvide de dónde está el foco.
 
 Qué cubre:
 - mover entre tarjetas del tablero activo con flechas (una dirección a la vez,
@@ -379,6 +479,12 @@ Criterios de hecho:
 
 | Fase | Planificada | En desarrollo | Hecha | Pendiente para revisión | Notas |
 |---|---|---|---|---|---|
+| S11-1 — Quitar imagen de fondo | sí | no | no | sí | eliminar `BackgroundFiles`, pestaña Fondo, `ui.background*` |
+| S11-2 — Esquema de colores | sí | no | no | sí | contraste obscuro + `ThemeColors`/`ThemeOverride` + vista previa + reset |
+| S11-3 — Notas y markdown | sí | no | no | sí | marcador `<!--pk-note:-->` retrocompatible con `## ` legado |
+| S11-4 — Gestión de etiquetas | sí | no | no | sí | todos los tableros, atajo `Alt+E`, predefinidas protegidas |
+| S11-5 — Clic = seleccionada | sí | no | no | sí | clic simple marca `cardFocused` |
+| S11-6 — Excepción atajos | sí | no | no | sí | `fromStorageNameOrThrow` tolerante + diálogo reescrito |
 | **S10-F1 — Navegación con teclado** | sí | sí | **sí** (`c0ed25f`) | prueba manual | filtros de escena, `CardNavigator`, botones fuera; +20 tests |
 | **S10-F2 — Resumen vs. extensa** | sí | sí | **sí** (`5193d63`) | prueba manual | `LineBudget` (líneas+caracteres) y `\n` entre bloques; +17 tests |
 | **S10-F3 — Exportar tarjeta** | sí | sí | **sí** (`ac5c62a`) | prueba manual | `CardExporter` + `CardPdfWriter`; diálogo con secciones/notas/formato; +14 tests |
