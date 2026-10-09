@@ -164,6 +164,11 @@ public final class BoardController {
     // The process filter combo of the filter bar (rebuilt on rebuilds).
     private ComboBox<String> processFilterCombo;
 
+    // Session 10 (board cleanup): archived cards (LABEL_ARCHIVED) stay in
+    // the database but are hidden until this toggle says otherwise.
+    // Session-scoped on purpose: hiding is a view decision, not data.
+    private boolean showArchived;
+
     // Background customization (session 4): "path|dim" or null = none.
     private String backgroundSpec;
 
@@ -833,8 +838,19 @@ public final class BoardController {
             }
         });
 
+        // Archived cards are hidden by default (session 10); this toggle
+        // brings them back without touching any data.
+        javafx.scene.control.ToggleButton archivedFilter = new javafx.scene.control.ToggleButton("\uD83D\uDDC4");
+        archivedFilter.getStyleClass().addAll("tool-button", "filter-flag");
+        archivedFilter.setSelected(showArchived);
+        archivedFilter.setTooltip(new Tooltip(i18n.text("filter.archived.show")));
+        archivedFilter.setOnAction(e -> {
+            showArchived = archivedFilter.isSelected();
+            refresh();
+        });
+
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
-                importantFilter, urgentFilter, processFilter);
+                importantFilter, urgentFilter, processFilter, archivedFilter);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
@@ -1055,6 +1071,7 @@ public final class BoardController {
             return;
         }
         guarded(() -> {
+            ids.forEach(this::trashAttachments); // files follow the card (undo can bring them back)
             service.removeCards(ids);
             exitSelectionMode();
         });
@@ -1172,6 +1189,7 @@ public final class BoardController {
         databaseMenu.getItems().setAll(
                 itemOf("file.save", this::onSaveNow),
                 itemOf("prefs.title", this::onShowPreferences),
+                itemOf("cleanup.attachments", this::onCleanupAttachments),
                 new SeparatorMenuItem(),
                 syncStatus,
                 itemOf("sync.now", this::onSyncNow),
@@ -1452,6 +1470,9 @@ public final class BoardController {
         }
         if (dialogs.confirm(i18n.text("board.delete.confirm"))) {
             try {
+                // Files of every card of the board follow it to the trash.
+                service.columnsOf(activeId).forEach(column -> column.cards().forEach(card ->
+                        trashAttachments(card.id())));
                 service.deleteBoard(activeId);
             } catch (RuntimeException e) {
                 // Never leave the user wondering: surface the root cause
@@ -1873,6 +1894,13 @@ public final class BoardController {
 
     /** True when the card passes the active process filter (null = all pass). */
     boolean matchesProcessFilter(com.personalkanban.domain.board.Card card) {
+        // Session 10 (board cleanup): every filter chain (rendering AND the
+        // keyboard navigator) passes through here, so hiding archived cards
+        // in this one place keeps views, counts and navigation consistent.
+        if (!showArchived && card.hasLabelIgnoreCase(
+                com.personalkanban.domain.board.Card.LABEL_ARCHIVED)) {
+            return false;
+        }
         if (activeProcessFilter != null) {
             return activeProcessFilter.equals(card.processId());
         }
@@ -2280,6 +2308,7 @@ public final class BoardController {
                 // the top of the board — remember the card's position and
                 // focus the card that takes its place afterwards.
                 int[] position = cardId.equals(cardFocused) ? visiblePositionOf(cardId) : null;
+                trashAttachments(cardId); // notes/checklist go with the row; files go to the trash
                 service.removeCard(cardId);
                 refresh();
                 if (position != null) {
@@ -2288,6 +2317,82 @@ public final class BoardController {
                 }
             });
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Session 10 (board cleanup): attachments of deleted cards + maintenance
+    // ------------------------------------------------------------------
+
+    /**
+     * The card's attachment files follow a deletion — but into the trash,
+     * never to `rm`: the row itself is undoable and the files live outside
+     * the database, so a hard delete would make Ctrl+Z restore a card whose
+     * attachments were silently lost.
+     */
+    private void trashAttachments(CardId cardId) {
+        AttachmentStore.moveToTrash(com.personalkanban.Main.dataDirectory(), cardId.value());
+    }
+
+    /** Brings back trashed attachments of cards that exist again (after undo). */
+    private void restoreTrashedAttachments() {
+        java.nio.file.Path dataDirectory = com.personalkanban.Main.dataDirectory();
+        for (String cardId : AttachmentStore.trashedCardIds(dataDirectory)) {
+            if (service.board().findCard(new CardId(cardId)).isPresent()) {
+                AttachmentStore.restoreFromTrash(dataDirectory, cardId);
+            }
+        }
+    }
+
+    /**
+     * File → Cleanup: deletes the attachment folders (live and trashed) whose
+     * card no longer exists in ANY board of this database. That is the safe
+     * way to actually free the disk: folders of cards that were deleted
+     * before this feature existed, and the trash left by later deletions.
+     */
+    private void onCleanupAttachments() {
+        java.nio.file.Path dataDirectory = com.personalkanban.Main.dataDirectory();
+        List<String> orphans = AttachmentStore.storedCardIds(dataDirectory).stream()
+                .filter(id -> !cardExistsAnywhere(id))
+                .toList();
+        if (orphans.isEmpty()) {
+            dialogs.info(i18n.text("cleanup.attachments.none"));
+            return;
+        }
+        if (!dialogs.confirm(i18n.text("cleanup.attachments.confirm", orphans.size()))) {
+            return;
+        }
+        int deleted = 0;
+        for (String cardId : orphans) {
+            if (AttachmentStore.deleteCardFolder(dataDirectory, cardId)) {
+                deleted++;
+            }
+        }
+        dialogs.info(i18n.text("cleanup.attachments.done", deleted));
+    }
+
+    /** True when the card exists in the active board or in any other one. */
+    private boolean cardExistsAnywhere(String cardId) {
+        CardId id = new CardId(cardId);
+        if (service.board().findCard(id).isPresent()) {
+            return true;
+        }
+        for (BoardDescriptor descriptor : service.boards()) {
+            if (descriptor.id().equals(service.activeBoardId())) {
+                continue;
+            }
+            try {
+                boolean exists = service.columnsOf(descriptor.id()).stream()
+                        .flatMap(column -> column.cards().stream())
+                        .anyMatch(card -> card.id().equals(id));
+                if (exists) {
+                    return true;
+                }
+            } catch (RuntimeException unreadableBoard) {
+                // A board we cannot read must never cost the user their files.
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Zero-based [column, card] of a visible card, or null when not visible. */
@@ -2396,6 +2501,7 @@ public final class BoardController {
     public void onClearColumn(com.personalkanban.domain.board.ColumnId columnId) {
         if (dialogs.confirm(i18n.text("confirm.clear.cards"))) {
             guarded(() -> {
+                service.column(columnId).cards().forEach(card -> trashAttachments(card.id()));
                 service.clearColumn(columnId);
                 refresh();
             });
@@ -2452,6 +2558,7 @@ public final class BoardController {
     public void onRemoveColumn(com.personalkanban.domain.board.ColumnId columnId) {
         if (dialogs.confirm(i18n.text("confirm.delete.column"))) {
             guarded(() -> {
+                service.column(columnId).cards().forEach(card -> trashAttachments(card.id()));
                 service.removeColumn(columnId);
                 refresh();
             });
@@ -2598,6 +2705,10 @@ public final class BoardController {
     // ------------------------------------------------------------------
 
     private void refresh() {
+        // An undo may have just brought a deleted card back: restore the
+        // attachment files that were trashed when it was deleted. Cheap when
+        // there is nothing trashed (one empty directory listing).
+        restoreTrashedAttachments();
         LabelFilter filter = currentLabelFilter();
         LabelFilter quickFilter = currentQuickFlagFilter();
         columnsRow.getChildren().setAll(

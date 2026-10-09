@@ -168,6 +168,13 @@ final class CardViewBuilder {
                     i18n.text("card.export.menu"));
             exportItem.setOnAction(e -> board.onExportCard(card.id()));
             viewMenu.getItems().add(exportItem);
+            // Session 10 (board cleanup): archive = keep the card (and every
+            // feature it travels with) but hide it until "show archived".
+            javafx.scene.control.MenuItem archiveItem = new javafx.scene.control.MenuItem(
+                    i18n.text("card.archive.menu"));
+            archiveItem.setOnAction(e -> board.onToggleCardLabel(card.id(),
+                    com.personalkanban.domain.board.Card.LABEL_ARCHIVED));
+            viewMenu.getItems().add(archiveItem);
             view.setOnContextMenuRequested(event -> {
                 CardViewSettings.Mode effective = settings.effectiveMode(card.id().value());
                 // Only the "reset override" entry depends on the card having

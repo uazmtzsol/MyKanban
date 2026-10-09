@@ -175,6 +175,42 @@ ArchitectureTest en verde.
 - Herramienta de mantenimiento: revisar/borrar adjuntos huérfanos
   (archivos en la carpeta de adjuntos sin tarjeta que los referencie).
 
+**Decisión de diseño (archivar):** implementado como **etiqueta reservada
+`Archivada`** (`Card.LABEL_ARCHIVED`) + casilla «Mostrar tarjetas
+archivadas» en la barra de filtro. Sin migración de esquema: archivar esun toggle de etiqueta (deshacible, sincronizable, exportable) y lo que oculta es la vista. El gate vive en un solo sitio —
+`BoardController.matchesProcessFilter` — por el que pasan tanto el
+renderizado como el navegador por teclado, así que las flechas y los
+dígitos no aterrizan en una tarjeta oculta.
+
+**Hecho (F4):**
+
+- Menú contextual de tarjeta: **Archivar / desarchivar** (alterna la
+  etiqueta; Ctrl+Z lo deshace).
+- Barra de filtro: botón 🗄 «Mostrar tarjetas archivadas» (por defecto
+  apagado = las archivadas están ocultas). Visible solo en sesión (es una
+  decisión de vista, no de datos).
+- **Borrado que arrastra los archivos:** cada ruta de borrado (tarjeta,
+  selección múltiple, vaciar columna, borrar columna, borrar tablero)
+  mueve `attachments/<cardId>` a `attachments-trash/<cardId>` ANTES de
+  borrar la fila. Las notas y el checklist van con la propia fila (ya
+  estaban en la BD y se borran con ella).
+- **Deshacer seguro:** `refresh()` restaura la carpeta de la papelera si la
+  tarjeta volvió a existir — borrar y Ctrl+Z no pierde ni un archivo.
+  (Un borrado directo habría roto esto: los archivos viven fuera de la BD.)
+- **Archivo → Limpiar archivos adjuntos huérfanos…**: lista las carpetas
+  (vivas y de papelera) cuya tarjeta **no existe en ningún tablero** de la
+  base, pide confirmación con el recuento y las borra. Si un tablero no
+  se puede leer, no se borra nada de él (nunca se arriesgan archivos).
+- Tests: `AttachmentTrashTest` (6, papelera/restauración/huérfanos) +
+  `BoardCleanupTest` (5, cableado a nivel fuente). Suite **367/367 OK**
+  (1 skip PHP); i18n y ArchUnit en verde (6 claves nuevas × 5 bundles).
+- **Límite conocido:** en la **vista de procesos** las tarjetas archivadas
+  siguen apareciendo (el grafo de disposición se calcula con todas las
+  tarjetas); filtrarlas ahí toca el algoritmo de disposición y se deja
+  documentado en vez de meterlo a última hora.
+- **Pendiente F4:** prueba manual (archivar/desarchivar, borrar con
+  adjuntos + Ctrl+Z, y el diálogo de limpieza).
+
 ## Fases originales (en espera hasta que el usuario diga lo contrario)
 
 ## Qué vamos a hacer
