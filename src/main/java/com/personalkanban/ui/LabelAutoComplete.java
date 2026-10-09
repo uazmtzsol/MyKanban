@@ -4,6 +4,8 @@ import com.personalkanban.domain.board.LabelSuggester;
 import javafx.animation.PauseTransition;
 import javafx.geometry.Bounds;
 import javafx.scene.control.ListView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.stage.Popup;
 import javafx.util.Duration;
 
@@ -70,6 +72,7 @@ final class LabelAutoComplete {
         });
         popup.getContent().add(list);
         popup.setAutoHide(true);
+        installPopupKeyFilter();
 
         field.textProperty().addListener((obs, was, now) -> scheduleShow());
         field.caretPositionProperty().addListener(obs -> scheduleShow());
@@ -103,6 +106,50 @@ final class LabelAutoComplete {
                 }
                 case ESCAPE -> {
                     if (visible) {
+                        hide();
+                        event.consume();
+                    }
+                }
+                default -> { }
+            }
+        });
+    }
+
+    /**
+     * Keyboard selection must be handled on the POPUP side, not on the field.
+     * While the popup is showing, JavaFX's PopupWindow event redirector (owner
+     * window capture phase) forwards every key as a copy into the popup's
+     * scene, and if that copy is consumed there the ORIGINAL event is
+     * suppressed before ever reaching the TextField — the field's own
+     * onKeyPressed below then never runs for arrows/Enter/Tab. Consuming the
+     * copy here therefore applies the suggestion AND keeps the original away
+     * from scene-level handlers (e.g. a Dialog's Enter accelerator, which
+     * would otherwise close the dialog instead of completing the label).
+     *
+     * <p>The filter lives on the popup scene so it covers both redirect
+     * targets: the scene itself (no focus owner) and a focused node such as
+     * the suggestion list (scene capture runs before the node's handlers).</p>
+     */
+    private void installPopupKeyFilter() {
+        javafx.scene.Scene popupScene = list.getScene();
+        if (popupScene == null) {
+            return;
+        }
+        popupScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (!popup.isShowing()) {
+                return;
+            }
+            switch (event.getCode()) {
+                case DOWN -> {
+                    list.getSelectionModel().selectNext();
+                    event.consume();
+                }
+                case UP -> {
+                    list.getSelectionModel().selectPrevious();
+                    event.consume();
+                }
+                case ENTER, TAB -> {
+                    if (applySelected()) {
                         hide();
                         event.consume();
                     }
@@ -146,6 +193,11 @@ final class LabelAutoComplete {
 
     void bindOwner(javafx.scene.control.TextField field) {
         this.ownerField = field;
+    }
+
+    /** Test hook: whether the suggestion popup is currently on screen. */
+    boolean isPopupVisible() {
+        return popup.isShowing();
     }
 
     private boolean applySelected() {
