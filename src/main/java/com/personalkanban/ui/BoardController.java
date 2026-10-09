@@ -2118,6 +2118,20 @@ public final class BoardController {
                 CardDetailWindow.open(card, this, i18n, themeManager));
     }
 
+    /**
+     * Opens the attachments window of a card: reference files kept as plain
+     * files under the program's data folder (never in the database).
+     */
+    public void onOpenCardAttachments(com.personalkanban.domain.board.CardId cardId) {
+        service.board().findCard(cardId).ifPresent(card ->
+                AttachmentsWindow.open(card.id().value(), card.title(), i18n, themeManager));
+    }
+
+    /** Number of files attached to a card (badge on the card view). */
+    public int attachmentCountOf(com.personalkanban.domain.board.CardId cardId) {
+        return AttachmentStore.count(com.personalkanban.Main.dataDirectory(), cardId.value());
+    }
+
     public void onMoveColumn(com.personalkanban.domain.board.ColumnId columnId, int targetIndex) {
         guarded(() -> {
             service.moveColumn(columnId, targetIndex);

@@ -40,6 +40,9 @@ final class CardViewBuilder {
                       Card card, boolean selectionMode, boolean dark) {
         var settings = board.currentCardViewSettings();
         var mode = settings.effectiveMode(card.id().value());
+        // One folder listing per card render feeds both the button state and
+        // the attachment badge.
+        int attachmentCount = board.attachmentCountOf(card.id());
 
         Label title = new Label(card.title());
         title.getStyleClass().add("card-title");
@@ -81,6 +84,7 @@ final class CardViewBuilder {
             titleRow.getChildren().add(flagButton(board, card, Card.LABEL_URGENT,
                     "!", "card.flag.urgent", "card-flag-urgent"));
             titleRow.getChildren().add(notesButton(i18n, board, card));
+            titleRow.getChildren().add(attachmentsButton(i18n, board, card, attachmentCount));
         }
         view.getChildren().add(titleRow);
 
@@ -89,6 +93,7 @@ final class CardViewBuilder {
         addDueBadgeIfPresent(i18n, card, view);
         addChecklistProgressIfPresent(i18n, card, view);
         addNotesIndicatorIfPresent(i18n, card, view);
+        addAttachmentsIndicatorIfPresent(i18n, attachmentCount, view);
         addProcessChipIfPresent(board, card, view);
         addRelationBadgesIfPresent(i18n, board, card, view);
         addLabelChipsIfPresent(i18n, board, card, view);
@@ -209,6 +214,17 @@ final class CardViewBuilder {
         String notes = card.notes();
         String extract = notes.length() > 120 ? notes.substring(0, 120) + "\u2026" : notes;
         badge.setTooltip(new Tooltip(extract));
+        view.getChildren().add(badge);
+    }
+
+    /** "\uD83D\uDCCE n" badge when the card folder holds reference files. */
+    private static void addAttachmentsIndicatorIfPresent(I18n i18n, int count, VBox view) {
+        if (count == 0) {
+            return;
+        }
+        Label badge = new Label("\uD83D\uDCCE " + count);
+        badge.getStyleClass().add("card-attachments");
+        badge.setTooltip(new Tooltip(i18n.text("card.attachments.badge.tip", count)));
         view.getChildren().add(badge);
     }
 
@@ -344,6 +360,24 @@ final class CardViewBuilder {
         button.setMinWidth(Region.USE_PREF_SIZE);
         button.setMinHeight(Region.USE_PREF_SIZE);
         button.setOnAction(e -> board.onOpenCardNotes(card.id()));
+        return button;
+    }
+
+    /**
+     * Opens the card's attachments window (reference files in the program's
+     * data folder); vivid once the folder holds at least one file.
+     */
+    private static Button attachmentsButton(I18n i18n, BoardController board, Card card,
+                                            int count) {
+        Button button = new Button("\uD83D\uDCCE");
+        button.getStyleClass().add(count == 0 ? "card-flag-off" : "card-flag-on");
+        button.setTooltip(new Tooltip(count == 0
+                ? i18n.text("card.attachments.button.tip")
+                : i18n.text("card.attachments.badge.tip", count)));
+        button.setFocusTraversable(false);
+        button.setMinWidth(Region.USE_PREF_SIZE);
+        button.setMinHeight(Region.USE_PREF_SIZE);
+        button.setOnAction(e -> board.onOpenCardAttachments(card.id()));
         return button;
     }
 

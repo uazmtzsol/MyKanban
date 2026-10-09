@@ -328,6 +328,10 @@
 .card-notes-indicator {
     -fx-font-size: 11px;
 }
+.card-attachments {
+    -fx-font-size: 11px;
+    -fx-text-fill: #9ca3af;
+}
 .card-process-chip {
     -fx-font-size: 11px;
     -fx-text-fill: #93c5fd;
