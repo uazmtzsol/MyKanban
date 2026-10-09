@@ -169,9 +169,6 @@ public final class BoardController {
     // Session-scoped on purpose: hiding is a view decision, not data.
     private boolean showArchived;
 
-    // Background customization (session 4): "path|dim" or null = none.
-    private String backgroundSpec;
-
     // Which database menus were built (the File menu must re-run its builder).
 
     public BoardController(AppContext context) {
@@ -648,17 +645,6 @@ public final class BoardController {
         collapsedColumns = service.collapsedColumnsOf(service.activeBoardId());
         cardViewSettings = service.cardViewSettingsOf(service.activeBoardId());
         columnWidths = service.columnWidthsOf(service.activeBoardId());
-        backgroundSpec = service.background();
-        // Keep the background image inside the program's data folder: import
-        // an original that still lives elsewhere (one-time migration) or
-        // point back at the local copy when the original disappeared.
-        String repaired = BackgroundFiles.repairSpec(
-                backgroundSpec, com.personalkanban.Main.dataDirectory());
-        if (!java.util.Objects.equals(backgroundSpec, repaired)) {
-            backgroundSpec = repaired;
-            service.setBackground(repaired);
-        }
-        applyBoardBackground();
 
         HBox toolbar = buildToolbar();
         HBox filterBar = buildFilterBar();
@@ -1729,114 +1715,9 @@ public final class BoardController {
                 });
     }
 
-    /** Preferences: background image, priority and label colors. */
+    /** Preferences: color schemes, priority and label colors. */
     private void onShowPreferences() {
-        java.io.File seed = initialDirectory();
-        var choice = new PreferencesDialog(i18n, service, themeManager.isDark())
-                .show(seed, backgroundSpec);
-        choice.ifPresent(selected -> {
-            String stored = selected.path() == null
-                    ? null
-                    : selected.path() + "|" + String.format(java.util.Locale.ROOT, "%.2f", selected.dim());
-            // A copy in the program's data folder keeps the preference alive
-            // when the chosen file later moves or is cleaned up.
-            stored = BackgroundFiles.importSpec(
-                    stored, com.personalkanban.Main.dataDirectory());
-            backgroundSpec = stored;
-            service.setBackground(stored);
-            applyBoardBackground();
-        });
-    }
-
-    /**
-     * Paints the customized background (session 4): image over the whole
-     * board, pre-dimmed once at load time so cards/columns stay readable.
-     * A missing or unreadable file silently falls back to no background
-     * (cosmetic preference; it must never block the app).
-     */
-    private void applyBoardBackground() {
-        paintBoardRoot(root, backgroundSpec, themeManager.isDark());
-    }
-
-    /**
-     * Paints the board root from a {@code "path|opacity"} spec (null/blank/
-     * missing file = plain themed color).
-     *
-     * <p>Implemented with an inline {@code setStyle} instead of
-     * {@code setBackground}: the light/dark stylesheets define
-     * {@code .root { -fx-background-color }}, and JavaFX re-applies CSS rules
-     * whenever the root enters a scene or the stylesheet changes,
-     * overwriting a programmatic {@link javafx.scene.layout.Background} —
-     * which is why the chosen image never showed up. Inline style is the
-     * only value with precedence over stylesheets, so both the image and
-     * the plain fallback are painted here that way.</p>
-     */
-    static void paintBoardRoot(javafx.scene.Node root, String spec, boolean dark) {
-        if (spec == null || spec.isBlank()) {
-            paintPlainBoardRoot(root, dark);
-            return;
-        }
-        String[] parts = spec.split("\\|", 2);
-        String path = parts[0];
-        double dim = 0.45;
-        if (parts.length == 2) {
-            try {
-                dim = Math.clamp(Double.parseDouble(parts[1]), 0.0, 0.8);
-            } catch (NumberFormatException ignored) {
-                // keep default dim
-            }
-        }
-        java.io.File file = new java.io.File(path);
-        if (!file.isFile()) {
-            paintPlainBoardRoot(root, dark);
-            return;
-        }
-        try {
-            String uri = dimmedImageUri(file, dim);
-            root.setStyle("-fx-background-image: url('" + uri + "');"
-                    + "-fx-background-repeat: no-repeat;"
-                    + "-fx-background-position: center;"
-                    + "-fx-background-size: cover;");
-        } catch (RuntimeException e) {
-            // A bad image file is a cosmetic problem only.
-            paintPlainBoardRoot(root, dark);
-        }
-    }
-
-    /**
-     * Solid fallback behind the columns: the stylesheets' own .root color
-     * would be overwritten by the image inline style anyway, so the plain
-     * state is painted here too (same colors as light.css / dark.css).
-     */
-    private static void paintPlainBoardRoot(javafx.scene.Node root, boolean dark) {
-        root.setStyle("-fx-background-color: "
-                + (dark ? "#16181d" : "#f5f6f8") + ";");
-    }
-
-    /**
-     * Returns a data URI of the image with a black overlay of the given
-     * opacity composited once (BufferedImage, same trick as the PDF
-     * exporter), so the UI never pays per-frame dimming.
-     */
-    private static String dimmedImageUri(java.io.File file, double dim) {
-        try {
-            java.awt.image.BufferedImage source = javax.imageio.ImageIO.read(file);
-            if (source == null) {
-                return file.toURI().toString(); // undimmable format: use as is
-            }
-            java.awt.image.BufferedImage dimmed = new java.awt.image.BufferedImage(
-                    source.getWidth(), source.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
-            java.awt.Graphics2D graphics = dimmed.createGraphics();
-            graphics.drawImage(source, 0, 0, null);
-            graphics.setColor(new java.awt.Color(0, 0, 0, (int) Math.round(dim * 255)));
-            graphics.fillRect(0, 0, dimmed.getWidth(), dimmed.getHeight());
-            graphics.dispose();
-            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            javax.imageio.ImageIO.write(dimmed, "png", out);
-            return "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(out.toByteArray());
-        } catch (java.io.IOException e) {
-            return file.toURI().toString(); // fall back to the raw image
-        }
+        new PreferencesDialog(i18n, service, themeManager.isDark()).show();
     }
 
     // ------------------------------------------------------------------

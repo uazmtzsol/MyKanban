@@ -479,7 +479,7 @@ Criterios de hecho:
 
 | Fase | Planificada | En desarrollo | Hecha | Pendiente para revisión | Notas |
 |---|---|---|---|---|---|
-| S11-1 — Quitar imagen de fondo | sí | no | no | sí | eliminar `BackgroundFiles`, pestaña Fondo, `ui.background*` |
+| **S11-1 — Quitar imagen de fondo** | sí | sí | **sí** | prueba manual | `BackgroundFiles` + tests fuera; pestaña Fondo eliminada; `ui.background*` fuera; `PreferencesDialog.show()` sin args |
 | S11-2 — Esquema de colores | sí | no | no | sí | contraste obscuro + `ThemeColors`/`ThemeOverride` + vista previa + reset |
 | S11-3 — Notas y markdown | sí | no | no | sí | marcador `<!--pk-note:-->` retrocompatible con `## ` legado |
 | S11-4 — Gestión de etiquetas | sí | no | no | sí | todos los tableros, atajo `Alt+E`, predefinidas protegidas |

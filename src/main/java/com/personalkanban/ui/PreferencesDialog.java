@@ -5,21 +5,14 @@ import com.personalkanban.application.StylePrefs;
 import javafx.collections.FXCollections;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Slider;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
-import javafx.scene.image.Image;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
-import javafx.stage.FileChooser;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,19 +20,16 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Preferences dialog (session 4.5 request: customization options such as a
- * background image; appearance request: priority and label colors). Three
- * areas live here: which image file and how strongly it is dimmed, the
- * highlight colors of the quick flags (Importante / Urgente / Importante y
- * urgente), and the colors of individual labels or label combinations — each
- * stored separately for the light and the dark theme. "Quitar imagen" clears
- * the preference; Cancel leaves everything untouched.
+ * Preferences dialog (appearance: priority and label colors). Two areas live
+ * here: the highlight colors of the quick flags (Importante / Urgente /
+ * Importante y urgente), and the colors of individual labels or label
+ * combinations — each stored separately for the light and the dark theme.
+ * Cancel leaves everything untouched.
+ *
+ * <p>Session 11 (S11-1): the background-image tab was removed at the user's
+ * request — the feature is gone entirely, not hidden.</p>
  */
 final class PreferencesDialog {
-
-    /** Outcome of the dialog: null path = no background; dim in [0..0.8]. */
-    record BackgroundChoice(String path, double dim) {
-    }
 
     /** One row of the label-rules list: storage key + readable name. */
     private record LabelRule(String key, String display) {
@@ -72,87 +62,22 @@ final class PreferencesDialog {
         this.dark = dark;
     }
 
-    /**
-     * Shows the dialog. {@code initialDirectory} seeds the image chooser;
-     * {@code current} holds the persisted "path|dim" setting, or null.
-     */
-    Optional<BackgroundChoice> show(File initialDirectory, String current) {
-        String initialPath = null;
-        double initialDim = 0.45;
-        if (current != null && current.contains("|")) {
-            String[] parts = current.split("\\\\|", 2);
-            initialPath = parts[0].isBlank() ? null : parts[0];
-            try {
-                initialDim = Math.clamp(Double.parseDouble(parts[1]), 0.0, 0.8);
-            } catch (NumberFormatException ignored) {
-                // keep default dim
-            }
-        }
-
-        Label fileLabel = new Label(initialPath == null
-                ? i18n.text("prefs.background.none")
-                : initialPath);
-        fileLabel.getStyleClass().add("prefs-file-label");
-        final double fallbackDim = initialDim;
-
-        Button choose = new Button(i18n.text("prefs.background.choose"));
-        String[] chosen = {initialPath};
-        choose.setOnAction(e -> {
-            FileChooser chooser = new FileChooser();
-            chooser.setTitle(i18n.text("prefs.background.choose"));
-            chooser.setInitialDirectory(initialDirectoryOrNull(initialDirectory));
-            chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-                    "PNG / JPG", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp"));
-            File file = chooser.showOpenDialog(choose.getScene() == null
-                    ? null : choose.getScene().getWindow());
-            if (file != null) {
-                chosen[0] = file.getAbsolutePath();
-                fileLabel.setText(chosen[0]);
-            }
-        });
-
-        Slider dim = new Slider(0, 0.8, initialDim);
-        dim.setShowTickLabels(true);
-        dim.setBlockIncrement(0.05);
-        Label dimLabel = new Label(i18n.text("prefs.background.dim"));
-
-        CheckBox enabled = new CheckBox(i18n.text("prefs.background.enable"));
-        enabled.setSelected(initialPath != null);
-
-        GridPane backgroundGrid = new GridPane();
-        backgroundGrid.setHgap(10);
-        backgroundGrid.setVgap(12);
-        backgroundGrid.add(enabled, 0, 0, 2, 1);
-        backgroundGrid.add(choose, 0, 1);
-        backgroundGrid.add(fileLabel, 1, 1);
-        backgroundGrid.add(dimLabel, 0, 2);
-        backgroundGrid.add(dim, 1, 2);
-
-        TabPane tabs = new TabPane();
-        Tab backgroundTab = new Tab(i18n.text("prefs.tab.background"), backgroundGrid);
-        Tab appearanceTab = new Tab(i18n.text("prefs.tab.appearance"), appearancePane());
-        backgroundTab.setClosable(false);
-        appearanceTab.setClosable(false);
-        tabs.getTabs().setAll(backgroundTab, appearanceTab);
-
-        Dialog<BackgroundChoice> dialog = new Dialog<>();
+    /** Shows the dialog; OK commits the appearance changes, Cancel discards them. */
+    void show() {
+        Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("prefs.title"));
         dialog.setHeaderText(i18n.text("prefs.header"));
         dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
-        dialog.getDialogPane().setContent(tabs);
+        dialog.getDialogPane().setContent(appearancePane());
         Dialogs.makeResizable(dialog, 720, 560);
 
         dialog.setResultConverter(button -> {
-            if (button != ButtonType.OK) {
-                return null;
+            if (button == ButtonType.OK) {
+                applyAppearanceChanges();
             }
-            applyAppearanceChanges();
-            if (!enabled.isSelected() || chosen[0] == null) {
-                return new BackgroundChoice(null, fallbackDim); // clear preference
-            }
-            return new BackgroundChoice(chosen[0], dim.getValue());
+            return null;
         });
-        return dialog.showAndWait();
+        dialog.showAndWait();
     }
 
     // ------------------------------------------------------------------
@@ -409,9 +334,5 @@ final class PreferencesDialog {
     /** The card dialogs' prompt/info helpers, reused for rule names. */
     private Dialogs dialogs() {
         return new Dialogs(i18n);
-    }
-
-    private File initialDirectoryOrNull(File seed) {
-        return seed != null && seed.isDirectory() ? seed : null;
     }
 }

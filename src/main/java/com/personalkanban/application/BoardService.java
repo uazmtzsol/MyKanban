@@ -90,8 +90,6 @@ public final class BoardService {
     private static final String LAST_BOARD_KEY = "board.last";
     private static final String COLUMN_STATE_PREFIX = "ui.columnstate.";
     private static final String CARD_VIEW_PREFIX = "ui.cardview.";
-    private static final String BACKGROUND_KEY = "ui.background"; // "path|opacity"
-    private static final String UI_BACKGROUND_PREFIX = "ui.background.";
     private static final String UI_SHORTCUTS_KEY = "ui.shortcuts";
 
     /**
@@ -618,28 +616,6 @@ public final class BoardService {
     /** Persists the card view preferences of the given board. */
     public void setCardViewSettings(BoardId boardId, CardViewSettings cardViewSettings) {
         settings.put(CARD_VIEW_PREFIX + boardId.value(), cardViewSettings.toJson());
-    }
-
-    /** Reads the background preference of the given board (null = none). */
-    public String boardBackgroundOf(BoardId boardId) {
-        return settings.get(UI_BACKGROUND_PREFIX + boardId.value()).orElse(null);
-    }
-
-    /** Persists the background preference of the given board (null clears it). */
-    public void setBoardBackground(BoardId boardId, String stored) {
-        settings.put(UI_BACKGROUND_PREFIX + boardId.value(), stored == null ? "" : stored);
-    }
-
-    /** Global background (any board); format "path|opacity" or null. */
-    public String background() {
-        return settings.get(BACKGROUND_KEY)
-                .filter(value -> !value.isBlank())
-                .orElse(null);
-    }
-
-    /** Sets the global background; format "path|opacity", null clears it. */
-    public void setBackground(String stored) {
-        settings.put(BACKGROUND_KEY, stored == null ? "" : stored);
     }
 
     /** Persists the collapsed-columns set of the given board (UI-only preference). */
