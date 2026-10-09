@@ -164,10 +164,29 @@ public final class GlobalShortcuts {
             if (converted.isEmpty()) {
                 return new GlobalShortcuts();
             }
-            return new GlobalShortcuts(converted);
+            return withMissingDefaults(converted);
         } catch (Exception e) {
             return new GlobalShortcuts();
         }
+    }
+
+    /**
+     * Adds the default binding for every action the stored list does not
+     * mention: a JSON saved before an action existed would otherwise leave it
+     * blank, and a blank action is bound to nothing (the filter shortcuts
+     * silently stopped working). An action present with an empty value stays
+     * empty — that is the user deliberately unbinding it.
+     */
+    private static GlobalShortcuts withMissingDefaults(List<ShortcutSetting> stored) {
+        List<ShortcutSetting> merged = new ArrayList<>(stored);
+        for (ShortcutSetting fallback : DEFAULTS) {
+            boolean present = merged.stream()
+                    .anyMatch(setting -> setting.action().equals(fallback.action()));
+            if (!present) {
+                merged.add(fallback);
+            }
+        }
+        return new GlobalShortcuts(merged);
     }
 
     /** Normalizes a key combination string for storage/validation. */

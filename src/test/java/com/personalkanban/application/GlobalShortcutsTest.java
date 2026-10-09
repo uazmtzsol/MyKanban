@@ -28,6 +28,40 @@ class GlobalShortcutsTest {
     }
 
     @Test
+    void storedJsonWithoutAnActionFallsBackToItsDefault() {
+        // A list saved before the filter actions existed: those must not stay
+        // blank (blank = unbound, which disabled Ctrl+F / Ctrl+P).
+        String legacy = """
+                [{"action":"NEXT_CARD","keyCombination":"Right"},
+                 {"action":"PREV_CARD","keyCombination":"Left"},
+                 {"action":"EDIT_CARD","keyCombination":"Enter"},
+                 {"action":"EXIT","keyCombination":"Escape"}]
+                """;
+
+        GlobalShortcuts shortcuts = GlobalShortcuts.fromJson(legacy);
+
+        assertThat(shortcuts.get(GlobalShortcuts.Action.LABEL_FILTER)).isEqualTo("Ctrl+F");
+        assertThat(shortcuts.get(GlobalShortcuts.Action.PROCESS_FILTER)).isEqualTo("Ctrl+P");
+        assertThat(shortcuts.get(GlobalShortcuts.Action.NEXT_CARD)).isEqualTo("Right");
+    }
+
+    @Test
+    void anActionTheUserClearedStaysCleared() {
+        String stored = """
+                [{"action":"NEXT_CARD","keyCombination":""},
+                 {"action":"PREV_CARD","keyCombination":"Left"},
+                 {"action":"EDIT_CARD","keyCombination":"Enter"},
+                 {"action":"EXIT","keyCombination":"Escape"},
+                 {"action":"LABEL_FILTER","keyCombination":"Ctrl+F"},
+                 {"action":"PROCESS_FILTER","keyCombination":"Ctrl+P"}]
+                """;
+
+        GlobalShortcuts shortcuts = GlobalShortcuts.fromJson(stored);
+
+        assertThat(shortcuts.get(GlobalShortcuts.Action.NEXT_CARD)).isEmpty();
+    }
+
+    @Test
     void defaultShortcutsMatchKnownDefaults() {
         GlobalShortcuts shortcuts = new GlobalShortcuts();
 
