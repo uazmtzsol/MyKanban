@@ -2,6 +2,7 @@ package com.personalkanban.ui;
 
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.CardNotes;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.ui.theme.ThemeManager;
@@ -14,6 +15,8 @@ import javafx.scene.control.ButtonBar;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
@@ -58,6 +61,12 @@ final class CardDetailWindow {
     private final MarkdownEditor descriptionEditor;
     private final MarkdownEditor notesEditor;
     private final MarkdownEditor timeCommentEditor;
+    // Multi-note support (user request): the list holds one titled note per
+    // row, the editor shows the selected one.
+    private final ListView<CardNotes.Note> notesList = new ListView<>();
+    private final TextField noteTitleField = new TextField();
+    private CardNotes notesModel = CardNotes.empty();
+    private boolean notesLoading;
     private final VBox checklistBox = new VBox(6);
 
     private final ToggleButton stopwatch = new ToggleButton("\u23F1");
@@ -72,7 +81,7 @@ final class CardDetailWindow {
         this.themeManager = themeManager;
 
         descriptionEditor = new MarkdownEditor(card.description(), null, 300, i18n, themeManager);
-        notesEditor = new MarkdownEditor(card.notes(), "card.notes.prompt", 300, i18n, themeManager);
+        notesEditor = new MarkdownEditor("", "card.notes.prompt", 300, i18n, themeManager);
         timeCommentEditor = new MarkdownEditor("", "time.track.comment.prompt", 70, i18n, themeManager);
 
         Label titleLabel = new Label(card.title());
@@ -139,17 +148,154 @@ final class CardDetailWindow {
         return pane;
     }
 
+    /**
+     * Notes as a list of titled entries (user request): instead of one long
+     * note, several smaller ones, each with a title to pick from the list and
+     * a body edited on the right. Everything is persisted through the card's
+     * single notes text (so undo keeps working) via {@code CardNotes}.
+     */
     private VBox buildNotesPane() {
         Label caption = new Label(i18n.text("card.notes.caption"));
         caption.getStyleClass().add("detail-caption");
-        Button saveNotes = new Button(i18n.text("card.notes.save"));
-        saveNotes.getStyleClass().add("tool-button");
-        saveNotes.setOnAction(e -> board.onNotesSaved(cardId, notesEditor.text()));
-        HBox header = new HBox(8, caption, saveNotes);
-        header.setAlignment(Pos.CENTER_LEFT);
-        VBox pane = new VBox(4, header, notesEditor.node());
+
+        notesList.setPrefWidth(210);
+        notesList.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(CardNotes.Note item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : noteLabel(item));
+            }
+        });
+        notesList.getSelectionModel().selectedIndexProperty().addListener(
+                (observable, was, now) -> onNoteSelected(now.intValue()));
+
+        noteTitleField.setPromptText(i18n.text("card.notes.title.prompt"));
+
+        Button add = noteButton("card.notes.add", this::addNote);
+        Button save = noteButton("card.notes.save", this::saveCurrentNote);
+        Button remove = noteButton("card.notes.remove", this::removeNote);
+        HBox actions = new HBox(8, add, save, remove);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox editor = new VBox(4, noteTitleField, notesEditor.node());
         VBox.setVgrow(notesEditor.node(), Priority.ALWAYS);
+        HBox.setHgrow(editor, Priority.ALWAYS);
+
+        HBox split = new HBox(10, notesList, editor);
+        VBox.setVgrow(split, Priority.ALWAYS);
+        VBox pane = new VBox(6, caption, split, actions);
+        reloadNotes();
         return pane;
+    }
+
+    private Button noteButton(String key, Runnable action) {
+        Button button = new Button(i18n.text(key));
+        button.getStyleClass().add("tool-button");
+        button.setOnAction(e -> action.run());
+        return button;
+    }
+
+    /** Re-reads the notes of the card and keeps the previous selection. */
+    private void reloadNotes() {
+        notesModel = board.cardById(cardId)
+                .map(card -> CardNotes.parse(card.notes()))
+                .orElseGet(CardNotes::empty);
+        int previous = notesList.getSelectionModel().getSelectedIndex();
+        notesLoading = true;
+        notesList.getItems().setAll(notesModel.notes());
+        if (notesModel.isEmpty()) {
+            notesList.getSelectionModel().clearSelection();
+            noteTitleField.setText("");
+            notesEditor.setText("");
+        } else {
+            int index = previous >= 0 && previous < notesModel.size()
+                    ? previous : notesModel.size() - 1;
+            notesList.getSelectionModel().select(index);
+            loadNote(index);
+        }
+        notesLoading = false;
+    }
+
+    private void loadNote(int index) {
+        if (index < 0 || index >= notesModel.size()) {
+            return;
+        }
+        CardNotes.Note note = notesModel.notes().get(index);
+        noteTitleField.setText(note.title());
+        notesEditor.setText(note.body());
+    }
+
+    private void onNoteSelected(int index) {
+        if (notesLoading || index < 0) {
+            return;
+        }
+        loadNote(index);
+    }
+
+    /** List label: the title, or the first body line for untitled notes. */
+    private String noteLabel(CardNotes.Note note) {
+        if (!note.title().isEmpty()) {
+            return note.title();
+        }
+        String firstLine = note.body().lines().findFirst().orElse("").strip();
+        if (firstLine.isEmpty()) {
+            return i18n.text("card.notes.untitled");
+        }
+        return firstLine.length() > 40 ? firstLine.substring(0, 40) + "\u2026" : firstLine;
+    }
+
+    /** Adds an empty titled note, selects it and lets the user name it. */
+    private void addNote() {
+        persistNotes(notesModel.withNote(nextDefaultTitle(), ""));
+        notesList.getSelectionModel().selectLast();
+        noteTitleField.requestFocus();
+        noteTitleField.selectAll();
+    }
+
+    private String nextDefaultTitle() {
+        String base = i18n.text("card.notes.default.title");
+        String candidate = base;
+        int suffix = 2;
+        while (hasNoteTitled(candidate)) {
+            candidate = base + " " + suffix++;
+        }
+        return candidate;
+    }
+
+    private boolean hasNoteTitled(String title) {
+        return notesModel.notes().stream().anyMatch(note -> note.title().equals(title));
+    }
+
+    /**
+     * Writes the title field and the editor into the selected note (or a new
+     * one when nothing is selected) and persists the card's notes text.
+     */
+    private void saveCurrentNote() {
+        int index = notesList.getSelectionModel().getSelectedIndex();
+        String title = noteTitleField.getText() == null ? "" : noteTitleField.getText();
+        String body = notesEditor.text();
+        CardNotes updated = index >= 0
+                ? notesModel.replaced(index, title, body)
+                : notesModel.withNote(title, body);
+        persistNotes(updated);
+    }
+
+    private void removeNote() {
+        int index = notesList.getSelectionModel().getSelectedIndex();
+        if (index < 0 || index >= notesModel.size()) {
+            return;
+        }
+        String label = noteLabel(notesModel.notes().get(index));
+        if (!board.confirm(i18n.text("card.notes.delete.confirm", label))) {
+            return;
+        }
+        persistNotes(notesModel.removed(index));
+    }
+
+    private void persistNotes(CardNotes updated) {
+        notesModel = updated;
+        board.onNotesSaved(cardId, updated.serialize());
+        reloadNotes();
     }
 
     private VBox buildChecklistPane() {
@@ -354,6 +500,17 @@ final class CardDetailWindow {
     // ------------------------------------------------------------------
 
     private void onSave() {
+        // Committing the note in progress here too: closing with an edited
+        // note must never drop it.
+        int index = notesList.getSelectionModel().getSelectedIndex();
+        String title = noteTitleField.getText() == null ? "" : noteTitleField.getText();
+        String body = notesEditor.text();
+        CardNotes updated = index >= 0
+                ? notesModel.replaced(index, title, body)
+                : notesModel.withNote(title, body);
+        if (!updated.serialize().equals(notesModel.serialize())) {
+            board.onNotesSaved(cardId, updated.serialize());
+        }
         board.onDescriptionSaved(cardId, descriptionEditor.text());
         stage.close();
     }

@@ -18,6 +18,7 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -70,10 +71,18 @@ public final class BoardController {
     /** Result of the last bulk labels dialog (so the caller can read add vs remove). */
     private Boolean lastBulkLabelsAdd;
 
-    /** All card ids visible in the active board under the current filter. */
+    /**
+     * All card ids visible in the active board under the current filters:
+     * process, label text/mode and quick flags, exactly what the columns
+     * render — otherwise the arrow keys would stop on hidden cards.
+     */
     private List<CardId> visibleCardIds() {
+        LabelFilter labelFilter = currentLabelFilter();
+        LabelFilter quickFilter = currentQuickFlagFilter();
         return service.board().allCards().stream()
                 .filter(this::matchesProcessFilter)
+                .filter(labelFilter::matches)
+                .filter(quickFilter::matches)
                 .map(card -> card.id())
                 .toList();
     }
@@ -210,7 +219,9 @@ public final class BoardController {
                 this::onShowShortcutsHelp);
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+N"),
                 this::onNewBoard);
-        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+F"),
+        // Filter shortcuts read the persisted bindings like the arrow keys,
+        // so File → Keyboard shortcuts can rewire them (defaults Ctrl+F/Ctrl+P).
+        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.LABEL_FILTER),
                 this::onFocusFilter);
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+D"),
                 this::onToggleDarkMode);
@@ -222,7 +233,7 @@ public final class BoardController {
                 this::onSaveNow);
         // Process filter: focus and open the filter combo, like Ctrl+F
         // does for the label filter.
-        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+P"),
+        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.PROCESS_FILTER),
                 this::onFocusProcessFilter);
         // Phase A (configurable kanban-card navigation): arrow keys move the
         // focus card, Enter edits it, Escape drops the focus or cancels a
@@ -272,13 +283,15 @@ public final class BoardController {
     private void onClearFocus() {
         if (!dialogs.modalActive()) {
             cardFocused = null;
+            // Move the focus owner off the card so the highlight goes away.
+            root.requestFocus();
         }
     }
 
     /** The card with keyboard focus in the kanban view (null = none). */
     private CardId cardFocused;
 
-    /** Sets kanban focus onto a card, refreshing inspectors if it changed. */
+    /** Sets kanban focus onto a card, highlighting and revealing it. */
     private void kanbanFocusCard(CardId id) {
         if (id == null) {
             return;
@@ -287,7 +300,44 @@ public final class BoardController {
             return;
         }
         cardFocused = id;
-        findKanbanCardNode(id).ifPresent(Node::requestFocus);
+        findKanbanCardNode(id).ifPresent(node -> {
+            node.requestFocus();
+            scrollCardIntoView(node);
+        });
+    }
+
+    /**
+     * Scrolls the board so the focused card is fully visible (a card reached
+     * with the arrow keys may sit outside the current viewport).
+     */
+    private void scrollCardIntoView(Node node) {
+        if (boardScroller == null || node == null || boardScroller.getContent() == null) {
+            return;
+        }
+        boardScroller.applyCss();
+        boardScroller.layout();
+        Bounds viewport = boardScroller.getViewportBounds();
+        Bounds nodeBounds = node.localToScene(node.getBoundsInLocal());
+        Bounds viewBounds = boardScroller.localToScene(boardScroller.getBoundsInLocal());
+        if (viewport == null || nodeBounds == null || viewBounds == null) {
+            return;
+        }
+        double extraVertical = boardScroller.getContent().getBoundsInLocal().getHeight()
+                - viewport.getHeight();
+        if (extraVertical > 0) {
+            double delta = (nodeBounds.getMinY() - viewBounds.getMinY()) / extraVertical;
+            if (delta < 0 || nodeBounds.getMaxY() > viewBounds.getMaxY()) {
+                boardScroller.setVvalue(Math.clamp(boardScroller.getVvalue() + delta, 0.0, 1.0));
+            }
+        }
+        double extraHorizontal = boardScroller.getContent().getBoundsInLocal().getWidth()
+                - viewport.getWidth();
+        if (extraHorizontal > 0) {
+            double delta = (nodeBounds.getMinX() - viewBounds.getMinX()) / extraHorizontal;
+            if (delta < 0 || nodeBounds.getMaxX() > viewBounds.getMaxX()) {
+                boardScroller.setHvalue(Math.clamp(boardScroller.getHvalue() + delta, 0.0, 1.0));
+            }
+        }
     }
 
     /**

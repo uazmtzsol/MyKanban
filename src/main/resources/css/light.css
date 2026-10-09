@@ -75,6 +75,15 @@
     -fx-border-color: #b9c2d0;
     -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.16), 8, 0.2, 0, 3);
 }
+/* Keyboard navigation: the card holding the keyboard focus must be obvious
+   (declared after :hover so hovering the focused card cannot hide it). The
+   highlight is a glow because custom card colors set the border inline,
+   which would win over any -fx-border-color declared here. */
+.card:focused {
+    -fx-effect: dropshadow(gaussian, #2563eb, 16, 0.60, 0, 0);
+    -fx-border-color: #2563eb;
+    -fx-border-width: 2;
+}
 
 .card-title { -fx-font-weight: bold; }
 .card-description { -fx-text-fill: #4b5563; -fx-font-size: 12px; }

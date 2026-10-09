@@ -5,6 +5,7 @@ import com.personalkanban.application.CardViewSettings;
 import com.personalkanban.application.StylePrefs;
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.CardNotes;
 import com.personalkanban.ui.markdown.MarkdownSummary;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -50,6 +51,11 @@ final class CardViewBuilder {
 
         VBox view = new VBox(4);
         view.getStyleClass().addAll("card", ColorCss.styleClass(card.color()));
+        // Keyboard navigation (arrow keys / Enter) locates the card node by
+        // its user data and needs it focusable, so the focused card shows the
+        // .card:focused highlight.
+        view.setUserData(card.id());
+        view.setFocusTraversable(true);
         // One inline style: the surface tint first, then the custom
         // flag/label colors (a later declaration wins), so the
         // priority highlight and the label rules never overwrite
@@ -204,17 +210,32 @@ final class CardViewBuilder {
         view.getChildren().add(badge);
     }
 
-    /** "\uD83D\uDCDD Notes" hint when the card has plain-text notes. */
+    /**
+     * "\uD83D\uDCDD n" hint when the card has notes: the tooltip shows the text
+     * for a single note and the list of titles once there are several.
+     */
     private static void addNotesIndicatorIfPresent(I18n i18n, Card card, VBox view) {
-        if (card.notes().isBlank()) {
+        CardNotes notes = CardNotes.parse(card.notes());
+        if (notes.isEmpty()) {
             return;
         }
-        Label badge = new Label("\uD83D\uDCDD");
+        Label badge = new Label(notes.size() == 1
+                ? "\uD83D\uDCDD" : "\uD83D\uDCDD " + notes.size());
         badge.getStyleClass().add("card-notes-indicator");
-        String notes = card.notes();
-        String extract = notes.length() > 120 ? notes.substring(0, 120) + "\u2026" : notes;
-        badge.setTooltip(new Tooltip(extract));
+        badge.setTooltip(new Tooltip(notesTooltip(i18n, notes)));
         view.getChildren().add(badge);
+    }
+
+    private static String notesTooltip(I18n i18n, CardNotes notes) {
+        if (notes.size() == 1) {
+            String body = notes.notes().get(0).body();
+            return body.length() > 120 ? body.substring(0, 120) + "\u2026" : body;
+        }
+        String titles = notes.notes().stream()
+                .map(note -> note.title().isEmpty()
+                        ? i18n.text("card.notes.untitled") : note.title())
+                .collect(java.util.stream.Collectors.joining("\n\u2022 ", "\u2022 ", ""));
+        return i18n.text("card.notes.count.tip", notes.size()) + "\n" + titles;
     }
 
     /** "\uD83D\uDCCE n" badge when the card folder holds reference files. */
