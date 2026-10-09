@@ -31,6 +31,17 @@ import java.util.Map;
  */
 final class CardViewBuilder {
 
+    /** Preview mode: how many rows of the description the card front shows. */
+    static final int PREVIEW_LINES = 3;
+
+    /**
+     * Preview mode: soft character cap — the description area is a fixed
+     * 220px wide at 12px (≈36 chars/row → 3 rows ≈ 120 chars), so a paragraph
+     * without line breaks would otherwise render in full and look identical
+     * to the FULL mode (session 10, F2).
+     */
+    static final int PREVIEW_MAX_CHARS = 120;
+
     private static final DateTimeFormatter DUE_FORMAT =
             DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM);
 
@@ -327,16 +338,23 @@ final class CardViewBuilder {
 
     /**
      * Description area per the card's effective view mode: nothing in
-     * TITLE_ONLY, the first 3 lines in TITLE_PREVIEW, everything in FULL.
+     * TITLE_ONLY, the first {@link #PREVIEW_LINES} rows in TITLE_PREVIEW
+     * (cut with an ellipsis), everything in FULL.
      * (Full tables/images only render in the markdown window; the card
      * front stays native text by design.)
+     *
+     * <p>Session 10 (F2): the preview also caps characters, because a
+     * paragraph without line breaks wraps to many rows inside the 220px
+     * front and would otherwise look exactly like the full mode.</p>
      */
     private static void addDescriptionByMode(VBox view, Card card, CardViewSettings.Mode mode) {
         if (card.description().isBlank() || mode == CardViewSettings.Mode.TITLE_ONLY) {
             return;
         }
-        int maxLines = mode == CardViewSettings.Mode.FULL ? Integer.MAX_VALUE : 3;
-        var summaryLines = MarkdownSummary.render(card.description(), maxLines);
+        boolean full = mode == CardViewSettings.Mode.FULL;
+        var summaryLines = MarkdownSummary.render(card.description(),
+                full ? Integer.MAX_VALUE : PREVIEW_LINES,
+                full ? Integer.MAX_VALUE : PREVIEW_MAX_CHARS);
         if (!summaryLines.isEmpty()) {
             javafx.scene.text.TextFlow summary = new javafx.scene.text.TextFlow(
                     summaryLines.toArray(new javafx.scene.text.Text[0]));

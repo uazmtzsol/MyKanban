@@ -98,6 +98,25 @@ Corrección: contar líneas visibles (saltos `\n` incluidos), cortar en 3 y
 marcar el corte con `…` en el modo resumen. `FULL` sigue pintando todo.
 Tests unitarios nuevos sobre `MarkdownSummary`.
 
+**Hecho:**
+
+- Nuevo `ui/markdown/LineBudget` (Java puro): presupuesto de **líneas y
+  caracteres**, corta en frontera de palabra y marca el corte con `…` (el
+  `\n` final se reemplaza para que el `…` no abra una cuarta fila).
+- `MarkdownSummary.render(md, maxLines, maxChars)` ahora separa **bloques y
+  ítems de lista con un `\n` explícito**. Hallazgo importante: `TextFlow`
+  coloca sus hijos *en línea*, así que sin ese `\n` dos párrafos (o dos
+  viñetas) se dibujaban pegados en UNA fila — por eso el recuento por bloques
+  no solo estaba mal, sino que las filas reales solo existían donde el
+  usuario escribía saltos.
+- `CardViewBuilder`: preview = **3 filas y ≈120 caracteres** (el área mide
+  220px a 12px ≈ 36 caracteres/fila); `FULL` = sin límites.
+- Tests: `LineBudgetTest` (8) + `MarkdownSummaryTest` (9, comprueba que
+  preview y extensa ya **no** coinciden en una descripción larga). Suite
+  **342/342 OK** (1 skip PHP).
+- **Pendiente F2:** verificación visual manual en claro/oscuro y con
+  descripciones que sí tienen viñetas/markdown (la suite no pinta la UI).
+
 ### F3 — Exportar una tarjeta (txt, markdown, pdf)
 
 Exporta una tarjeta con las secciones marcadas por el usuario:
