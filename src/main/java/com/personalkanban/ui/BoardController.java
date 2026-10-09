@@ -66,7 +66,11 @@ public final class BoardController {
     private ThemeManager themeManager;
     private UndoRedoController undoRedo;
     private Dialogs dialogs;
-    private final GlobalShortcuts shortcuts = new GlobalShortcuts();
+    // Global shortcuts (ui.shortcuts): loaded from settings in the constructor
+    // and again on rebind(), and mutated live by the shortcuts dialog.
+    // Session 10 fix: persisted bindings used to be saved but never read back,
+    // so a rebinding silently reset to the defaults on every restart.
+    private GlobalShortcuts shortcuts;
 
     /** Result of the last bulk labels dialog (so the caller can read add vs remove). */
     private Boolean lastBulkLabelsAdd;
@@ -77,19 +81,35 @@ public final class BoardController {
      * render — otherwise the arrow keys would stop on hidden cards.
      */
     private List<CardId> visibleCardIds() {
+        return visibleColumnsCards().stream().flatMap(List::stream).toList();
+    }
+
+    /**
+     * The same visible cards, grouped per column in display order — the
+     * column-major shape {@link CardNavigator} reasons about (session 10).
+     */
+    private List<List<CardId>> visibleColumnsCards() {
         LabelFilter labelFilter = currentLabelFilter();
         LabelFilter quickFilter = currentQuickFlagFilter();
-        return service.board().allCards().stream()
-                .filter(this::matchesProcessFilter)
-                .filter(labelFilter::matches)
-                .filter(quickFilter::matches)
-                .map(card -> card.id())
-                .toList();
+        List<List<CardId>> columns = new ArrayList<>();
+        for (BoardColumn column : service.board().columns()) {
+            columns.add(column.cards().stream()
+                    .filter(this::matchesProcessFilter)
+                    .filter(labelFilter::matches)
+                    .filter(quickFilter::matches)
+                    .map(card -> card.id())
+                    .toList());
+        }
+        return columns;
     }
 
 
     private final StringProperty title = new SimpleStringProperty();
     private final VBox root;
+
+    // The scene bound by bindScene(): the session-10 keyboard map needs the
+    // focus owner to tell "the user is typing" apart from "navigate the board".
+    private Scene boundScene;
 
     private HBox columnsRow;
     private ScrollPane boardScroller;
@@ -156,6 +176,7 @@ public final class BoardController {
         this.themeManager = context.themeManager();
         this.undoRedo = new UndoRedoController(service, i18n, this::refresh);
         this.dialogs = new Dialogs(i18n);
+        this.shortcuts = service.globalShortcuts();
         this.root = new VBox();
         this.root.getStyleClass().add("board-root");
         collapsedColumns = service.collapsedColumnsOf(context.boardService().activeBoardId());
@@ -235,19 +256,15 @@ public final class BoardController {
         // does for the label filter.
         scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.PROCESS_FILTER),
                 this::onFocusProcessFilter);
-        // Phase A (configurable kanban-card navigation): arrow keys move the
-        // focus card, Enter edits it, Escape drops the focus or cancels a
-        // modal dialog — the bindings read the persisted global shortcuts
-        // (ui.shortcuts) so the user can rewire them in File → Keyboard
-        // shortcuts. Defaults: Right/Left/Enter/Escape.
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.NEXT_CARD),
-                this::onMoveFocusNext);
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.PREV_CARD),
-                this::onMoveFocusPrev);
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.EDIT_CARD),
-                this::onEditFocusedCard);
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.EXIT),
-                this::onClearFocus);
+        // Session 10 (user request): the whole card keyboard map runs as a
+        // scene-level event FILTER instead of accelerators. A filter fires
+        // before the focused control gets the event, so the keys work no
+        // matter what has focus — which is exactly what the toolbar buttons
+        // did that the keyboard did not. The configurable bindings
+        // (Enter/Escape/Left/Right by default) are matched here too, so
+        // File → Keyboard shortcuts still rewires them.
+        this.boundScene = scene;
+        scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, this::onBoardKeyPressed);
     }
 
     GlobalShortcuts globalShortcuts() {
@@ -290,6 +307,230 @@ public final class BoardController {
 
     /** The card with keyboard focus in the kanban view (null = none). */
     private CardId cardFocused;
+
+    // ------------------------------------------------------------------
+    // Session 10: the full keyboard map (scene event filter)
+    // ------------------------------------------------------------------
+
+    /**
+     * Runs before the focused control can consume the key, so navigation
+     * works no matter what has focus (card, toolbar button, scroller…).
+     * While the user types in a field or drives a list/combo the keys stay
+     * with that control; only Escape is taken over (drop the card focus).
+     * The processes view keeps its own keys (ProcessViewBuilder.installKeys)
+     * except Escape and Enter, which are handled here for consistency.
+     */
+    private void onBoardKeyPressed(javafx.scene.input.KeyEvent event) {
+        if (event.isConsumed() || dialogs.modalActive()) {
+            return;
+        }
+        javafx.scene.input.KeyCode code = event.getCode();
+        boolean alt = event.isAltDown();
+        boolean ctrl = event.isShortcutDown();
+        boolean plain = !alt && !ctrl && !event.isShiftDown() && !event.isMetaDown();
+
+        if (processView) {
+            // Arrows, Delete and modifiers belong to the diagram here.
+            if (matches(GlobalShortcuts.Action.EXIT, event)) {
+                onClearProcessFocus();
+                event.consume();
+            } else if (matches(GlobalShortcuts.Action.EDIT_CARD, event)) {
+                CardId target = processFocusId != null ? processFocusId : cardFocused;
+                if (target != null) {
+                    onEditCard(target);
+                    event.consume();
+                }
+            }
+            return;
+        }
+
+        if (!inTextEntryContext()) {
+            if (alt && !ctrl && !event.isMetaDown()) {
+                if (code == javafx.scene.input.KeyCode.LEFT) {
+                    focusNeighbouringColumn(-1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.RIGHT) {
+                    focusNeighbouringColumn(1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.I) {
+                    toggleFocusedFlag(com.personalkanban.domain.board.Card.LABEL_IMPORTANT);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.U) {
+                    toggleFocusedFlag(com.personalkanban.domain.board.Card.LABEL_URGENT);
+                    event.consume();
+                    return;
+                }
+            }
+            if (ctrl && !alt && !event.isShiftDown() && !event.isMetaDown()) {
+                if (code == javafx.scene.input.KeyCode.LEFT) {
+                    switchBoard(-1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.RIGHT) {
+                    switchBoard(1);
+                    event.consume();
+                    return;
+                }
+            }
+            if (plain) {
+                if (code == javafx.scene.input.KeyCode.DOWN) {
+                    focusVertical(1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.UP) {
+                    focusVertical(-1);
+                    event.consume();
+                    return;
+                }
+                int position = digitPosition(code);
+                if (position >= 0) {
+                    focusCardAtPosition(position);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.DELETE) {
+                    deleteFocusedCard();
+                    event.consume();
+                    return;
+                }
+            }
+        }
+
+        // Configurable bindings (defaults: Enter edits, Escape drops focus).
+        if (matches(GlobalShortcuts.Action.EXIT, event)) {
+            onClearFocus();
+            event.consume();
+            return;
+        }
+        if (inTextEntryContext()) {
+            return; // arrows / digits / Enter stay with the field or list
+        }
+        if (matches(GlobalShortcuts.Action.EDIT_CARD, event)) {
+            onEditFocusedCard();
+            event.consume();
+            return;
+        }
+        if (matches(GlobalShortcuts.Action.NEXT_CARD, event)) {
+            onMoveFocusNext();
+            event.consume();
+            return;
+        }
+        if (matches(GlobalShortcuts.Action.PREV_CARD, event)) {
+            onMoveFocusPrev();
+            event.consume();
+        }
+    }
+
+    /** Whether the keyboard currently belongs to a text field or a list control. */
+    private boolean inTextEntryContext() {
+        javafx.scene.Node node = boundScene == null ? null : boundScene.getFocusOwner();
+        while (node != null) {
+            if (node instanceof javafx.scene.control.TextInputControl input && input.isEditable()) {
+                return true;
+            }
+            if (node instanceof javafx.scene.control.ComboBoxBase
+                    || node instanceof javafx.scene.control.ListView
+                    || node instanceof javafx.scene.control.TableView
+                    || node instanceof javafx.scene.control.TreeView
+                    || node instanceof javafx.scene.control.TabPane) {
+                return true;
+            }
+            node = node.getParent();
+        }
+        return false;
+    }
+
+    /** Match of a configurable shortcut (blank or unparsable = never matches). */
+    private boolean matches(GlobalShortcuts.Action action, javafx.scene.input.KeyEvent event) {
+        String combination = shortcuts.get(action);
+        if (combination.isBlank()) {
+            return false;
+        }
+        try {
+            return javafx.scene.input.KeyCombination.valueOf(combination).match(event);
+        } catch (IllegalArgumentException unparsable) {
+            return false;
+        }
+    }
+
+    /** 0-based position of a plain digit key (top row or keypad), or -1. */
+    private static int digitPosition(javafx.scene.input.KeyCode code) {
+        return switch (code) {
+            case DIGIT1, NUMPAD1 -> 0;
+            case DIGIT2, NUMPAD2 -> 1;
+            case DIGIT3, NUMPAD3 -> 2;
+            case DIGIT4, NUMPAD4 -> 3;
+            case DIGIT5, NUMPAD5 -> 4;
+            case DIGIT6, NUMPAD6 -> 5;
+            case DIGIT7, NUMPAD7 -> 6;
+            case DIGIT8, NUMPAD8 -> 7;
+            case DIGIT9, NUMPAD9 -> 8;
+            default -> -1;
+        };
+    }
+
+    /** Down / Up inside the current column (wrapping at both ends). */
+    private void focusVertical(int direction) {
+        kanbanFocusCard(CardNavigator.stepInColumn(visibleColumnsCards(), cardFocused, direction));
+    }
+
+    /** Alt+Left / Alt+Right: first card of the neighbouring column. */
+    private void focusNeighbouringColumn(int direction) {
+        kanbanFocusCard(CardNavigator.neighbouringColumnFirst(
+                visibleColumnsCards(), cardFocused, direction));
+    }
+
+    /** Digit keys: the n-th card of the current column. */
+    private void focusCardAtPosition(int position) {
+        kanbanFocusCard(CardNavigator.cardAtPosition(visibleColumnsCards(), cardFocused, position));
+    }
+
+    /** Alt+I / Alt+U: quick flags on the focused card (undoable like a click). */
+    private void toggleFocusedFlag(String label) {
+        if (cardFocused != null) {
+            onToggleCardLabel(cardFocused, label);
+        }
+    }
+
+    /** Delete: removes the focused card after the usual confirmation. */
+    private void deleteFocusedCard() {
+        if (cardFocused != null) {
+            onRemoveCard(cardFocused);
+        }
+    }
+
+    /** Ctrl+Left / Ctrl+Right: previous / next board, focusing its first card. */
+    private void switchBoard(int direction) {
+        List<com.personalkanban.domain.board.BoardDescriptor> boards = service.boards();
+        if (boards.size() < 2) {
+            return;
+        }
+        int index = -1;
+        for (int i = 0; i < boards.size(); i++) {
+            if (boards.get(i).id().equals(service.activeBoardId())) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            return;
+        }
+        int next = (index + direction + boards.size()) % boards.size();
+        if (next == index) {
+            return;
+        }
+        cardFocused = null;
+        onOpenBoard(boards.get(next).id());
+        kanbanFocusCard(CardNavigator.firstCard(visibleColumnsCards()));
+    }
 
     /** Sets kanban focus onto a card, highlighting and revealing it. */
     private void kanbanFocusCard(CardId id) {
@@ -486,18 +727,14 @@ public final class BoardController {
         boardNameLabel = new Label();
         boardNameLabel.getStyleClass().add("board-name");
 
-        Button focusNext = toolButton("\u2192", "shortcut.next.card");
-        focusNext.setOnAction(e -> onMoveFocusNext());
-
-        Button focusPrev = toolButton("\u2190", "shortcut.prev.card");
-        focusPrev.setOnAction(e -> onMoveFocusPrev());
-
-        Button editFocused = toolButton("\u21B5", "shortcut.edit.card");
-        editFocused.setOnAction(e -> onEditFocusedCard());
+        // Session 10: the navigation buttons (prev / next / edit) are gone on
+        // purpose — the whole map lives on the keyboard now
+        // (onBoardKeyPressed): arrows, Alt+arrows, Ctrl+arrows, digits,
+        // Enter, Alt+I/U and Delete.
 
         HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, viewToggle,
                 undoButton, redoButton, save, darkMode, exportPdf, cardViewMenu,
-                focusPrev, focusNext, editFocused, spacer);
+                spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
         toolbar.setPadding(new Insets(10));
@@ -1048,6 +1285,8 @@ public final class BoardController {
         this.themeManager = context.themeManager();
         this.undoRedo = new UndoRedoController(service, i18n, this::refresh);
         this.dialogs = new Dialogs(i18n);
+        // A new database carries its own ui.shortcuts value.
+        this.shortcuts = service.globalShortcuts();
         rebuildAll();
         Scene scene = root.getScene();
         if (scene != null) {
@@ -2037,10 +2276,43 @@ public final class BoardController {
     public void onRemoveCard(com.personalkanban.domain.board.CardId cardId) {
         if (dialogs.confirm(i18n.text("confirm.delete.card"))) {
             guarded(() -> {
+                // Session 10: Delete must not throw the keyboard user back to
+                // the top of the board — remember the card's position and
+                // focus the card that takes its place afterwards.
+                int[] position = cardId.equals(cardFocused) ? visiblePositionOf(cardId) : null;
                 service.removeCard(cardId);
                 refresh();
+                if (position != null) {
+                    cardFocused = null;
+                    focusAtVisiblePosition(position[0], position[1]);
+                }
             });
         }
+    }
+
+    /** Zero-based [column, card] of a visible card, or null when not visible. */
+    private int[] visiblePositionOf(CardId cardId) {
+        List<List<CardId>> columns = visibleColumnsCards();
+        for (int c = 0; c < columns.size(); c++) {
+            int index = columns.get(c).indexOf(cardId);
+            if (index >= 0) {
+                return new int[]{c, index};
+            }
+        }
+        return null;
+    }
+
+    /** Focuses the card that took a removed card's place (clamped to the column). */
+    private void focusAtVisiblePosition(int columnIndex, int cardIndex) {
+        List<List<CardId>> columns = visibleColumnsCards();
+        if (columnIndex < 0 || columnIndex >= columns.size()) {
+            return;
+        }
+        List<CardId> cards = columns.get(columnIndex);
+        if (cards.isEmpty()) {
+            return;
+        }
+        kanbanFocusCard(cards.get(Math.min(cardIndex, cards.size() - 1)));
     }
 
     /**

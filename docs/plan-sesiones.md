@@ -36,9 +36,45 @@ Teclas a implementar:
 | `Alt+U` | Alterna la etiqueta «urgente» en la tarjeta seleccionada |
 | `Delete` | Borra la tarjeta seleccionada **con confirmación** |
 
+**Hecho (commit de la sesión 10):**
+
+- Los tres botones de navegación de la toolbar **eliminados**; el mapa
+  completo vive en `BoardController.onBoardKeyPressed`.
+- Cambio clave de diseño: se usa un **`scene.addEventFilter(KEY_PRESSED)`**,
+  no aceleradores. Un acelerador de JavaFX llega *después* de que el control
+  con foco trate el evento, así que las flechas "no hacían nada" cuando el
+  foco estaba en un control que se los come; el filtro se ejecuta **antes**
+  y garantiza la navegación con cualquier foco.
+- Lógica de navegación extraída a **`ui/CardNavigator`** (Java puro, sin
+  JavaFX) → testeable: dentro de columna con vuelta al inicio/fin, salto de
+  columna con vuelta al tablero **ignorando columnas vacías** (la tecla nunca
+  queda muda), dígito = posición en la columna actual, sin foco = empieza
+  arriba/abajo del tablero.
+- `Enter` edita, `Escape` suelta el foco y `Alt+I`/`Alt+U`/`Delete` actúan
+  sobre la tarjeta enfocada (`Delete` = el mismo diálogo de confirmación de
+  siempre; al borrar, el foco queda en la tarjeta que ocupa su lugar).
+- `Ctrl+←/→` cambia de tablero y enfoca la primera tarjeta de la primera
+  columna del tablero destino.
+- El foco **no se secuestra** mientras se escribe en un campo ni dentro de
+  listas/combos (ahí las flechas siguen siendo del control); `Escape` siempre
+  suelta el foco de la tarjeta. La **vista de procesos conserva sus teclas
+  propias** (flechas/Delete del diagrama) y aquí solo se le añaden `Escape`
+  y `Enter`.
+- **Bug encontrado y corregido de paso:** los atajos guardados (`ui.shortcuts`)
+  se escribían con «Ayuda → Atajos de teclado» pero **nunca se volvían a leer**
+  (`service.globalShortcuts()` no tenía ningún llamante): al reiniciar, todo
+  volvía a los valores por defecto. Ahora se cargan en el constructor y en
+  `rebind()` (cambio de base de datos).
+- Tests: `CardNavigatorTest` (13) + `KeyboardNavigationTest` (7, a nivel
+  fuente, mismo estilo que `CardKeyboardFocusTest`). Suite **325/325 OK**
+  (1 skip: el endpoint PHP sin servidor).
+- **Pendiente de F1:** prueba manual con el teclado real (la suite no puede
+  arrancar el toolkit JavaFX) y, si se quiere, añadir las teclas fijas a la
+  ventana de ayuda F1 (hoy solo lista las configurables).
+
 Criterios de hecho:
 
-- Quitar los tres botones de navegación de la toolbar (`←`, `→`, `↵`).
+- Quitar los tres botones de navegación de la toolbar (`←`, `→`, `↵`). ✅
 - El manejo pasa a un **filtro de eventos de la escena** (no solo
   aceleradores): así las teclas funcionan **sin importar qué control tenga
   el foco**, salvo cuando se está escribiendo en un campo de texto (ahí no
