@@ -707,6 +707,101 @@ final class Dialogs {
     }
 
     // ------------------------------------------------------------------
+    // Card export (session 10, F3)
+    // ------------------------------------------------------------------
+
+    /**
+     * Sections + notes + format chooser for exporting one card. Every
+     * section and every note starts selected (the user asked for "by default
+     * all"), and OK with no section at all behaves like Cancel.
+     */
+    Optional<CardExporter.ExportForm> exportCardDialog(
+            com.personalkanban.domain.board.Card card) {
+        CheckBox dataBox = new CheckBox(i18n.text("export.section.data"));
+        CheckBox checklistBox = new CheckBox(i18n.text("export.section.checklist"));
+        CheckBox notesBox = new CheckBox(i18n.text("export.section.notes"));
+        CheckBox timeBox = new CheckBox(i18n.text("export.section.time"));
+        dataBox.setSelected(true);
+        checklistBox.setSelected(true);
+        notesBox.setSelected(true);
+        timeBox.setSelected(true);
+
+        var parsed = com.personalkanban.domain.board.CardNotes.parse(card.notes());
+        javafx.scene.layout.VBox noteBoxes = new javafx.scene.layout.VBox(4);
+        List<CheckBox> noteSelection = new java.util.ArrayList<>();
+        for (var note : parsed.notes()) {
+            CheckBox box = new CheckBox(note.title().isEmpty()
+                    ? i18n.text("card.notes.untitled") : note.title());
+            box.setSelected(true);
+            noteSelection.add(box);
+            noteBoxes.getChildren().add(box);
+        }
+        noteBoxes.setDisable(!notesBox.isSelected());
+        notesBox.selectedProperty().addListener((obs, old, selected) ->
+                noteBoxes.setDisable(!selected));
+
+        javafx.scene.control.ToggleGroup formatGroup = new javafx.scene.control.ToggleGroup();
+        javafx.scene.control.RadioButton txtRadio =
+                formatRadio(formatGroup, i18n.text("export.format.txt"),
+                        CardExporter.Format.TXT, true);
+        javafx.scene.control.RadioButton mdRadio =
+                formatRadio(formatGroup, i18n.text("export.format.markdown"),
+                        CardExporter.Format.MARKDOWN, false);
+        javafx.scene.control.RadioButton pdfRadio =
+                formatRadio(formatGroup, i18n.text("export.format.pdf"),
+                        CardExporter.Format.PDF, false);
+
+        Dialog<CardExporter.ExportForm> dialog = new Dialog<>();
+        dialog.setTitle(i18n.text("export.card.title"));
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        GridPane grid = formGrid();
+        grid.add(new Label(i18n.text("export.card.sections")), 0, 0);
+        grid.add(new javafx.scene.layout.VBox(4,
+                dataBox, checklistBox, notesBox, timeBox), 1, 0);
+        if (!noteSelection.isEmpty()) {
+            grid.add(new Label(i18n.text("export.card.notes.hint")), 0, 1);
+            grid.add(noteBoxes, 1, 1);
+        }
+        grid.add(new Label(i18n.text("export.card.format")), 0, 2);
+        grid.add(new javafx.scene.layout.VBox(4, txtRadio, mdRadio, pdfRadio), 1, 2);
+        dialog.getDialogPane().setContent(grid);
+
+        track(dialog);
+        dialog.setResultConverter(button -> {
+            if (button != ButtonType.OK) {
+                return null;
+            }
+            CardExporter.Sections sections = new CardExporter.Sections(
+                    dataBox.isSelected(), checklistBox.isSelected(),
+                    notesBox.isSelected(), timeBox.isSelected());
+            if (!sections.any()) {
+                return null;
+            }
+            java.util.Set<Integer> indexes = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < noteSelection.size(); i++) {
+                if (sections.notes() && noteSelection.get(i).isSelected()) {
+                    indexes.add(i);
+                }
+            }
+            var toggle = formatGroup.getSelectedToggle();
+            CardExporter.Format format = toggle == null
+                    ? CardExporter.Format.TXT : (CardExporter.Format) toggle.getUserData();
+            return new CardExporter.ExportForm(sections, indexes, format);
+        });
+        return dialog.showAndWait();
+    }
+
+    private javafx.scene.control.RadioButton formatRadio(
+            javafx.scene.control.ToggleGroup group, String label,
+            CardExporter.Format format, boolean selected) {
+        javafx.scene.control.RadioButton radio = new javafx.scene.control.RadioButton(label);
+        radio.setToggleGroup(group);
+        radio.setUserData(format);
+        radio.setSelected(selected);
+        return radio;
+    }
+
+    // ------------------------------------------------------------------
     // Prompts, confirmations, messages
     // ------------------------------------------------------------------
 

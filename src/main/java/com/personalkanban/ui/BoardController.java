@@ -2345,6 +2345,54 @@ public final class BoardController {
                 }));
     }
 
+    /**
+     * Session 10 (F3): exports ONE card as txt / markdown / pdf with the
+     * sections, notes and format the user picks in the export dialog.
+     */
+    public void onExportCard(com.personalkanban.domain.board.CardId cardId) {
+        service.board().findCard(cardId).ifPresent(card ->
+                dialogs.exportCardDialog(card).ifPresent(form -> {
+                    String extension = form.format().fileExtension();
+                    FileChooser chooser = new FileChooser();
+                    chooser.setTitle(i18n.text("export.card.title"));
+                    chooser.setInitialFileName(safeFileName(card.title()) + extension);
+                    chooser.setInitialDirectory(initialDirectory());
+                    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                            form.format().name().toUpperCase(Locale.ROOT) + " (*" + extension + ")",
+                            "*" + extension));
+                    java.io.File file = chooser.showSaveDialog(window());
+                    if (file == null) {
+                        return;
+                    }
+                    try {
+                        String text = CardExporter.render(card, service.timeEntriesOf(cardId),
+                                form, i18n);
+                        if (form.format() == CardExporter.Format.PDF) {
+                            com.personalkanban.ui.pdf.CardPdfWriter.write(text, file.toPath());
+                        } else {
+                            Files.writeString(file.toPath(), text,
+                                    java.nio.charset.StandardCharsets.UTF_8);
+                        }
+                        context.rememberTransferDirectory(file.getParentFile().toPath());
+                    } catch (java.io.IOException e) {
+                        dialogs.error(Dialogs.describeFailure(
+                                new RuntimeException(e.getMessage(), e)));
+                    } catch (RuntimeException e) {
+                        dialogs.error(Dialogs.describeFailure(e));
+                    }
+                }));
+    }
+
+    /** File-system-safe default file name for a card title. */
+    private static String safeFileName(String title) {
+        String base = title == null ? "" : title.strip()
+                .replaceAll("[\\\\/:*?\"<>|]+", " ").strip().replaceAll("\\s+", " ");
+        if (base.isEmpty()) {
+            base = "card";
+        }
+        return base.length() > 60 ? base.substring(0, 60).strip() : base;
+    }
+
     public void onClearColumn(com.personalkanban.domain.board.ColumnId columnId) {
         if (dialogs.confirm(i18n.text("confirm.clear.cards"))) {
             guarded(() -> {

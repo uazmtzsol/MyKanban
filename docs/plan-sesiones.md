@@ -136,6 +136,32 @@ Criterios de hecho: generación de txt/md testeable sin JavaFX (clase
 pura en `application` o `ui` sin dependencias de escena), i18n completa,
 ArchitectureTest en verde.
 
+**Hecho:**
+
+- **`ui/CardExporter`** (puro, sin JavaFX): renderiza la tarjeta a txt o
+  markdown con las secciones marcadas y las notas seleccionadas (todas por
+  defecto, en el orden de `CardNotes`). Marcadores `- [x]`/`- [ ]` y
+  registros `inicio – fin : nota` (sin fin = «en curso»).
+- **`ui/pdf/CardPdfWriter`**: PDF de **texto seleccionable** paginado en A4
+  (PDFBox puro, sin captura de pantalla). Helvetica solo admite WinAnsi →
+  los emoji/Caracteres fuera de tabla se sustituyen por `?` en vez de
+  reventar la exportación; líneas largas con corte por palabras.
+- **Diálogo** (`Dialogs.exportCardDialog`): casillas de sección, lista de
+  notas con casillas (todo seleccionado) y formato (txt/md/pdf). Aceptar sin
+  ninguna sección actúa como Cancelar.
+- **Acceso:** menú contextual de la tarjeta → **Exportar tarjeta…** →
+  FileChooser con nombre derivado del título (carpeta recordada `io.lastdir`).
+- i18n: 16 claves nuevas en los 5 bundles.
+- Tests: `CardExporterTest` (8) + `CardPdfWriterTest` (6, reabre el PDF y
+  extrae el texto). Suite **356/356 OK** (1 skip PHP); ArchitectureTest e
+  I18nCoverageTest en verde.
+- **Hallazgo (bug existente corregido):** el bucle de visibilidad del menú
+  contextual ocultaba **todos** los ítems «plain» (incluido «Mover/copiar a
+  otro tablero» y los separadores) hasta que la tarjeta tenía un override
+  de vista; ahora solo se oculta el ítem de «restablecer vista».
+- **Pendiente F3:** prueba manual (guardado real de los 3 formatos y
+  apariencia del PDF) — la suite valida el contenido y el PDF, no el diálogo.
+
 ### F4 — Limpieza de tableros: archivar y borrar tarjetas
 
 - **Archivar**: revisar la viabilidad de ocultar tarjetas que ya no interesan

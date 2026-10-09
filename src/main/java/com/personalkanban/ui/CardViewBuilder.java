@@ -163,13 +163,21 @@ final class CardViewBuilder {
                     i18n.text("card.transfer.menu"));
             transfer.setOnAction(e -> board.onTransferCardToBoard(card.id()));
             viewMenu.getItems().add(transfer);
+            // Session 10 (F3): export this one card as txt / markdown / pdf.
+            javafx.scene.control.MenuItem exportItem = new javafx.scene.control.MenuItem(
+                    i18n.text("card.export.menu"));
+            exportItem.setOnAction(e -> board.onExportCard(card.id()));
+            viewMenu.getItems().add(exportItem);
             view.setOnContextMenuRequested(event -> {
                 CardViewSettings.Mode effective = settings.effectiveMode(card.id().value());
+                // Only the "reset override" entry depends on the card having
+                // an override. The old loop hid EVERY plain menu item —
+                // separators and "move/copy to another board" included — until
+                // one existed, which also would have hidden this export entry.
+                reset.setVisible(settings.hasOverride(card.id().value()));
                 for (javafx.scene.control.MenuItem item : viewMenu.getItems()) {
                     if (item instanceof javafx.scene.control.RadioMenuItem radio) {
                         radio.setSelected(radio.getUserData() == effective);
-                    } else if (item instanceof javafx.scene.control.MenuItem) {
-                        item.setVisible(settings.hasOverride(card.id().value()));
                     }
                 }
                 viewMenu.show(view, event.getScreenX(), event.getScreenY());
