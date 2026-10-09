@@ -353,6 +353,15 @@ public final class BoardController {
         cardViewSettings = service.cardViewSettingsOf(service.activeBoardId());
         columnWidths = service.columnWidthsOf(service.activeBoardId());
         backgroundSpec = service.background();
+        // Keep the background image inside the program's data folder: import
+        // an original that still lives elsewhere (one-time migration) or
+        // point back at the local copy when the original disappeared.
+        String repaired = BackgroundFiles.repairSpec(
+                backgroundSpec, com.personalkanban.Main.dataDirectory());
+        if (!java.util.Objects.equals(backgroundSpec, repaired)) {
+            backgroundSpec = repaired;
+            service.setBackground(repaired);
+        }
         applyBoardBackground();
 
         HBox toolbar = buildToolbar();
@@ -1419,6 +1428,10 @@ public final class BoardController {
             String stored = selected.path() == null
                     ? null
                     : selected.path() + "|" + String.format(java.util.Locale.ROOT, "%.2f", selected.dim());
+            // A copy in the program's data folder keeps the preference alive
+            // when the chosen file later moves or is cleaned up.
+            stored = BackgroundFiles.importSpec(
+                    stored, com.personalkanban.Main.dataDirectory());
             backgroundSpec = stored;
             service.setBackground(stored);
             applyBoardBackground();
@@ -1432,11 +1445,28 @@ public final class BoardController {
      * (cosmetic preference; it must never block the app).
      */
     private void applyBoardBackground() {
-        if (backgroundSpec == null || backgroundSpec.isBlank()) {
-            paintPlainBackground();
+        paintBoardRoot(root, backgroundSpec, themeManager.isDark());
+    }
+
+    /**
+     * Paints the board root from a {@code "path|opacity"} spec (null/blank/
+     * missing file = plain themed color).
+     *
+     * <p>Implemented with an inline {@code setStyle} instead of
+     * {@code setBackground}: the light/dark stylesheets define
+     * {@code .root { -fx-background-color }}, and JavaFX re-applies CSS rules
+     * whenever the root enters a scene or the stylesheet changes,
+     * overwriting a programmatic {@link javafx.scene.layout.Background} —
+     * which is why the chosen image never showed up. Inline style is the
+     * only value with precedence over stylesheets, so both the image and
+     * the plain fallback are painted here that way.</p>
+     */
+    static void paintBoardRoot(javafx.scene.Node root, String spec, boolean dark) {
+        if (spec == null || spec.isBlank()) {
+            paintPlainBoardRoot(root, dark);
             return;
         }
-        String[] parts = backgroundSpec.split("\\|", 2);
+        String[] parts = spec.split("\\|", 2);
         String path = parts[0];
         double dim = 0.45;
         if (parts.length == 2) {
@@ -1448,41 +1478,29 @@ public final class BoardController {
         }
         java.io.File file = new java.io.File(path);
         if (!file.isFile()) {
-            paintPlainBackground();
+            paintPlainBoardRoot(root, dark);
             return;
         }
         try {
-            javafx.scene.image.Image image = new javafx.scene.image.Image(
-                    dimmedImageUri(file, dim), true);
-            root.setBackground(new javafx.scene.layout.Background(
-                    new javafx.scene.layout.BackgroundImage(
-                            image,
-                            javafx.scene.layout.BackgroundRepeat.NO_REPEAT,
-                            javafx.scene.layout.BackgroundRepeat.NO_REPEAT,
-                            javafx.scene.layout.BackgroundPosition.CENTER,
-                            new javafx.scene.layout.BackgroundSize(
-                                    javafx.scene.layout.BackgroundSize.AUTO,
-                                    javafx.scene.layout.BackgroundSize.AUTO,
-                                    false, false, true, true)))); // cover
+            String uri = dimmedImageUri(file, dim);
+            root.setStyle("-fx-background-image: url('" + uri + "');"
+                    + "-fx-background-repeat: no-repeat;"
+                    + "-fx-background-position: center;"
+                    + "-fx-background-size: cover;");
         } catch (RuntimeException e) {
             // A bad image file is a cosmetic problem only.
-            paintPlainBackground();
+            paintPlainBoardRoot(root, dark);
         }
     }
 
     /**
-     * Solid fallback behind the columns. The stylesheet's
-     * .board-root color used to win over the programmatic
-     * background (hiding the image), so both the plain state and
-     * the "image missing" state are painted here instead.
+     * Solid fallback behind the columns: the stylesheets' own .root color
+     * would be overwritten by the image inline style anyway, so the plain
+     * state is painted here too (same colors as light.css / dark.css).
      */
-    private void paintPlainBackground() {
-        root.setBackground(new javafx.scene.layout.Background(
-                new javafx.scene.layout.BackgroundFill(
-                        javafx.scene.paint.Color.web(
-                                themeManager.isDark() ? "#16181d" : "#f5f6f8"),
-                        javafx.scene.layout.CornerRadii.EMPTY,
-                        javafx.geometry.Insets.EMPTY)));
+    private static void paintPlainBoardRoot(javafx.scene.Node root, boolean dark) {
+        root.setStyle("-fx-background-color: "
+                + (dark ? "#16181d" : "#f5f6f8") + ";");
     }
 
     /**

@@ -8,8 +8,6 @@
     -fx-text-fill: #e5e7eb;
 }
 
-.board-root { -fx-background-color: #16181d; }
-
 .toolbar {
     -fx-background-color: #1f2229;
     -fx-border-color: transparent transparent #2b2f38 transparent;
