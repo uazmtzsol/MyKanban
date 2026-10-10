@@ -213,8 +213,13 @@ Migraciones: crear `V<n>__desc.sql` **y** registrar en
 - **Clic en chip = filtrar** por esa etiqueta.
 - **Checklist jerárquica** (sub-niveles) si el usuario la pide — hoy es
   plana por decisión explícita.
-- **Higiene menor:** `deleteBoard` parametrizado, import duplicado en
-  `ColumnViewBuilder`, aviso por límite de etiquetas.
+- **Higiene menor:** `deleteBoard` parametrizado (hoy sin
+  `requireInCatalog`), aviso por límite de etiquetas (8, solo excepción de
+  dominio).
+- **Import con merge** en vez de duplicar el tablero: idea del usuario
+  (2026-10-08) **pendiente de conversación**; propuesta completa, estado
+  del código, precedentes de otros programas y preguntas abiertas en
+  [`docs/import-merge-tableros.md`](docs/import-merge-tableros.md).
 
 ---
 
