@@ -14,8 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Service-level tests for the session-4 use cases: every mutation goes
- * through one undoable transaction (persist-first) and the background
- * preference round-trips through the settings store.
+ * through one undoable transaction (persist-first).
  */
 class SessionFourServiceTest {
 
@@ -143,18 +142,6 @@ class SessionFourServiceTest {
         var result = service.suggestedOrder(List.of(c, b, a));
         assertThat(result.ordered()).containsExactly(a, b, c);
         assertThat(result.cycleRemaining()).isEmpty();
-    }
-
-    @Test
-    void backgroundPreferenceRoundTripsAndClears() {
-        setUp();
-        assertThat(service.background()).isNull();
-
-        service.setBackground("C:/fondo.png|0.35");
-        assertThat(service.background()).isEqualTo("C:/fondo.png|0.35");
-
-        service.setBackground(null);
-        assertThat(service.background()).isNull();
     }
 
     @Test

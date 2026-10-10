@@ -2,24 +2,19 @@ package com.personalkanban.ui;
 
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.StylePrefs;
+import com.personalkanban.application.ThemeColors;
 import javafx.collections.FXCollections;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Slider;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
-import javafx.scene.image.Image;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.stage.FileChooser;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,23 +22,31 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Preferences dialog (session 4.5 request: customization options such as a
- * background image; appearance request: priority and label colors). Three
- * areas live here: which image file and how strongly it is dimmed, the
- * highlight colors of the quick flags (Importante / Urgente / Importante y
- * urgente), and the colors of individual labels or label combinations — each
- * stored separately for the light and the dark theme. "Quitar imagen" clears
- * the preference; Cancel leaves everything untouched.
+ * Preferences dialog (appearance: priority and label colors). Two areas live
+ * here: the highlight colors of the quick flags (Importante / Urgente /
+ * Importante y urgente), and the colors of individual labels or label
+ * combinations — each stored separately for the light and the dark theme.
+ * Cancel leaves everything untouched.
+ *
+ * <p>Session 11 (S11-1): the background-image tab was removed at the user's
+ * request — the feature is gone entirely, not hidden.</p>
  */
 final class PreferencesDialog {
-
-    /** Outcome of the dialog: null path = no background; dim in [0..0.8]. */
-    record BackgroundChoice(String path, double dim) {
-    }
 
     /** One row of the label-rules list: storage key + readable name. */
     private record LabelRule(String key, String display) {
     }
+
+    /** The five scheme slots, in dialog order, with their i18n key suffix. */
+    private static final ThemeColors.Slot[] SCHEME_SLOTS = {
+            ThemeColors.Slot.BG, ThemeColors.Slot.COLUMN, ThemeColors.Slot.CARD,
+            ThemeColors.Slot.TEXT, ThemeColors.Slot.SELECTED};
+
+    /** Scheme pickers: slot -> {lightPicker, darkPicker}. */
+    private final Map<ThemeColors.Slot, ColorPicker[]> schemePickers = new LinkedHashMap<>();
+
+    /** Live preview nodes, restyled on every picker change. */
+    private final List<javafx.scene.Node> previewNodes = new ArrayList<>();
 
     /** Edited colors of one label rule; a null field keeps the default. */
     private record LabelRuleEdit(String lightBg, String lightText,
@@ -72,87 +75,22 @@ final class PreferencesDialog {
         this.dark = dark;
     }
 
-    /**
-     * Shows the dialog. {@code initialDirectory} seeds the image chooser;
-     * {@code current} holds the persisted "path|dim" setting, or null.
-     */
-    Optional<BackgroundChoice> show(File initialDirectory, String current) {
-        String initialPath = null;
-        double initialDim = 0.45;
-        if (current != null && current.contains("|")) {
-            String[] parts = current.split("\\\\|", 2);
-            initialPath = parts[0].isBlank() ? null : parts[0];
-            try {
-                initialDim = Math.clamp(Double.parseDouble(parts[1]), 0.0, 0.8);
-            } catch (NumberFormatException ignored) {
-                // keep default dim
-            }
-        }
-
-        Label fileLabel = new Label(initialPath == null
-                ? i18n.text("prefs.background.none")
-                : initialPath);
-        fileLabel.getStyleClass().add("prefs-file-label");
-        final double fallbackDim = initialDim;
-
-        Button choose = new Button(i18n.text("prefs.background.choose"));
-        String[] chosen = {initialPath};
-        choose.setOnAction(e -> {
-            FileChooser chooser = new FileChooser();
-            chooser.setTitle(i18n.text("prefs.background.choose"));
-            chooser.setInitialDirectory(initialDirectoryOrNull(initialDirectory));
-            chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-                    "PNG / JPG", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp"));
-            File file = chooser.showOpenDialog(choose.getScene() == null
-                    ? null : choose.getScene().getWindow());
-            if (file != null) {
-                chosen[0] = file.getAbsolutePath();
-                fileLabel.setText(chosen[0]);
-            }
-        });
-
-        Slider dim = new Slider(0, 0.8, initialDim);
-        dim.setShowTickLabels(true);
-        dim.setBlockIncrement(0.05);
-        Label dimLabel = new Label(i18n.text("prefs.background.dim"));
-
-        CheckBox enabled = new CheckBox(i18n.text("prefs.background.enable"));
-        enabled.setSelected(initialPath != null);
-
-        GridPane backgroundGrid = new GridPane();
-        backgroundGrid.setHgap(10);
-        backgroundGrid.setVgap(12);
-        backgroundGrid.add(enabled, 0, 0, 2, 1);
-        backgroundGrid.add(choose, 0, 1);
-        backgroundGrid.add(fileLabel, 1, 1);
-        backgroundGrid.add(dimLabel, 0, 2);
-        backgroundGrid.add(dim, 1, 2);
-
-        TabPane tabs = new TabPane();
-        Tab backgroundTab = new Tab(i18n.text("prefs.tab.background"), backgroundGrid);
-        Tab appearanceTab = new Tab(i18n.text("prefs.tab.appearance"), appearancePane());
-        backgroundTab.setClosable(false);
-        appearanceTab.setClosable(false);
-        tabs.getTabs().setAll(backgroundTab, appearanceTab);
-
-        Dialog<BackgroundChoice> dialog = new Dialog<>();
+    /** Shows the dialog; OK commits the appearance changes, Cancel discards them. */
+    void show() {
+        Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("prefs.title"));
         dialog.setHeaderText(i18n.text("prefs.header"));
         dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
-        dialog.getDialogPane().setContent(tabs);
+        dialog.getDialogPane().setContent(appearancePane());
         Dialogs.makeResizable(dialog, 720, 560);
 
         dialog.setResultConverter(button -> {
-            if (button != ButtonType.OK) {
-                return null;
+            if (button == ButtonType.OK) {
+                applyAppearanceChanges();
             }
-            applyAppearanceChanges();
-            if (!enabled.isSelected() || chosen[0] == null) {
-                return new BackgroundChoice(null, fallbackDim); // clear preference
-            }
-            return new BackgroundChoice(chosen[0], dim.getValue());
+            return null;
         });
-        return dialog.showAndWait();
+        dialog.showAndWait();
     }
 
     // ------------------------------------------------------------------
@@ -161,12 +99,152 @@ final class PreferencesDialog {
 
     private VBox appearancePane() {
         VBox pane = new VBox(14);
-        pane.getChildren().addAll(prioritySection(), labelSection());
+        pane.getChildren().addAll(schemeSection(), prioritySection(), labelSection());
         ScrollPane scroll = new ScrollPane(pane);
         scroll.setFitToWidth(true);
         scroll.setPrefWidth(680);
         scroll.setPrefHeight(460);
         return new VBox(scroll);
+    }
+
+    // ------------------------------------------------------------------
+    // Color scheme section (session 11, S11-2)
+    // ------------------------------------------------------------------
+
+    /**
+     * The user color scheme: one row per slot (board/column/card/text/
+     * selected card), light and dark pickers, a "restore defaults" button
+     * and a live mini-board preview that repaints on every change.
+     */
+    private VBox schemeSection() {
+        Label caption = new Label(i18n.text("prefs.scheme.section"));
+        caption.getStyleClass().add("prefs-state-name");
+
+        ThemeColors colors = service.themeColors();
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.add(new Label(i18n.text("prefs.theme.light")), 1, 0);
+        grid.add(new Label(i18n.text("prefs.theme.dark")), 2, 0);
+        int row = 1;
+        for (ThemeColors.Slot slot : SCHEME_SLOTS) {
+            grid.add(new Label(i18n.text("prefs.scheme." + slot.key())), 0, row);
+            ColorPicker light = colorPicker(colors.get(slot, false));
+            ColorPicker dark = colorPicker(colors.get(slot, true));
+            schemePickers.put(slot, new ColorPicker[]{light, dark});
+            light.valueProperty().addListener((obs, old, value) -> updatePreview());
+            dark.valueProperty().addListener((obs, old, value) -> updatePreview());
+            grid.add(light, 1, row);
+            grid.add(dark, 2, row);
+            row++;
+        }
+
+        Button reset = new Button(i18n.text("prefs.scheme.reset"));
+        reset.setOnAction(e -> {
+            // Back to the developer defaults, kept local until OK.
+            for (ThemeColors.Slot slot : SCHEME_SLOTS) {
+                schemePickers.get(slot)[0].setValue(
+                        parseColor(ThemeColors.defaultOf(slot, false)));
+                schemePickers.get(slot)[1].setValue(
+                        parseColor(ThemeColors.defaultOf(slot, true)));
+            }
+            updatePreview();
+        });
+
+        VBox preview = schemePreview();
+        HBox controls = new HBox(8, reset);
+        return new VBox(8, caption, grid, controls,
+                new Label(i18n.text("prefs.scheme.preview")), preview);
+    }
+
+    /**
+     * Mini board preview: one column on the board background, two cards —
+     * one plain, one "currently selected" — all painted live from the
+     * pickers, in the theme the user is currently working with, so every
+     * change is seen immediately.
+     */
+    private VBox schemePreview() {
+        ThemeColors colors = schemeColorsFromPickers();
+
+        Label title = new Label(i18n.text("prefs.scheme.preview.card"));
+        title.setStyle(textStyle(colors, ThemeColors.Slot.TEXT, dark));
+        Label selectedTitle = new Label(i18n.text("prefs.scheme.preview.selected"));
+        selectedTitle.setStyle(textStyle(colors, ThemeColors.Slot.TEXT, dark));
+
+        VBox card = new VBox(title);
+        card.setStyle(surfaceStyle(colors, ThemeColors.Slot.CARD, false, dark));
+        card.setPadding(new javafx.geometry.Insets(8));
+
+        VBox selected = new VBox(selectedTitle);
+        selected.setStyle(surfaceStyle(colors, ThemeColors.Slot.CARD, true, dark));
+        selected.setPadding(new javafx.geometry.Insets(8));
+
+        VBox column = new VBox(6, card, selected);
+        column.setStyle(surfaceStyle(colors, ThemeColors.Slot.COLUMN, false, dark));
+        column.setPadding(new javafx.geometry.Insets(8));
+        column.setMaxWidth(320);
+
+        VBox board = new VBox(column);
+        board.setStyle(surfaceStyle(colors, ThemeColors.Slot.BG, false, dark));
+        board.setPadding(new javafx.geometry.Insets(10));
+
+        previewNodes.clear();
+        previewNodes.addAll(List.of(board, column, card, selected, title, selectedTitle));
+        return board;
+    }
+
+    /** Re-reads the pickers and repaints the live preview. */
+    private void updatePreview() {
+        if (previewNodes.size() < 5) {
+            return; // preview not built yet
+        }
+        ThemeColors colors = schemeColorsFromPickers();
+        javafx.scene.layout.VBox board = (javafx.scene.layout.VBox) previewNodes.get(0);
+        javafx.scene.layout.VBox column = (javafx.scene.layout.VBox) previewNodes.get(1);
+        javafx.scene.layout.VBox card = (javafx.scene.layout.VBox) previewNodes.get(2);
+        javafx.scene.layout.VBox selected = (javafx.scene.layout.VBox) previewNodes.get(3);
+        Label title = (Label) previewNodes.get(4);
+        Label selectedTitle = (Label) previewNodes.get(5);
+        board.setStyle(surfaceStyle(colors, ThemeColors.Slot.BG, false, dark));
+        column.setStyle(surfaceStyle(colors, ThemeColors.Slot.COLUMN, false, dark));
+        card.setStyle(surfaceStyle(colors, ThemeColors.Slot.CARD, false, dark));
+        selected.setStyle(surfaceStyle(colors, ThemeColors.Slot.CARD, true, dark));
+        title.setStyle(textStyle(colors, ThemeColors.Slot.TEXT, dark));
+        selectedTitle.setStyle(textStyle(colors, ThemeColors.Slot.TEXT, dark));
+    }
+
+    /** The scheme as the pickers currently show it (preview + OK source). */
+    private ThemeColors schemeColorsFromPickers() {
+        if (schemePickers.isEmpty()) {
+            return service.themeColors();
+        }
+        ThemeColors colors = service.themeColors();
+        for (ThemeColors.Slot slot : SCHEME_SLOTS) {
+            ColorPicker[] pickers = schemePickers.get(slot);
+            colors = colors.with(slot, false, hexOrNull(pickers[0]));
+            colors = colors.with(slot, true, hexOrNull(pickers[1]));
+        }
+        return colors;
+    }
+
+    /** Inline surface style of a preview node (board/column/card + selection). */
+    private static String surfaceStyle(ThemeColors colors, ThemeColors.Slot slot,
+                                       boolean selectedCard, boolean dark) {
+        StringBuilder style = new StringBuilder("-fx-background-color: ")
+                .append(colors.get(slot, dark)).append(";");
+        if (selectedCard) {
+            String accent = colors.get(ThemeColors.Slot.SELECTED, dark);
+            style.append(" -fx-border-color: ").append(accent).append(";")
+                    .append(" -fx-border-width: 2;")
+                    .append(" -fx-background-radius: 10;")
+                    .append(" -fx-border-radius: 10;");
+        }
+        return style.toString();
+    }
+
+    /** Inline text style for a preview label. */
+    private static String textStyle(ThemeColors colors, ThemeColors.Slot slot, boolean dark) {
+        return "-fx-text-fill: " + colors.get(slot, dark) + ";";
     }
 
     /** Quick-flag highlight colors: one row per state, both themes. */
@@ -353,6 +431,16 @@ final class PreferencesDialog {
 
     /** Commits every pending appearance change (OK only). */
     private void applyAppearanceChanges() {
+        // Color scheme: persist each slot; a value equal to the developer
+        // default is cleared, so the storage stays minimal.
+        ThemeColors defaults = ThemeColors.defaults();
+        for (ThemeColors.Slot slot : SCHEME_SLOTS) {
+            for (boolean dark : new boolean[]{false, true}) {
+                String hex = hexOrNull(schemePickers.get(slot)[dark ? 1 : 0]);
+                service.setThemeColor(slot, dark,
+                        hex.equalsIgnoreCase(defaults.get(slot, dark)) ? null : hex);
+            }
+        }
         for (String state : PRIORITY_STATES) {
             ColorPicker[] pickers = priorityPickers.get(state);
             service.setPriorityStyle(state, false,
@@ -409,9 +497,5 @@ final class PreferencesDialog {
     /** The card dialogs' prompt/info helpers, reused for rule names. */
     private Dialogs dialogs() {
         return new Dialogs(i18n);
-    }
-
-    private File initialDirectoryOrNull(File seed) {
-        return seed != null && seed.isDirectory() ? seed : null;
     }
 }

@@ -4,6 +4,7 @@ import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.CardViewSettings;
 import com.personalkanban.application.GlobalShortcuts;
+import com.personalkanban.application.ThemeColors;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
 import com.personalkanban.domain.board.BoardDescriptor;
@@ -66,7 +67,11 @@ public final class BoardController {
     private ThemeManager themeManager;
     private UndoRedoController undoRedo;
     private Dialogs dialogs;
-    private final GlobalShortcuts shortcuts = new GlobalShortcuts();
+    // Global shortcuts (ui.shortcuts): loaded from settings in the constructor
+    // and again on rebind(), and mutated live by the shortcuts dialog.
+    // Session 10 fix: persisted bindings used to be saved but never read back,
+    // so a rebinding silently reset to the defaults on every restart.
+    private GlobalShortcuts shortcuts;
 
     /** Result of the last bulk labels dialog (so the caller can read add vs remove). */
     private Boolean lastBulkLabelsAdd;
@@ -77,19 +82,35 @@ public final class BoardController {
      * render — otherwise the arrow keys would stop on hidden cards.
      */
     private List<CardId> visibleCardIds() {
+        return visibleColumnsCards().stream().flatMap(List::stream).toList();
+    }
+
+    /**
+     * The same visible cards, grouped per column in display order — the
+     * column-major shape {@link CardNavigator} reasons about (session 10).
+     */
+    private List<List<CardId>> visibleColumnsCards() {
         LabelFilter labelFilter = currentLabelFilter();
         LabelFilter quickFilter = currentQuickFlagFilter();
-        return service.board().allCards().stream()
-                .filter(this::matchesProcessFilter)
-                .filter(labelFilter::matches)
-                .filter(quickFilter::matches)
-                .map(card -> card.id())
-                .toList();
+        List<List<CardId>> columns = new ArrayList<>();
+        for (BoardColumn column : service.board().columns()) {
+            columns.add(column.cards().stream()
+                    .filter(this::matchesProcessFilter)
+                    .filter(labelFilter::matches)
+                    .filter(quickFilter::matches)
+                    .map(card -> card.id())
+                    .toList());
+        }
+        return columns;
     }
 
 
     private final StringProperty title = new SimpleStringProperty();
     private final VBox root;
+
+    // The scene bound by bindScene(): the session-10 keyboard map needs the
+    // focus owner to tell "the user is typing" apart from "navigate the board".
+    private Scene boundScene;
 
     private HBox columnsRow;
     private ScrollPane boardScroller;
@@ -144,8 +165,10 @@ public final class BoardController {
     // The process filter combo of the filter bar (rebuilt on rebuilds).
     private ComboBox<String> processFilterCombo;
 
-    // Background customization (session 4): "path|dim" or null = none.
-    private String backgroundSpec;
+    // Session 10 (board cleanup): archived cards (LABEL_ARCHIVED) stay in
+    // the database but are hidden until this toggle says otherwise.
+    // Session-scoped on purpose: hiding is a view decision, not data.
+    private boolean showArchived;
 
     // Which database menus were built (the File menu must re-run its builder).
 
@@ -156,6 +179,7 @@ public final class BoardController {
         this.themeManager = context.themeManager();
         this.undoRedo = new UndoRedoController(service, i18n, this::refresh);
         this.dialogs = new Dialogs(i18n);
+        this.shortcuts = service.globalShortcuts();
         this.root = new VBox();
         this.root.getStyleClass().add("board-root");
         collapsedColumns = service.collapsedColumnsOf(context.boardService().activeBoardId());
@@ -208,6 +232,7 @@ public final class BoardController {
 
     public void bindScene(Scene scene) {
         undoRedo.bindScene(scene);
+        applyThemeOverride();
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+1"),
                 () -> onSetBoardCardViewMode(CardViewSettings.Mode.TITLE_ONLY));
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+2"),
@@ -235,19 +260,15 @@ public final class BoardController {
         // does for the label filter.
         scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.PROCESS_FILTER),
                 this::onFocusProcessFilter);
-        // Phase A (configurable kanban-card navigation): arrow keys move the
-        // focus card, Enter edits it, Escape drops the focus or cancels a
-        // modal dialog — the bindings read the persisted global shortcuts
-        // (ui.shortcuts) so the user can rewire them in File → Keyboard
-        // shortcuts. Defaults: Right/Left/Enter/Escape.
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.NEXT_CARD),
-                this::onMoveFocusNext);
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.PREV_CARD),
-                this::onMoveFocusPrev);
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.EDIT_CARD),
-                this::onEditFocusedCard);
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.EXIT),
-                this::onClearFocus);
+        // Session 10 (user request): the whole card keyboard map runs as a
+        // scene-level event FILTER instead of accelerators. A filter fires
+        // before the focused control gets the event, so the keys work no
+        // matter what has focus — which is exactly what the toolbar buttons
+        // did that the keyboard did not. The configurable bindings
+        // (Enter/Escape/Left/Right by default) are matched here too, so
+        // File → Keyboard shortcuts still rewires them.
+        this.boundScene = scene;
+        scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, this::onBoardKeyPressed);
     }
 
     GlobalShortcuts globalShortcuts() {
@@ -290,6 +311,230 @@ public final class BoardController {
 
     /** The card with keyboard focus in the kanban view (null = none). */
     private CardId cardFocused;
+
+    // ------------------------------------------------------------------
+    // Session 10: the full keyboard map (scene event filter)
+    // ------------------------------------------------------------------
+
+    /**
+     * Runs before the focused control can consume the key, so navigation
+     * works no matter what has focus (card, toolbar button, scroller…).
+     * While the user types in a field or drives a list/combo the keys stay
+     * with that control; only Escape is taken over (drop the card focus).
+     * The processes view keeps its own keys (ProcessViewBuilder.installKeys)
+     * except Escape and Enter, which are handled here for consistency.
+     */
+    private void onBoardKeyPressed(javafx.scene.input.KeyEvent event) {
+        if (event.isConsumed() || dialogs.modalActive()) {
+            return;
+        }
+        javafx.scene.input.KeyCode code = event.getCode();
+        boolean alt = event.isAltDown();
+        boolean ctrl = event.isShortcutDown();
+        boolean plain = !alt && !ctrl && !event.isShiftDown() && !event.isMetaDown();
+
+        if (processView) {
+            // Arrows, Delete and modifiers belong to the diagram here.
+            if (matches(GlobalShortcuts.Action.EXIT, event)) {
+                onClearProcessFocus();
+                event.consume();
+            } else if (matches(GlobalShortcuts.Action.EDIT_CARD, event)) {
+                CardId target = processFocusId != null ? processFocusId : cardFocused;
+                if (target != null) {
+                    onEditCard(target);
+                    event.consume();
+                }
+            }
+            return;
+        }
+
+        if (!inTextEntryContext()) {
+            if (alt && !ctrl && !event.isMetaDown()) {
+                if (code == javafx.scene.input.KeyCode.LEFT) {
+                    focusNeighbouringColumn(-1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.RIGHT) {
+                    focusNeighbouringColumn(1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.I) {
+                    toggleFocusedFlag(com.personalkanban.domain.board.Card.LABEL_IMPORTANT);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.U) {
+                    toggleFocusedFlag(com.personalkanban.domain.board.Card.LABEL_URGENT);
+                    event.consume();
+                    return;
+                }
+            }
+            if (ctrl && !alt && !event.isShiftDown() && !event.isMetaDown()) {
+                if (code == javafx.scene.input.KeyCode.LEFT) {
+                    switchBoard(-1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.RIGHT) {
+                    switchBoard(1);
+                    event.consume();
+                    return;
+                }
+            }
+            if (plain) {
+                if (code == javafx.scene.input.KeyCode.DOWN) {
+                    focusVertical(1);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.UP) {
+                    focusVertical(-1);
+                    event.consume();
+                    return;
+                }
+                int position = digitPosition(code);
+                if (position >= 0) {
+                    focusCardAtPosition(position);
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.DELETE) {
+                    deleteFocusedCard();
+                    event.consume();
+                    return;
+                }
+            }
+        }
+
+        // Configurable bindings (defaults: Enter edits, Escape drops focus).
+        if (matches(GlobalShortcuts.Action.EXIT, event)) {
+            onClearFocus();
+            event.consume();
+            return;
+        }
+        if (inTextEntryContext()) {
+            return; // arrows / digits / Enter stay with the field or list
+        }
+        if (matches(GlobalShortcuts.Action.EDIT_CARD, event)) {
+            onEditFocusedCard();
+            event.consume();
+            return;
+        }
+        if (matches(GlobalShortcuts.Action.NEXT_CARD, event)) {
+            onMoveFocusNext();
+            event.consume();
+            return;
+        }
+        if (matches(GlobalShortcuts.Action.PREV_CARD, event)) {
+            onMoveFocusPrev();
+            event.consume();
+        }
+    }
+
+    /** Whether the keyboard currently belongs to a text field or a list control. */
+    private boolean inTextEntryContext() {
+        javafx.scene.Node node = boundScene == null ? null : boundScene.getFocusOwner();
+        while (node != null) {
+            if (node instanceof javafx.scene.control.TextInputControl input && input.isEditable()) {
+                return true;
+            }
+            if (node instanceof javafx.scene.control.ComboBoxBase
+                    || node instanceof javafx.scene.control.ListView
+                    || node instanceof javafx.scene.control.TableView
+                    || node instanceof javafx.scene.control.TreeView
+                    || node instanceof javafx.scene.control.TabPane) {
+                return true;
+            }
+            node = node.getParent();
+        }
+        return false;
+    }
+
+    /** Match of a configurable shortcut (blank or unparsable = never matches). */
+    private boolean matches(GlobalShortcuts.Action action, javafx.scene.input.KeyEvent event) {
+        String combination = shortcuts.get(action);
+        if (combination.isBlank()) {
+            return false;
+        }
+        try {
+            return javafx.scene.input.KeyCombination.valueOf(combination).match(event);
+        } catch (IllegalArgumentException unparsable) {
+            return false;
+        }
+    }
+
+    /** 0-based position of a plain digit key (top row or keypad), or -1. */
+    private static int digitPosition(javafx.scene.input.KeyCode code) {
+        return switch (code) {
+            case DIGIT1, NUMPAD1 -> 0;
+            case DIGIT2, NUMPAD2 -> 1;
+            case DIGIT3, NUMPAD3 -> 2;
+            case DIGIT4, NUMPAD4 -> 3;
+            case DIGIT5, NUMPAD5 -> 4;
+            case DIGIT6, NUMPAD6 -> 5;
+            case DIGIT7, NUMPAD7 -> 6;
+            case DIGIT8, NUMPAD8 -> 7;
+            case DIGIT9, NUMPAD9 -> 8;
+            default -> -1;
+        };
+    }
+
+    /** Down / Up inside the current column (wrapping at both ends). */
+    private void focusVertical(int direction) {
+        kanbanFocusCard(CardNavigator.stepInColumn(visibleColumnsCards(), cardFocused, direction));
+    }
+
+    /** Alt+Left / Alt+Right: first card of the neighbouring column. */
+    private void focusNeighbouringColumn(int direction) {
+        kanbanFocusCard(CardNavigator.neighbouringColumnFirst(
+                visibleColumnsCards(), cardFocused, direction));
+    }
+
+    /** Digit keys: the n-th card of the current column. */
+    private void focusCardAtPosition(int position) {
+        kanbanFocusCard(CardNavigator.cardAtPosition(visibleColumnsCards(), cardFocused, position));
+    }
+
+    /** Alt+I / Alt+U: quick flags on the focused card (undoable like a click). */
+    private void toggleFocusedFlag(String label) {
+        if (cardFocused != null) {
+            onToggleCardLabel(cardFocused, label);
+        }
+    }
+
+    /** Delete: removes the focused card after the usual confirmation. */
+    private void deleteFocusedCard() {
+        if (cardFocused != null) {
+            onRemoveCard(cardFocused);
+        }
+    }
+
+    /** Ctrl+Left / Ctrl+Right: previous / next board, focusing its first card. */
+    private void switchBoard(int direction) {
+        List<com.personalkanban.domain.board.BoardDescriptor> boards = service.boards();
+        if (boards.size() < 2) {
+            return;
+        }
+        int index = -1;
+        for (int i = 0; i < boards.size(); i++) {
+            if (boards.get(i).id().equals(service.activeBoardId())) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            return;
+        }
+        int next = (index + direction + boards.size()) % boards.size();
+        if (next == index) {
+            return;
+        }
+        cardFocused = null;
+        onOpenBoard(boards.get(next).id());
+        kanbanFocusCard(CardNavigator.firstCard(visibleColumnsCards()));
+    }
 
     /** Sets kanban focus onto a card, highlighting and revealing it. */
     private void kanbanFocusCard(CardId id) {
@@ -402,17 +647,6 @@ public final class BoardController {
         collapsedColumns = service.collapsedColumnsOf(service.activeBoardId());
         cardViewSettings = service.cardViewSettingsOf(service.activeBoardId());
         columnWidths = service.columnWidthsOf(service.activeBoardId());
-        backgroundSpec = service.background();
-        // Keep the background image inside the program's data folder: import
-        // an original that still lives elsewhere (one-time migration) or
-        // point back at the local copy when the original disappeared.
-        String repaired = BackgroundFiles.repairSpec(
-                backgroundSpec, com.personalkanban.Main.dataDirectory());
-        if (!java.util.Objects.equals(backgroundSpec, repaired)) {
-            backgroundSpec = repaired;
-            service.setBackground(repaired);
-        }
-        applyBoardBackground();
 
         HBox toolbar = buildToolbar();
         HBox filterBar = buildFilterBar();
@@ -486,18 +720,14 @@ public final class BoardController {
         boardNameLabel = new Label();
         boardNameLabel.getStyleClass().add("board-name");
 
-        Button focusNext = toolButton("\u2192", "shortcut.next.card");
-        focusNext.setOnAction(e -> onMoveFocusNext());
-
-        Button focusPrev = toolButton("\u2190", "shortcut.prev.card");
-        focusPrev.setOnAction(e -> onMoveFocusPrev());
-
-        Button editFocused = toolButton("\u21B5", "shortcut.edit.card");
-        editFocused.setOnAction(e -> onEditFocusedCard());
+        // Session 10: the navigation buttons (prev / next / edit) are gone on
+        // purpose — the whole map lives on the keyboard now
+        // (onBoardKeyPressed): arrows, Alt+arrows, Ctrl+arrows, digits,
+        // Enter, Alt+I/U and Delete.
 
         HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, viewToggle,
                 undoButton, redoButton, save, darkMode, exportPdf, cardViewMenu,
-                focusPrev, focusNext, editFocused, spacer);
+                spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
         toolbar.setPadding(new Insets(10));
@@ -596,8 +826,19 @@ public final class BoardController {
             }
         });
 
+        // Archived cards are hidden by default (session 10); this toggle
+        // brings them back without touching any data.
+        javafx.scene.control.ToggleButton archivedFilter = new javafx.scene.control.ToggleButton("\uD83D\uDDC4");
+        archivedFilter.getStyleClass().addAll("tool-button", "filter-flag");
+        archivedFilter.setSelected(showArchived);
+        archivedFilter.setTooltip(new Tooltip(i18n.text("filter.archived.show")));
+        archivedFilter.setOnAction(e -> {
+            showArchived = archivedFilter.isSelected();
+            refresh();
+        });
+
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
-                importantFilter, urgentFilter, processFilter);
+                importantFilter, urgentFilter, processFilter, archivedFilter);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
@@ -818,6 +1059,7 @@ public final class BoardController {
             return;
         }
         guarded(() -> {
+            ids.forEach(this::trashAttachments); // files follow the card (undo can bring them back)
             service.removeCards(ids);
             exitSelectionMode();
         });
@@ -935,6 +1177,7 @@ public final class BoardController {
         databaseMenu.getItems().setAll(
                 itemOf("file.save", this::onSaveNow),
                 itemOf("prefs.title", this::onShowPreferences),
+                itemOf("cleanup.attachments", this::onCleanupAttachments),
                 new SeparatorMenuItem(),
                 syncStatus,
                 itemOf("sync.now", this::onSyncNow),
@@ -1048,11 +1291,10 @@ public final class BoardController {
         this.themeManager = context.themeManager();
         this.undoRedo = new UndoRedoController(service, i18n, this::refresh);
         this.dialogs = new Dialogs(i18n);
+        // A new database carries its own ui.shortcuts value.
+        this.shortcuts = service.globalShortcuts();
         rebuildAll();
-        Scene scene = root.getScene();
-        if (scene != null) {
-            scene.getStylesheets().setAll(themeManager.stylesheet());
-        }
+        applyThemeOverride();
     }
 
     private void onNewDatabase() {
@@ -1213,6 +1455,9 @@ public final class BoardController {
         }
         if (dialogs.confirm(i18n.text("board.delete.confirm"))) {
             try {
+                // Files of every card of the board follow it to the trash.
+                service.columnsOf(activeId).forEach(column -> column.cards().forEach(card ->
+                        trashAttachments(card.id())));
                 service.deleteBoard(activeId);
             } catch (RuntimeException e) {
                 // Never leave the user wondering: surface the root cause
@@ -1320,9 +1565,22 @@ public final class BoardController {
     private void onToggleDarkMode() {
         themeManager.toggle();
         context.saveTheme(themeManager.theme());
+        applyThemeOverride();
+    }
+
+    /**
+     * Session 11 (S11-2): (re)generates the user color-scheme override for
+     * the active theme and re-applies the full stylesheet list to the scene.
+     * A write failure only means the built-in theme keeps rendering.
+     */
+    private void applyThemeOverride() {
+        ThemeColors colors = service.themeColors();
+        boolean dark = themeManager.isDark();
+        themeManager.overrideStylesheet(ThemeOverride.write(
+                com.personalkanban.Main.dataDirectory(), colors, dark));
         Scene scene = root.getScene();
         if (scene != null) {
-            scene.getStylesheets().setAll(themeManager.stylesheet());
+            scene.getStylesheets().setAll(themeManager.stylesheets());
         }
     }
 
@@ -1338,7 +1596,7 @@ public final class BoardController {
 
     /** Opens (or focuses) the fixed-shortcuts reference window (F1). */
     private void onShowShortcutsHelp() {
-        ShortcutsHelpWindow.show(i18n, themeManager.stylesheet());
+        ShortcutsHelpWindow.show(i18n, themeManager.stylesheets());
     }
 
     /** Opens the editable keyboard-shortcuts dialog (File → Keyboard shortcuts). */
@@ -1469,114 +1727,12 @@ public final class BoardController {
                 });
     }
 
-    /** Preferences: background image, priority and label colors. */
+    /** Preferences: color scheme, priority and label colors. */
     private void onShowPreferences() {
-        java.io.File seed = initialDirectory();
-        var choice = new PreferencesDialog(i18n, service, themeManager.isDark())
-                .show(seed, backgroundSpec);
-        choice.ifPresent(selected -> {
-            String stored = selected.path() == null
-                    ? null
-                    : selected.path() + "|" + String.format(java.util.Locale.ROOT, "%.2f", selected.dim());
-            // A copy in the program's data folder keeps the preference alive
-            // when the chosen file later moves or is cleaned up.
-            stored = BackgroundFiles.importSpec(
-                    stored, com.personalkanban.Main.dataDirectory());
-            backgroundSpec = stored;
-            service.setBackground(stored);
-            applyBoardBackground();
-        });
-    }
-
-    /**
-     * Paints the customized background (session 4): image over the whole
-     * board, pre-dimmed once at load time so cards/columns stay readable.
-     * A missing or unreadable file silently falls back to no background
-     * (cosmetic preference; it must never block the app).
-     */
-    private void applyBoardBackground() {
-        paintBoardRoot(root, backgroundSpec, themeManager.isDark());
-    }
-
-    /**
-     * Paints the board root from a {@code "path|opacity"} spec (null/blank/
-     * missing file = plain themed color).
-     *
-     * <p>Implemented with an inline {@code setStyle} instead of
-     * {@code setBackground}: the light/dark stylesheets define
-     * {@code .root { -fx-background-color }}, and JavaFX re-applies CSS rules
-     * whenever the root enters a scene or the stylesheet changes,
-     * overwriting a programmatic {@link javafx.scene.layout.Background} —
-     * which is why the chosen image never showed up. Inline style is the
-     * only value with precedence over stylesheets, so both the image and
-     * the plain fallback are painted here that way.</p>
-     */
-    static void paintBoardRoot(javafx.scene.Node root, String spec, boolean dark) {
-        if (spec == null || spec.isBlank()) {
-            paintPlainBoardRoot(root, dark);
-            return;
-        }
-        String[] parts = spec.split("\\|", 2);
-        String path = parts[0];
-        double dim = 0.45;
-        if (parts.length == 2) {
-            try {
-                dim = Math.clamp(Double.parseDouble(parts[1]), 0.0, 0.8);
-            } catch (NumberFormatException ignored) {
-                // keep default dim
-            }
-        }
-        java.io.File file = new java.io.File(path);
-        if (!file.isFile()) {
-            paintPlainBoardRoot(root, dark);
-            return;
-        }
-        try {
-            String uri = dimmedImageUri(file, dim);
-            root.setStyle("-fx-background-image: url('" + uri + "');"
-                    + "-fx-background-repeat: no-repeat;"
-                    + "-fx-background-position: center;"
-                    + "-fx-background-size: cover;");
-        } catch (RuntimeException e) {
-            // A bad image file is a cosmetic problem only.
-            paintPlainBoardRoot(root, dark);
-        }
-    }
-
-    /**
-     * Solid fallback behind the columns: the stylesheets' own .root color
-     * would be overwritten by the image inline style anyway, so the plain
-     * state is painted here too (same colors as light.css / dark.css).
-     */
-    private static void paintPlainBoardRoot(javafx.scene.Node root, boolean dark) {
-        root.setStyle("-fx-background-color: "
-                + (dark ? "#16181d" : "#f5f6f8") + ";");
-    }
-
-    /**
-     * Returns a data URI of the image with a black overlay of the given
-     * opacity composited once (BufferedImage, same trick as the PDF
-     * exporter), so the UI never pays per-frame dimming.
-     */
-    private static String dimmedImageUri(java.io.File file, double dim) {
-        try {
-            java.awt.image.BufferedImage source = javax.imageio.ImageIO.read(file);
-            if (source == null) {
-                return file.toURI().toString(); // undimmable format: use as is
-            }
-            java.awt.image.BufferedImage dimmed = new java.awt.image.BufferedImage(
-                    source.getWidth(), source.getHeight(), java.awt.image.BufferedImage.TYPE_INT_ARGB);
-            java.awt.Graphics2D graphics = dimmed.createGraphics();
-            graphics.drawImage(source, 0, 0, null);
-            graphics.setColor(new java.awt.Color(0, 0, 0, (int) Math.round(dim * 255)));
-            graphics.fillRect(0, 0, dimmed.getWidth(), dimmed.getHeight());
-            graphics.dispose();
-            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            javax.imageio.ImageIO.write(dimmed, "png", out);
-            return "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(out.toByteArray());
-        } catch (java.io.IOException e) {
-            return file.toURI().toString(); // fall back to the raw image
-        }
+        new PreferencesDialog(i18n, service, themeManager.isDark()).show();
+        // The dialog may have changed the scheme: repaint with the new colors.
+        applyThemeOverride();
+        refresh();
     }
 
     // ------------------------------------------------------------------
@@ -1634,6 +1790,13 @@ public final class BoardController {
 
     /** True when the card passes the active process filter (null = all pass). */
     boolean matchesProcessFilter(com.personalkanban.domain.board.Card card) {
+        // Session 10 (board cleanup): every filter chain (rendering AND the
+        // keyboard navigator) passes through here, so hiding archived cards
+        // in this one place keeps views, counts and navigation consistent.
+        if (!showArchived && card.hasLabelIgnoreCase(
+                com.personalkanban.domain.board.Card.LABEL_ARCHIVED)) {
+            return false;
+        }
         if (activeProcessFilter != null) {
             return activeProcessFilter.equals(card.processId());
         }
@@ -2037,10 +2200,120 @@ public final class BoardController {
     public void onRemoveCard(com.personalkanban.domain.board.CardId cardId) {
         if (dialogs.confirm(i18n.text("confirm.delete.card"))) {
             guarded(() -> {
+                // Session 10: Delete must not throw the keyboard user back to
+                // the top of the board — remember the card's position and
+                // focus the card that takes its place afterwards.
+                int[] position = cardId.equals(cardFocused) ? visiblePositionOf(cardId) : null;
+                trashAttachments(cardId); // notes/checklist go with the row; files go to the trash
                 service.removeCard(cardId);
                 refresh();
+                if (position != null) {
+                    cardFocused = null;
+                    focusAtVisiblePosition(position[0], position[1]);
+                }
             });
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Session 10 (board cleanup): attachments of deleted cards + maintenance
+    // ------------------------------------------------------------------
+
+    /**
+     * The card's attachment files follow a deletion — but into the trash,
+     * never to `rm`: the row itself is undoable and the files live outside
+     * the database, so a hard delete would make Ctrl+Z restore a card whose
+     * attachments were silently lost.
+     */
+    private void trashAttachments(CardId cardId) {
+        AttachmentStore.moveToTrash(com.personalkanban.Main.dataDirectory(), cardId.value());
+    }
+
+    /** Brings back trashed attachments of cards that exist again (after undo). */
+    private void restoreTrashedAttachments() {
+        java.nio.file.Path dataDirectory = com.personalkanban.Main.dataDirectory();
+        for (String cardId : AttachmentStore.trashedCardIds(dataDirectory)) {
+            if (service.board().findCard(new CardId(cardId)).isPresent()) {
+                AttachmentStore.restoreFromTrash(dataDirectory, cardId);
+            }
+        }
+    }
+
+    /**
+     * File → Cleanup: deletes the attachment folders (live and trashed) whose
+     * card no longer exists in ANY board of this database. That is the safe
+     * way to actually free the disk: folders of cards that were deleted
+     * before this feature existed, and the trash left by later deletions.
+     */
+    private void onCleanupAttachments() {
+        java.nio.file.Path dataDirectory = com.personalkanban.Main.dataDirectory();
+        List<String> orphans = AttachmentStore.storedCardIds(dataDirectory).stream()
+                .filter(id -> !cardExistsAnywhere(id))
+                .toList();
+        if (orphans.isEmpty()) {
+            dialogs.info(i18n.text("cleanup.attachments.none"));
+            return;
+        }
+        if (!dialogs.confirm(i18n.text("cleanup.attachments.confirm", orphans.size()))) {
+            return;
+        }
+        int deleted = 0;
+        for (String cardId : orphans) {
+            if (AttachmentStore.deleteCardFolder(dataDirectory, cardId)) {
+                deleted++;
+            }
+        }
+        dialogs.info(i18n.text("cleanup.attachments.done", deleted));
+    }
+
+    /** True when the card exists in the active board or in any other one. */
+    private boolean cardExistsAnywhere(String cardId) {
+        CardId id = new CardId(cardId);
+        if (service.board().findCard(id).isPresent()) {
+            return true;
+        }
+        for (BoardDescriptor descriptor : service.boards()) {
+            if (descriptor.id().equals(service.activeBoardId())) {
+                continue;
+            }
+            try {
+                boolean exists = service.columnsOf(descriptor.id()).stream()
+                        .flatMap(column -> column.cards().stream())
+                        .anyMatch(card -> card.id().equals(id));
+                if (exists) {
+                    return true;
+                }
+            } catch (RuntimeException unreadableBoard) {
+                // A board we cannot read must never cost the user their files.
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Zero-based [column, card] of a visible card, or null when not visible. */
+    private int[] visiblePositionOf(CardId cardId) {
+        List<List<CardId>> columns = visibleColumnsCards();
+        for (int c = 0; c < columns.size(); c++) {
+            int index = columns.get(c).indexOf(cardId);
+            if (index >= 0) {
+                return new int[]{c, index};
+            }
+        }
+        return null;
+    }
+
+    /** Focuses the card that took a removed card's place (clamped to the column). */
+    private void focusAtVisiblePosition(int columnIndex, int cardIndex) {
+        List<List<CardId>> columns = visibleColumnsCards();
+        if (columnIndex < 0 || columnIndex >= columns.size()) {
+            return;
+        }
+        List<CardId> cards = columns.get(columnIndex);
+        if (cards.isEmpty()) {
+            return;
+        }
+        kanbanFocusCard(cards.get(Math.min(cardIndex, cards.size() - 1)));
     }
 
     /**
@@ -2073,9 +2346,58 @@ public final class BoardController {
                 }));
     }
 
+    /**
+     * Session 10 (F3): exports ONE card as txt / markdown / pdf with the
+     * sections, notes and format the user picks in the export dialog.
+     */
+    public void onExportCard(com.personalkanban.domain.board.CardId cardId) {
+        service.board().findCard(cardId).ifPresent(card ->
+                dialogs.exportCardDialog(card).ifPresent(form -> {
+                    String extension = form.format().fileExtension();
+                    FileChooser chooser = new FileChooser();
+                    chooser.setTitle(i18n.text("export.card.title"));
+                    chooser.setInitialFileName(safeFileName(card.title()) + extension);
+                    chooser.setInitialDirectory(initialDirectory());
+                    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                            form.format().name().toUpperCase(Locale.ROOT) + " (*" + extension + ")",
+                            "*" + extension));
+                    java.io.File file = chooser.showSaveDialog(window());
+                    if (file == null) {
+                        return;
+                    }
+                    try {
+                        String text = CardExporter.render(card, service.timeEntriesOf(cardId),
+                                form, i18n);
+                        if (form.format() == CardExporter.Format.PDF) {
+                            com.personalkanban.ui.pdf.CardPdfWriter.write(text, file.toPath());
+                        } else {
+                            Files.writeString(file.toPath(), text,
+                                    java.nio.charset.StandardCharsets.UTF_8);
+                        }
+                        context.rememberTransferDirectory(file.getParentFile().toPath());
+                    } catch (java.io.IOException e) {
+                        dialogs.error(Dialogs.describeFailure(
+                                new RuntimeException(e.getMessage(), e)));
+                    } catch (RuntimeException e) {
+                        dialogs.error(Dialogs.describeFailure(e));
+                    }
+                }));
+    }
+
+    /** File-system-safe default file name for a card title. */
+    private static String safeFileName(String title) {
+        String base = title == null ? "" : title.strip()
+                .replaceAll("[\\\\/:*?\"<>|]+", " ").strip().replaceAll("\\s+", " ");
+        if (base.isEmpty()) {
+            base = "card";
+        }
+        return base.length() > 60 ? base.substring(0, 60).strip() : base;
+    }
+
     public void onClearColumn(com.personalkanban.domain.board.ColumnId columnId) {
         if (dialogs.confirm(i18n.text("confirm.clear.cards"))) {
             guarded(() -> {
+                service.column(columnId).cards().forEach(card -> trashAttachments(card.id()));
                 service.clearColumn(columnId);
                 refresh();
             });
@@ -2132,6 +2454,7 @@ public final class BoardController {
     public void onRemoveColumn(com.personalkanban.domain.board.ColumnId columnId) {
         if (dialogs.confirm(i18n.text("confirm.delete.column"))) {
             guarded(() -> {
+                service.column(columnId).cards().forEach(card -> trashAttachments(card.id()));
                 service.removeColumn(columnId);
                 refresh();
             });
@@ -2278,6 +2601,10 @@ public final class BoardController {
     // ------------------------------------------------------------------
 
     private void refresh() {
+        // An undo may have just brought a deleted card back: restore the
+        // attachment files that were trashed when it was deleted. Cheap when
+        // there is nothing trashed (one empty directory listing).
+        restoreTrashedAttachments();
         LabelFilter filter = currentLabelFilter();
         LabelFilter quickFilter = currentQuickFlagFilter();
         columnsRow.getChildren().setAll(

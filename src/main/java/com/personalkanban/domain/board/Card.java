@@ -33,6 +33,14 @@ public final class Card {
     public static final String LABEL_IMPORTANT = "Importante";
     public static final String LABEL_URGENT = "Urgente";
 
+    /**
+     * Session 10 (board cleanup): an archived card is hidden from the board
+     * until the user ticks "show archived". Implemented as a plain label so
+     * archiving needs no schema migration and rides every existing feature
+     * (undo, filters, export, sync) for free — the UI is what hides it.
+     */
+    public static final String LABEL_ARCHIVED = "Archivada";
+
     private final CardId id;
     private final ColumnId columnId;
     private String title;

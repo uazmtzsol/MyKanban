@@ -15,6 +15,9 @@ public final class ThemeManager {
 
     private Theme theme;
 
+    /** Session 11 (S11-2): URL of the user color-scheme override sheet. */
+    private String overrideStylesheet;
+
     public ThemeManager(Theme initial) {
         this.theme = Objects.requireNonNull(initial);
     }
@@ -38,5 +41,22 @@ public final class ThemeManager {
     /** Classpath path of the stylesheet for the current theme. */
     public String stylesheet() {
         return isDark() ? DARK_CSS : LIGHT_CSS;
+    }
+
+    /**
+     * Registers (or with null: drops) the overriding stylesheet of the user
+     * color scheme. It is appended AFTER the theme sheet, so its same-
+     * specificity declarations win — that is the whole application channel.
+     */
+    public void overrideStylesheet(String url) {
+        this.overrideStylesheet = url;
+    }
+
+    /** The full stylesheet list: built-in theme first, override second. */
+    public java.util.List<String> stylesheets() {
+        if (overrideStylesheet == null || overrideStylesheet.isBlank()) {
+            return java.util.List.of(stylesheet());
+        }
+        return java.util.List.of(stylesheet(), overrideStylesheet);
     }
 }
