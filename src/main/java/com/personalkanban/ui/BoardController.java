@@ -703,6 +703,12 @@ public final class BoardController {
         Button exportPdf = toolButton("\uD83D\uDCC4", "toolbar.export.pdf");
         exportPdf.setOnAction(e -> onExportBoardPdf());
 
+        // Archive/unarchive (user request): toggles the "Archivada" system
+        // label on the selected cards, or on the focused one when nothing
+        // is selected. Archived cards stay hidden until the 🗄 filter.
+        Button archive = toolButton("\uD83D\uDCE6", "card.archive.menu");
+        archive.setOnAction(e -> onArchiveCurrentCards());
+
         // "Guardar" (session 5, user request): every mutation already
         // commits instantly; this confirms the state to the user.
         Button save = toolButton("\uD83D\uDCBE", "toolbar.save");
@@ -731,7 +737,7 @@ public final class BoardController {
         // Enter, Alt+I/U and Delete.
 
         HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, viewToggle,
-                undoButton, redoButton, save, darkMode, exportPdf, cardViewMenu,
+                undoButton, redoButton, save, darkMode, exportPdf, archive, cardViewMenu,
                 spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
@@ -1007,6 +1013,40 @@ public final class BoardController {
         } else {
             dialogs.info(i18n.text("labels.shortcut.no.card"));
         }
+    }
+
+    /**
+     * Toolbar archive toggle (user request): targets the selected cards
+     * first, else the card the arrow keys are focused on. If every target
+     * is already archived the label is taken off (unarchive), otherwise it
+     * is added to all of them in one undoable step.
+     */
+    private void onArchiveCurrentCards() {
+        List<CardId> targets = new ArrayList<>();
+        if (selectionMode && !selectedCards.isEmpty()) {
+            targets.addAll(selectedCards);
+        } else if (cardFocused != null) {
+            targets.add(cardFocused);
+        }
+        if (targets.isEmpty()) {
+            dialogs.info(i18n.text("toolbar.archive.no.card"));
+            return;
+        }
+        boolean allArchived = targets.stream()
+                .map(service.board()::findCard)
+                .flatMap(java.util.Optional::stream)
+                .allMatch(card -> card.hasLabelIgnoreCase(
+                        com.personalkanban.domain.board.Card.LABEL_ARCHIVED));
+        guarded(() -> {
+            if (allArchived) {
+                service.removeLabelsFromCards(targets,
+                        List.of(com.personalkanban.domain.board.Card.LABEL_ARCHIVED));
+            } else {
+                service.addLabelsToCards(targets,
+                        List.of(com.personalkanban.domain.board.Card.LABEL_ARCHIVED));
+            }
+            refresh();
+        });
     }
 
     /** Shared body of the bulk bar button and the labels shortcut. */
