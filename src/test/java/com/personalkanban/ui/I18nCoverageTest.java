@@ -90,7 +90,13 @@ class I18nCoverageTest {
                     .collect(Collectors.toList())) {
                 Matcher matcher = TEXT_KEY.matcher(Files.readString(file, StandardCharsets.UTF_8));
                 while (matcher.find()) {
-                    keys.add(matcher.group(1));
+                    String key = matcher.group(1);
+                    // A trailing dot means the literal is a dynamic prefix
+                    // (e.g. i18n.text("prefs.scheme." + slot.key())): the
+                    // concrete keys are validated by the bundles themselves.
+                    if (!key.endsWith(".")) {
+                        keys.add(key);
+                    }
                 }
             }
         }

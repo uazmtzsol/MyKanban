@@ -123,6 +123,7 @@ public final class BoardController {
     private Menu boardMenu;
     private Menu databaseMenu;
     private Menu processMenu;
+    private Menu labelsMenu;
     private Menu helpMenu;
     private Label boardNameLabel;
     private HBox toolbarReference;
@@ -987,7 +988,7 @@ public final class BoardController {
 
     private void onBulkLabels() {
         List<CardId> ids = List.copyOf(selectedCards);
-        dialogs.bulkLabelsDialog(ids.size(), service.labelVocabulary())
+        dialogs.bulkLabelsDialog(ids.size(), globalLabelVocabulary())
                 .ifPresent(form -> {
                     lastBulkLabelsAdd = form.add();
                     if (form.labels().isEmpty()) {
@@ -1065,9 +1066,21 @@ public final class BoardController {
         });
     }
 
-    /** Vocabulary for the filter's autocomplete: same as card dialogs. */
+    /**
+     * Vocabulary for the filter's autocomplete: only labels in use on the
+     * active board make sense as filter criteria (unlike the card dialogs,
+     * which offer the whole global catalog).
+     */
     private List<String> filterVocabulary() {
         return service.labelVocabulary();
+    }
+
+    /**
+     * Autocomplete vocabulary for label fields: the global catalog (reserved
+     * labels first), available on every board.
+     */
+    private List<String> globalLabelVocabulary() {
+        return context.globalLabels().vocabularyForActiveBoard(List.of());
     }
 
     /** Localized label of a view mode; null = "follow the board default". */
@@ -1155,9 +1168,13 @@ public final class BoardController {
         // natural menus.
         processMenu = new Menu(i18n.text("menu.processes"));
         rebuildProcessMenu();
+        // Global labels: the vocabulary is shared by every board, so its
+        // manager gets its own menu (between Processes and Language).
+        labelsMenu = new Menu(i18n.text("menu.labels"));
+        rebuildLabelsMenu();
         helpMenu = new Menu(i18n.text("menu.help"));
         rebuildHelpMenu();
-        return new MenuBar(databaseMenu, boardMenu, processMenu, languageMenu, helpMenu);
+        return new MenuBar(databaseMenu, boardMenu, processMenu, labelsMenu, languageMenu, helpMenu);
     }
 
     private void rebuildDatabaseMenu() {
@@ -1224,6 +1241,19 @@ public final class BoardController {
                 itemOf("board.export", this::onExportBoard),
                 itemOf("board.export.pdf", this::onExportBoardPdf),
                 itemOf("board.import", this::onImportBoard));
+    }
+
+    /** Rebuilds the (single-item) global label manager menu. */
+    private void rebuildLabelsMenu() {
+        if (labelsMenu == null) {
+            return;
+        }
+        labelsMenu.getItems().setAll(itemOf("labels.manage", this::onManageLabels));
+    }
+
+    /** Opens the global label manager (add / rename / remove across boards). */
+    private void onManageLabels() {
+        new LabelManagerDialog(i18n, context.globalLabels(), dialogs, this::refresh).show();
     }
 
     /** Rebuilds the process management menu (creation order, like boards). */
@@ -2093,7 +2123,7 @@ public final class BoardController {
 
     public void onAddCard(com.personalkanban.domain.board.ColumnId columnId) {
         Optional<Dialogs.CardForm> form = dialogs.cardDialog(
-                null, service.labelVocabulary(), service.processes(),
+                null, globalLabelVocabulary(), service.processes(),
                 service.board().allCards(), List.of(), List.of());
         form.ifPresent(f -> guarded(() -> {
             var created = service.addCard(columnId, f.title(), f.description(), f.color(),
@@ -2126,7 +2156,7 @@ public final class BoardController {
             var initial = new Dialogs.CardForm(card.title(), card.description(), card.color(),
                     card.dueDate(), List.copyOf(card.labels()), card.notes(),
                     checklistLines, card.processId());
-            dialogs.cardDialog(initial, service.labelVocabulary(), service.processes(),
+            dialogs.cardDialog(initial, globalLabelVocabulary(), service.processes(),
                     otherCards, oldPredecessors, oldSuccessors)
                     .ifPresent(f -> guarded(() -> {
                         service.editCard(cardId, f.title(), f.description(), f.color(),

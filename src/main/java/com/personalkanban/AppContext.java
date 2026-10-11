@@ -1,6 +1,7 @@
 package com.personalkanban;
 
 import com.personalkanban.application.BoardService;
+import com.personalkanban.application.GlobalLabelsService;
 import com.personalkanban.application.port.ConflictCopyStore;
 import com.personalkanban.application.port.SettingsStore;
 import com.personalkanban.application.port.SyncRepository;
@@ -11,6 +12,7 @@ import com.personalkanban.infrastructure.sync.JsonConflictCopyStore;
 import com.personalkanban.infrastructure.sqlite.Database;
 import com.personalkanban.infrastructure.sqlite.SchemaMigrator;
 import com.personalkanban.infrastructure.sqlite.SqliteBoardRepository;
+import com.personalkanban.infrastructure.sqlite.SqliteLabelCatalogStore;
 import com.personalkanban.infrastructure.sqlite.SqliteSettingsStore;
 import com.personalkanban.ui.theme.ThemeManager;
 
@@ -54,6 +56,7 @@ public final class AppContext implements AutoCloseable {
     private ThemeManager themeManager;
     private java.util.Optional<SyncRepository> syncRepository = java.util.Optional.empty();
     private ConflictCopyStore conflictCopyStore;
+    private GlobalLabelsService globalLabels;
     private Path databasePath;
 
     private AppContext(Path configFile) {
@@ -183,6 +186,8 @@ public final class AppContext implements AutoCloseable {
             java.util.Optional<SyncRepository> newSync = wireSyncRepository(newSettings);
             ConflictCopyStore newCopyStore = new JsonConflictCopyStore(
                     dbFile.getParent().resolve("conflicts"));
+            GlobalLabelsService newLabels = new GlobalLabelsService(newService,
+                    new SqliteLabelCatalogStore(newDatabase));
 
             // Commit point: everything built; now swap the live wiring.
             if (database != null) {
@@ -194,6 +199,7 @@ public final class AppContext implements AutoCloseable {
             themeManager = newTheme;
             syncRepository = newSync;
             conflictCopyStore = newCopyStore;
+            globalLabels = newLabels;
             databasePath = dbFile;
             rememberRecent(dbFile);
             writeConfiguredDatabase(dbFile);
@@ -282,6 +288,11 @@ public final class AppContext implements AutoCloseable {
 
     public BoardService boardService() {
         return boardService;
+    }
+
+    /** Global label catalog service (add / rename / remove across boards). */
+    public GlobalLabelsService globalLabels() {
+        return globalLabels;
     }
 
     public ThemeManager themeManager() {

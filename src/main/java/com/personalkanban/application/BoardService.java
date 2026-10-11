@@ -898,6 +898,22 @@ public final class BoardService {
     }
 
     // ------------------------------------------------------------------
+    // Stored board access (used by cross-board label propagation)
+    // ------------------------------------------------------------------
+
+    /** Loads a board from storage without installing it as the active board. */
+    public BoardMemento loadStored(BoardId boardId) {
+        requireInCatalog(boardId);
+        return repository.load(boardId);
+    }
+
+    /** Persists the given memento to storage without touching the active board or history. */
+    public void saveStored(BoardId boardId, BoardMemento memento) {
+        requireInCatalog(boardId);
+        repository.save(boardId, Objects.requireNonNull(memento));
+    }
+
+    // ------------------------------------------------------------------
     // JSON export / import
     // ------------------------------------------------------------------
 

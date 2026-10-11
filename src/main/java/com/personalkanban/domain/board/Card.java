@@ -20,7 +20,8 @@ import java.util.Set;
 public final class Card {
 
     private static final int MAX_LABELS = 8;
-    private static final int MAX_LABEL_LENGTH = 40;
+    /** Upper bound of a label name; public because the global catalog validates against it. */
+    public static final int MAX_LABEL_LENGTH = 40;
     private static final int MAX_CHECKLIST_ITEMS = 50;
 
     /**
@@ -40,6 +41,10 @@ public final class Card {
      * (undo, filters, export, sync) for free — the UI is what hides it.
      */
     public static final String LABEL_ARCHIVED = "Archivada";
+
+    /** Predefined system labels used by the app (global, managed, not removable). */
+    public static final Set<String> SYSTEM_LABELS = Set.of(
+            LABEL_IMPORTANT, LABEL_URGENT, LABEL_ARCHIVED);
 
     private final CardId id;
     private final ColumnId columnId;
@@ -269,6 +274,14 @@ public final class Card {
     /** True when this card carries the given label, ignoring case. */
     public boolean hasLabelIgnoreCase(String label) {
         return labels.stream().anyMatch(existing -> existing.equalsIgnoreCase(label));
+    }
+
+    /** True when this card carries a label whose identity matches {@code otherName} (case-insensitive). */
+    public boolean hasLabelMatchingIdentity(String otherName) {
+        if (otherName == null) {
+            return false;
+        }
+        return labels.stream().anyMatch(existing -> existing.equalsIgnoreCase(otherName.strip()));
     }
 
     // Quick-flag priority helpers (sorting + card-front highlighting).
