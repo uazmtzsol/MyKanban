@@ -4,7 +4,9 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Última actualización: 2026-10-09 · **Sesión 10:** cuatro características nuevas pedidas de golpe por el usuario (navegación con teclado, resumen vs. extensa de la tarjeta, exportar tarjeta, limpieza/archivado) — **las 4 hechas**, una por commit con push; ver la sección «Sesión 10» al final. Suite **367/367 OK** (1 skip: endpoint PHP sin servidor).*
+*Última actualización: 2026-10-11 · **Sesión 12:** catálogo global de etiquetas con gestor (añadir/renombrar/quitar con barrido entre tableros + etiquetas reservadas), visor de copias de conflicto integrado en el menú (cierra 3.1), atajo Ctrl+L para etiquetas, botón 📦 archivar en la barra de herramientas y fix del bug de notas con markdown — **todo hecho**, una por commit con push; ver la sección «Sesión 12» al final. Suite **385/385 OK** (1 skip: endpoint PHP sin servidor).*
+
+*Sesión 10 (2026-10-09): cuatro características nuevas pedidas de golpe por el usuario (navegación con teclado, resumen vs. extensa de la tarjeta, exportar tarjeta, limpieza/archivado) — **las 4 hechas**, una por commit con push; ver la sección «Sesión 10» al final. Suite **367/367 OK** (1 skip: endpoint PHP sin servidor).*
 
 *Sesión 9 (2026-10-07): mejoras adicionales recomendadas documentadas en [`docs/adiciones-propuestas.md`](docs/adiciones-propuestas.md) (**sin implementar**, para revisar al probar); plan de trabajo formalizado en [`docs/plan-sesiones.md`](docs/plan-sesiones.md) con fases A-B-C-D y checklist para continuar si se interrumpe; suite **236/236 tests OK** (1 skipped: `PhpSyncApiEndpointTest`, salta si no hay servidor PHP). Mejoras ya hechas en Sesión 9: sync §4/§4.1 (`SyncMerge`, `SyncService`, copias de conflicto), `SyncMergePropertyTest` (9 propiedades), B6 (clic en chip = filtrar) + `LabelChipFilterTest`, D3 (CI `.github/workflows/ci.yml`), manual de usuario y mejoras propuestas. Corregido un **NPE latente** del merge (columna huérfana). Pendiente: planificación y desarrollo de las mejoras recommendadas por fases (primero la Fase A).*
 
@@ -480,3 +482,58 @@ push-eado (`a049298` plan, `c0ed25f`, `5193d63`, `ac5c62a`, `5dc2882`).
 **Pendiente:** la prueba manual del usuario de las 4 características (la
 suite no puede arrancar el toolkit JavaFX ni el diálogo real); las fases
 B/C/D del plan de sesión siguen en espera.
+
+---
+
+## Sesión 12 (2026-10-11): etiquetas globales + cierre de pendientes
+
+Pedidas por el usuario de una vez: gestor global de etiquetas, visor de copias
+de conflicto (3.1 de `docs/adiciones-propuestas.md`), atajo de etiquetas,
+botón de archivar y el fix del bug de notas con markdown. Todo hecho, una
+funcionalidad por commit con push.
+
+- [x] **Catálogo global de etiquetas** (`afb6163`). Las etiquetas son un único
+  vocabulario por base de datos (`LabelCatalog` persistido en `app_setting`
+  clave `labels.catalog`, sin migración). Menú **Etiquetas → Gestionar
+  etiquetas…** para añadir, renombrar y quitar: renombrar/quitar barre las
+  tarjetas de **todos** los tableros guardados y recarga el activo; las
+  etiquetas ya existentes en tarjetas se adoptan al arrancar. Reservadas
+  (Urgente/Importante/Archivada): se listan primeras y **no** se pueden
+  renombrar ni quitar, ni renombrar otra hacia ellas; identidad sin
+  distinguir mayúsculas («et1» = «ET1»). Los diálogos de tarjeta y masivo
+  ofrecen el catálogo global.
+  - **Recuperación incluida:** `BoardController.java` había quedado con 2.6k
+    líneas perdidas de una sesión anterior (restaurado desde git),
+    `GlobalLabelsService` estaba corrupto (reescrito), `BoardService` tenía un
+    par de métodos duplicados y `Card.setLabels` había perdido el tope de 8
+    etiquetas y rechazaba las etiquetas del sistema que usan ★/! (ambos
+    restaurados).
+- [x] **Visor de copias de conflicto** (`9606a64`), cierra **3.1**: menú
+  **Tableros → Ver copias de conflicto…** con lista + manifiesto campo a
+  campo (local → remoto) para el tablero activo. `ConflictCopy` movido a
+  `application.sync` (regla ArchUnit) y NPE del panel de detalle corregido.
+  Ver `docs/progress-conflict-viewer-sesion.md`.
+- [x] **Atajo Ctrl+L** (`982819b`), acción configurable `LABELS` como las
+  demás: abre el diálogo añadir/quitar etiquetas de la selección, o de la
+  tarjeta enfocada con las flechas.
+- [x] **Botón 📦 archivar** (`7328bb4`) en la barra de herramientas: alterna
+  la etiqueta «Archivada» en la selección (o en la tarjeta enfocada); si
+  todas están archivadas la quita. Un paso deshacerable.
+- [x] **Fix notas markdown** (commit `fix(notes): …`). El separador de notas
+  dejó de ser «## » (también era markdown) y pasó a «%% »: pegar texto con
+  encabezados `#`/`##` ya **no** fragmenta la lista de notas. Los textos
+  guardados con el formato antiguo (que empiezan por «## ») siguen
+  parseando con el separador legado para no perder su estructura.
+
+**Hallazgos/sorpresas:** `LabelCatalog` (nuevo en una sesión previa) tenía
+errores que impedían compilar (import `Optional`, `kindFor` no estática en un
+record, `Card.MAX_LABEL_LENGTH` privado); `I18nCoverageTest` fallaba en HEAD
+por la clave dinámica `i18n.text("prefs.scheme." + slot)` (el scan ahora
+ignora claves terminadas en «.»); `CurrentConflicts` dependía de
+infrastructure (ArchUnit) y su test no limpiaba el tmpdir.
+
+**Estado:** suite **385/385 OK** (1 skip: `PhpSyncApiEndpointTest`), jar
+empaquetado, 5 commits con push. **Pendiente manual:** probar la app
+(`kanban.bat`): gestor de etiquetas, Ctrl+L, 📦 y las notas pegadas con
+markdown. **Sin tocar (grandes, para sesiones dedicadas):** sync automático
+(3.4), device_id (3.2), fractional index (3.3), jpackage (4.3).

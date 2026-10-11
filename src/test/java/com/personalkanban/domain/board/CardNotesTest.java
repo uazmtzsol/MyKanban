@@ -24,7 +24,7 @@ class CardNotesTest {
     }
 
     @Test
-    void titledNotesAreSplitByHeading() {
+    void titledNotesAreSplitByMarker() {
         CardNotes notes = CardNotes.parse("""
                 ## Compras
 
@@ -44,7 +44,7 @@ class CardNotesTest {
 
     @Test
     void titleOnlyNoteIsKept() {
-        CardNotes notes = CardNotes.parse("## Pendiente");
+        CardNotes notes = CardNotes.parse("%% Pendiente");
 
         assertThat(notes.size()).isEqualTo(1);
         assertThat(notes.notes().get(0).title()).isEqualTo("Pendiente");
@@ -54,7 +54,7 @@ class CardNotesTest {
     @Test
     void bodyWithBlankLinesAndMarkdownIsPreserved() {
         CardNotes notes = CardNotes.parse("""
-                ## Ideas
+                %% Ideas
 
                 - punto uno
 
@@ -79,15 +79,80 @@ class CardNotesTest {
     }
 
     @Test
-    void serializeOfLegacyNoteUsesHeadingSoItRoundTrips() {
+    void serializeOfLegacyNoteUsesMarkerSoItRoundTrips() {
         CardNotes legacy = CardNotes.parse("Nota antigua\ncon dos líneas");
 
         String serialized = legacy.serialize();
         CardNotes reparsed = CardNotes.parse(serialized);
 
-        assertThat(serialized).startsWith("## ");
+        assertThat(serialized).startsWith("%% ");
         assertThat(reparsed.notes()).isEqualTo(legacy.notes());
         assertThat(reparsed.notes().get(0).body()).isEqualTo("Nota antigua\ncon dos líneas");
+    }
+
+    // ------------------------------------------------------------------
+    // User request: pasted Markdown must not fragment the notes list
+    // ------------------------------------------------------------------
+
+    @Test
+    void markdownHeadingsDoNotFragmentNotes() {
+        String pasted = """
+                # Reunión
+
+                Notas de la reunión
+
+                ## Sección markdown
+
+                más texto
+
+                ### Subsección
+
+                final
+                """;
+
+        CardNotes notes = CardNotes.parse(pasted);
+
+        assertThat(notes.size()).isEqualTo(1);
+        assertThat(notes.notes().get(0).body())
+                .isEqualTo(pasted.strip());
+
+        // Saving and re-reading keeps it a single note.
+        assertThat(CardNotes.parse(notes.serialize()).size()).isEqualTo(1);
+    }
+
+    @Test
+    void legacyMultiNotesWrittenWithHeadingsStillParse() {
+        // Texts saved by the original format start with a "## " heading;
+        // they keep their note structure through the legacy path.
+        CardNotes notes = CardNotes.parse("""
+                ## Compras
+
+                Leche, pan
+
+                ## Ideas
+
+                - una
+                """);
+
+        assertThat(notes.size()).isEqualTo(2);
+        assertThat(notes.notes().get(0).title()).isEqualTo("Compras");
+        assertThat(notes.notes().get(1).title()).isEqualTo("Ideas");
+    }
+
+    @Test
+    void markdownStartingWithSecondLevelHeadingIsReadAsLegacy() {
+        // Documented limitation of the backwards-compatible path: a paste
+        // that *starts* exactly like the legacy serialization is treated as
+        // legacy structure. Any other starting line (e.g. "# Título") is not.
+        CardNotes notes = CardNotes.parse("""
+                ## Heading
+
+                body
+                """);
+
+        assertThat(notes.size()).isEqualTo(1);
+        assertThat(notes.notes().get(0).title()).isEqualTo("Heading");
+        assertThat(notes.notes().get(0).body()).isEqualTo("body");
     }
 
     @Test
@@ -106,7 +171,7 @@ class CardNotesTest {
 
     @Test
     void blankOperationsAreIgnored() {
-        CardNotes notes = CardNotes.parse("## A\n\nuno");
+        CardNotes notes = CardNotes.parse("%% A\n\nuno");
 
         assertThat(notes.withNote("  ", "  ")).isSameAs(notes);
         // Blanking the only note removes it instead of storing an empty text.
@@ -115,11 +180,11 @@ class CardNotesTest {
     }
 
     @Test
-    void textAroundHeadingsIsKeptAsTheFirstNote() {
+    void textAroundMarkersIsKeptAsTheFirstNote() {
         CardNotes notes = CardNotes.parse("""
                 Texto suelto
 
-                ## Con título
+                %% Con título
 
                 cuerpo
                 """);
