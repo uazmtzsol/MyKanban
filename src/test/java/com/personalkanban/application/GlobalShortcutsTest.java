@@ -42,7 +42,16 @@ class GlobalShortcutsTest {
 
         assertThat(shortcuts.get(GlobalShortcuts.Action.LABEL_FILTER)).isEqualTo("Ctrl+F");
         assertThat(shortcuts.get(GlobalShortcuts.Action.PROCESS_FILTER)).isEqualTo("Ctrl+P");
+        // Added later (labels shortcut): a JSON saved before it existed must
+        // still pick up its default binding.
+        assertThat(shortcuts.get(GlobalShortcuts.Action.LABELS)).isEqualTo("Ctrl+L");
         assertThat(shortcuts.get(GlobalShortcuts.Action.NEXT_CARD)).isEqualTo("Right");
+    }
+
+    @Test
+    void labelsShortcutDefaultsToCtrlL() {
+        assertThat(new GlobalShortcuts().get(GlobalShortcuts.Action.LABELS))
+                .isEqualTo("Ctrl+L");
     }
 
     @Test
@@ -161,7 +170,8 @@ class GlobalShortcutsTest {
                 GlobalShortcuts.Action.EDIT_CARD.name(),
                 GlobalShortcuts.Action.EXIT.name(),
                 GlobalShortcuts.Action.LABEL_FILTER.name(),
-                GlobalShortcuts.Action.PROCESS_FILTER.name()
+                GlobalShortcuts.Action.PROCESS_FILTER.name(),
+                GlobalShortcuts.Action.LABELS.name()
         );
     }
 

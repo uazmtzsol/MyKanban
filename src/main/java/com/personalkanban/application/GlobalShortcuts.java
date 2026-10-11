@@ -41,7 +41,8 @@ public final class GlobalShortcuts {
         EDIT_CARD("edit"),
         EXIT("exit"),
         LABEL_FILTER("filter"),
-        PROCESS_FILTER("process");
+        PROCESS_FILTER("process"),
+        LABELS("labels");
 
         final String storageName;
 
@@ -78,6 +79,7 @@ public final class GlobalShortcuts {
     private static final String DEFAULT_EXIT = "Escape";
     private static final String DEFAULT_LABEL_FILTER = "Ctrl+F";
     private static final String DEFAULT_PROCESS_FILTER = "Ctrl+P";
+    private static final String DEFAULT_LABELS = "Ctrl+L";
 
     private static final List<ShortcutSetting> DEFAULTS = List.of(
             new ShortcutSetting(Action.NEXT_CARD.name(), DEFAULT_NEXT),
@@ -85,7 +87,8 @@ public final class GlobalShortcuts {
             new ShortcutSetting(Action.EDIT_CARD.name(), DEFAULT_EDIT),
             new ShortcutSetting(Action.EXIT.name(), DEFAULT_EXIT),
             new ShortcutSetting(Action.LABEL_FILTER.name(), DEFAULT_LABEL_FILTER),
-            new ShortcutSetting(Action.PROCESS_FILTER.name(), DEFAULT_PROCESS_FILTER)
+            new ShortcutSetting(Action.PROCESS_FILTER.name(), DEFAULT_PROCESS_FILTER),
+            new ShortcutSetting(Action.LABELS.name(), DEFAULT_LABELS)
     );
 
     private List<ShortcutSetting> settings;
@@ -132,6 +135,7 @@ public final class GlobalShortcuts {
             case EXIT -> "shortcut.exit";
             case LABEL_FILTER -> "shortcut.filter.labels";
             case PROCESS_FILTER -> "shortcut.filter.process";
+            case LABELS -> "shortcut.labels";
         };
     }
 
@@ -221,6 +225,7 @@ public final class GlobalShortcuts {
             case EXIT -> DEFAULT_EXIT;
             case LABEL_FILTER -> DEFAULT_LABEL_FILTER;
             case PROCESS_FILTER -> DEFAULT_PROCESS_FILTER;
+            case LABELS -> DEFAULT_LABELS;
         };
     }
 }

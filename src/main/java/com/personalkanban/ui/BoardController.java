@@ -249,6 +249,10 @@ public final class BoardController {
         // so File → Keyboard shortcuts can rewire them (defaults Ctrl+F/Ctrl+P).
         scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.LABEL_FILTER),
                 this::onFocusFilter);
+        // Add/remove labels (default Ctrl+L): same dialog as the bulk bar,
+        // scoped to the selection or to the keyboard-focused card.
+        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.LABELS),
+                this::onLabelsForCurrentCards);
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+D"),
                 this::onToggleDarkMode);
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+Q"),
@@ -987,7 +991,29 @@ public final class BoardController {
     // ------------------------------------------------------------------
 
     private void onBulkLabels() {
-        List<CardId> ids = List.copyOf(selectedCards);
+        applyBulkLabels(List.copyOf(selectedCards), true);
+    }
+
+    /**
+     * Labels shortcut (default Ctrl+L, user request): the add/remove dialog
+     * for the selected cards, or — with no selection — for the card the
+     * arrow keys are focused on.
+     */
+    private void onLabelsForCurrentCards() {
+        if (!selectedCards.isEmpty()) {
+            applyBulkLabels(List.copyOf(selectedCards), true);
+        } else if (cardFocused != null) {
+            applyBulkLabels(List.of(cardFocused), false);
+        } else {
+            dialogs.info(i18n.text("labels.shortcut.no.card"));
+        }
+    }
+
+    /** Shared body of the bulk bar button and the labels shortcut. */
+    private void applyBulkLabels(List<CardId> ids, boolean fromSelectionMode) {
+        if (ids.isEmpty()) {
+            return;
+        }
         dialogs.bulkLabelsDialog(ids.size(), globalLabelVocabulary())
                 .ifPresent(form -> {
                     lastBulkLabelsAdd = form.add();
@@ -1000,7 +1026,11 @@ public final class BoardController {
                         } else {
                             service.removeLabelsFromCards(ids, form.labels());
                         }
-                        exitSelectionMode();
+                        if (fromSelectionMode) {
+                            exitSelectionMode();
+                        } else {
+                            refresh();
+                        }
                     });
                 });
     }
