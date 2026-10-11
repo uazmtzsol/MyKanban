@@ -3,6 +3,7 @@ package com.personalkanban.infrastructure.sync;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.personalkanban.application.BoardJsonMapper;
 import com.personalkanban.application.port.ConflictCopyStore;
+import com.personalkanban.application.sync.ConflictCopy;
 import com.personalkanban.application.sync.SyncConflict;
 import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
@@ -50,10 +51,5 @@ public final class JsonConflictCopyStore implements ConflictCopyStore {
         } catch (IOException | RuntimeException e) {
             return Optional.empty();
         }
-    }
-
-    /** On-disk shape of a conflict copy: metadata + manifest + full snapshot. */
-    public record ConflictCopy(String boardId, String boardName, long savedAt,
-                               List<SyncConflict> conflicts, BoardMemento snapshot) {
     }
 }

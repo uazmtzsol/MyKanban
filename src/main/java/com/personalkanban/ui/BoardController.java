@@ -1240,7 +1240,9 @@ public final class BoardController {
                 new SeparatorMenuItem(),
                 itemOf("board.export", this::onExportBoard),
                 itemOf("board.export.pdf", this::onExportBoardPdf),
-                itemOf("board.import", this::onImportBoard));
+                itemOf("board.import", this::onImportBoard),
+                new SeparatorMenuItem(),
+                itemOf("view.conflicts.menu", this::onShowConflicts));
     }
 
     /** Rebuilds the (single-item) global label manager menu. */
@@ -1254,6 +1256,20 @@ public final class BoardController {
     /** Opens the global label manager (add / rename / remove across boards). */
     private void onManageLabels() {
         new LabelManagerDialog(i18n, context.globalLabels(), dialogs, this::refresh).show();
+    }
+
+    /**
+     * Reviews the conflict copies the sync layer preserved for the active
+     * board (design §4.1): list on the left, field-level manifest on the
+     * right. Empty list is a valid "nothing was ever lost" state.
+     */
+    private void onShowConflicts() {
+        Path dataDirectory = context.databasePath().getParent();
+        com.personalkanban.application.CurrentConflicts conflicts =
+                new com.personalkanban.application.CurrentConflicts(dataDirectory);
+        java.util.List<com.personalkanban.application.CurrentConflicts.ConflictEntry> entries =
+                conflicts.listFor(service.activeBoardId());
+        new ConflictReviewDialog(null, i18n, dataDirectory, entries).showAndWait();
     }
 
     /** Rebuilds the process management menu (creation order, like boards). */
