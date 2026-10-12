@@ -246,6 +246,11 @@ public final class BoardController {
                 this::onShowShortcutsHelp);
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+N"),
                 this::onNewBoard);
+        // Session 14 (user request B2): search the whole catalogue. A plain
+        // scene accelerator like Ctrl+N / Ctrl+D, not one of the re-bindable
+        // card actions (those are about the card on screen).
+        scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+F"),
+                this::onGlobalSearch);
         // Filter shortcuts read the persisted bindings like the arrow keys,
         // so File → Keyboard shortcuts can rewire them (defaults Ctrl+F/Ctrl+P).
         scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.LABEL_FILTER),
@@ -553,6 +558,11 @@ public final class BoardController {
         }
         cardFocused = id;
         syncCurrentCardHighlight();
+        requestFocusOnCardNode(id);
+    }
+
+    /** Focuses and reveals the rendered node of a card, when it is built. */
+    private void requestFocusOnCardNode(CardId id) {
         findKanbanCardNode(id).ifPresent(node -> {
             node.requestFocus();
             scrollCardIntoView(node);
@@ -717,6 +727,12 @@ public final class BoardController {
         Button save = toolButton("\uD83D\uDCBE", "toolbar.save");
         save.setOnAction(e -> onSaveNow());
 
+        // Global search (session 14, B2): finding something in a board full of
+        // cards is a daily move, so it gets a button next to the accelerators
+        // and the menu entry.
+        Button search = toolButton("\uD83D\uDD0D", "search.tooltip");
+        search.setOnAction(e -> onGlobalSearch());
+
         // Card view mode: one button, radio menu (board-wide default).
         MenuButton cardViewMenu = new MenuButton("\u2637");
         cardViewMenu.getStyleClass().addAll("tool-button");
@@ -740,7 +756,7 @@ public final class BoardController {
         // Enter, Alt+I/U and Delete.
 
         HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, viewToggle,
-                undoButton, redoButton, save, darkMode, exportPdf, archive, cardViewMenu,
+                undoButton, redoButton, save, search, darkMode, exportPdf, archive, cardViewMenu,
                 spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("toolbar");
@@ -779,18 +795,7 @@ public final class BoardController {
         });
 
         Button clearFilter = toolButton("\u2715", "filter.clear");
-        clearFilter.setOnAction(e -> {
-            labelFilterField.clear();
-            labelFilterMode.setValue(null);
-            activeFilterLabels = "";
-            activeFilterMode = null;
-            activeProcessFilter = null;
-            processFilterNone = false;
-            if (processFilterCombo != null) {
-                processFilterCombo.setValue(i18n.text("filter.process.all"));
-            }
-            refresh();
-        });
+        clearFilter.setOnAction(e -> clearFilters());
 
         javafx.scene.control.ToggleButton importantFilter = quickFlagFilterButton(
                 "\u2605", com.personalkanban.domain.board.Card.LABEL_IMPORTANT, "filter.flag.important");
@@ -857,6 +862,33 @@ public final class BoardController {
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
         return bar;
+    }
+
+    /**
+     * Clears every filter of the bar — label text and mode, process choice and
+     * the quick flags ★/! — and refreshes. Returns true when something was
+     * actually filtered out, so the callers that rebuild the whole scene
+     * (opening a search hit, session 14 B2) only pay for a rebuild when the
+     * visible cards really changed.
+     */
+    private boolean clearFilters() {
+        boolean changed = !activeFilterLabels.isBlank()
+                || activeFilterMode != null
+                || activeProcessFilter != null
+                || processFilterNone
+                || !quickFlagFilters.isEmpty();
+        labelFilterField.clear();
+        labelFilterMode.setValue(null);
+        activeFilterLabels = "";
+        activeFilterMode = null;
+        activeProcessFilter = null;
+        processFilterNone = false;
+        quickFlagFilters.clear();
+        if (processFilterCombo != null) {
+            processFilterCombo.setValue(i18n.text("filter.process.all"));
+        }
+        refresh();
+        return changed;
     }
 
     /** One toggle in the quick-flag filter row; both active together = AND. */
@@ -1472,7 +1504,8 @@ public final class BoardController {
         // no new top-level menu for a single entry.
         viewMenu.getItems().setAll(boardView, processViewItem,
                 new SeparatorMenuItem(),
-                itemOf("report.time", this::onShowTimeReport));
+                itemOf("report.time", this::onShowTimeReport),
+                itemOf("search.menu", this::onGlobalSearch));
         syncViewMenu();
     }
 
@@ -1826,6 +1859,62 @@ public final class BoardController {
     /** Opens (or focuses) the fixed-shortcuts reference window (F1). */
     private void onShowShortcutsHelp() {
         ShortcutsHelpWindow.show(i18n, themeManager.stylesheets());
+    }
+
+    /**
+     * Searches every board of the catalogue (session 14, B2) and opens the hit
+     * the user picks: the board comes on screen and the card becomes the
+     * "current" one, so the arrow keys and the card shortcuts continue from it.
+     */
+    private void onGlobalSearch() {
+        new GlobalSearchDialog(new com.personalkanban.application.GlobalSearch(service), i18n)
+                .show()
+                .ifPresent(hit -> focusCardInBoard(hit.boardId(), hit.card().id()));
+    }
+
+    /**
+     * Brings a card of any board on screen as the current one. The board is
+     * opened only when it is not the one already displayed; filters are
+     * cleared (a filtered-out card cannot be focused) and an archived hit also
+     * switches the archived view on, so "open this result" never lands on an
+     * empty screen.
+     */
+    public void focusCardInBoard(BoardId boardId, CardId cardId) {
+        boolean boardChanged = !boardId.equals(service.activeBoardId());
+        if (boardChanged) {
+            service.openBoard(boardId);
+            cardFocused = null;
+        }
+        boolean needsRebuild = clearFilters();
+        if (!showArchived && isArchived(cardId)) {
+            showArchived = true;
+            needsRebuild = true;
+        }
+        if (boardChanged || needsRebuild) {
+            rebuildAll();
+        }
+        // kanbanFocusCard skips the work when the card is already current, and
+        // this entry point must always land on the hit (the search dialog may
+        // have opened it twice).
+        if (cardId.equals(cardFocused)) {
+            cardFocused = null;
+        }
+        kanbanFocusCard(cardId);
+        // A rebuilt column exposes its cards to the node walk only after the
+        // next layout pass, so the focus and the scroll are retried one pulse
+        // later; the "current" highlight is already applied.
+        javafx.application.Platform.runLater(() -> {
+            if (cardId.equals(cardFocused)) {
+                requestFocusOnCardNode(cardId);
+            }
+        });
+    }
+
+    private boolean isArchived(CardId cardId) {
+        return service.board().findCard(cardId)
+                .map(card -> card.hasLabelIgnoreCase(
+                        com.personalkanban.domain.board.Card.LABEL_ARCHIVED))
+                .orElse(false);
     }
 
     /** Opens the (non-modal) time report of the board on screen (B1). */

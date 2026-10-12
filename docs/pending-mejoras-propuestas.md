@@ -51,6 +51,7 @@
 | Descripción de tarjeta legible en tema obscuro | 5.1 del PLAN | Clase `text` en `MarkdownSummary` + regla CSS efectiva (2026-10-12) |
 | Tooltips que mostraban claves de properties | §2.2 | `bulk.process` en los 5 bundles + guardián de claves indirectas (2026-10-12) |
 | **Informe de tiempo por proceso y semana (CSV/PDF)** | B1 / 2.2 | `TimeReport` + `TimeReportWindow` en `Ver → Informe de tiempo…` (2026-10-12) |
+| **Búsqueda global entre tableros** | B2 / 2.3 | `GlobalSearch` + `GlobalSearchDialog` con Ctrl+Shift+F, 🔍 y menú Ver (2026-10-12) |
 
 ---
 
@@ -88,7 +89,6 @@
 
 | Mejora | Id. | Nota |
 |---|---|---|
-| Búsqueda global (Ctrl+Shift+F) entre tableros | B2 / 2.3 | El mayor hueco de uso diario |
 | Recordatorios de vencimiento + vistas «vence hoy/semana» | B3 / 2.1 | El badge de vencida ya existe |
 | Creación rápida con sintaxis (`Título #etiqueta ! @fecha`) | B4 | Parseo puro, sin migración |
 | Plantillas propias guardables | B5 / 2.4 | Hoy solo hay plantillas fijas |

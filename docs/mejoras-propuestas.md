@@ -41,7 +41,7 @@
 | # | Mejora | Por qué | Dónde encaja | Prioridad |
 |---|---|---|---|---|
 | B1 | **Informe/dashboard de tiempo** (horas por proceso, por semana; export CSV/PDF) | El seguimiento de tiempo por tarjeta ya existe (pestaña **Tiempo**); falta explotarlo. Es la mayor capacidad nueva con el menor código | `application` (consulta) + `ui` (ventana) | ✅ Hecho (2026-10-12): `TimeReport` + menú **Ver → Informe de tiempo…** |
-| B2 | **Búsqueda global** (Ctrl+Shift+F) sobre título, descripción, notas y checklist, cruzando tableros | Hoy no existe ninguna búsqueda fuera del filtro de etiquetas/proceso | `application` (caso de uso) + `ui` | 🟠 Media-alta |
+| B2 | **Búsqueda global** (Ctrl+Shift+F) sobre título, descripción, notas y checklist, cruzando tableros | Hoy no existe ninguna búsqueda fuera del filtro de etiquetas/proceso | `application` (caso de uso) + `ui` | ✅ Hecho (2026-10-12): `GlobalSearch` + diálogo, botón 🔍 y Ctrl+Shift+F |
 | B3 | **Recordatorios de vencimiento** (notificación del sistema) + vistas "vence hoy / esta semana" y reagendado rápido | Ya hay badge de vencido, pero solo si miras el tablero | `ui` + `application` | 🟠 Media |
 | B4 | **Creación rápida con sintaxis** en el campo de añadir (`Título #etiqueta ! @2026-10-10` → etiqueta, urgente, fecha) | Captura ideas sin abrir el diálogo | `ui` (parseo puro en `Dialogs`/intent) | 🟠 Media |
 | B5 | **Plantillas propias** guardables (hoy solo las fijas Estándar / Personalizadas / Sin columnas) + **archivar/completar** tarjetas con purga | Reutilizar estructuras propias y evitar que "Hecho" crezca sin fin | `application` + persistencia de plantilla en setting | 🟡 Media |
@@ -51,7 +51,7 @@
 | B9 | **Nombres de color traducidos** | El tooltip del selector de color muestra el nombre interno (`blue`) porque no existe ninguna clave i18n de color (sesión 13) | `ui/Dialogs` + 5 bundles | 🔵 Baja |
 
 - [x] B1 — Informe/dashboard de tiempo  ✅ 2026-10-12
-- [ ] B2 — Búsqueda global
+- [x] B2 — Búsqueda global  ✅ 2026-10-12
 - [ ] B3 — Recordatorios de vencimiento
 - [ ] B4 — Creación rápida con sintaxis
 - [ ] B5 — Plantillas propias + archivado

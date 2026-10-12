@@ -107,10 +107,11 @@ columnas y tarjetas pasan al tablero **«My Board»**.
 
 De arriba abajo:
 
-- **Barra de menús:** **Archivo**, **Tableros**, **Procesos**, **Idioma**,
-  **Ayuda**.
+- **Barra de menús:** **Archivo**, **Tableros**, **Ver**,
+  **Procesos**, **Etiquetas**, **Idioma**, **Ayuda**.
 - **Barra de herramientas:**
   - ➕ **Añadir columna**
+  - 🔍 **Buscar en todos los tableros** (§10)
   - ⇄ **Cambiar entre kanban y procesos** (vista alternativa, §11)
   - ↶ **Deshacer** · ↷ **Rehacer**
   - 💾 **Guardar ahora** (todo se guarda tras cada cambio; es una
@@ -253,6 +254,21 @@ por esa etiqueta al instante; clic sobre el mismo chip otra vez lo quita.
 
 Los filtros se combinan entre sí.
 
+### Búsqueda global (Ctrl+Shift+F)
+
+Con la app llena de tableros, **🔍** (o **Ctrl+Shift+F**, o **Ver -> Buscar en
+todos los tableros...**) busca en **todos los tableros a la vez**: título,
+descripción, notas, etiquetas y listas de tareas. Los resultados aparecen
+mientras escribes, con el tablero, el título y el campo donde coincidió más un
+fragmento del texto.
+
+- **Intro** o doble clic abre el resultado: el tablero pasa a primer plano, la
+  tarjeta queda marcada como **actual** (la que mueven las flechas) y se
+  limpian los filtros para que sea visible.
+- Se muestran hasta **20 resultados por tablero** (el tablero activo primero);
+  si se recorta, el propio contador lo dice.
+- Buscar **no cambia** el tablero activo hasta que abres un resultado.
+
 ## 11. Procesos y vista de procesos
 
 Un **proceso** es una agrupación transversal de tarjetas (p. ej. «Mudanza»),
@@ -346,6 +362,7 @@ de la app:
 | **Ctrl+Shift+Z** | Rehacer |
 | **Ctrl+1 / Ctrl+2 / Ctrl+3** | Vista de tarjeta: solo título / + resumen / completa |
 
+| **Ctrl+Shift+F** | Buscar en todos los tableros |
 | **Ctrl+Shift+1 / Ctrl+Shift+2** | Vista de tablero / vista de procesos |
 | **Ctrl+L** | Añadir o quitar etiquetas a lo seleccionado (o a la tarjeta actual) |
 | **Ctrl+N** | Nuevo tablero |

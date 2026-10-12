@@ -355,12 +355,29 @@ commit `feat(checklist): one-level subtasks (V10)`.
 | # | Mejora | Estado | Verificado con |
 |---|---|---|---|
 | B1 | Informe de tiempo | ✅ hecho 2026-10-12 | `TimeReportTest` (9), `TimeReportExportTest` (6), `TimeReportWindowTest` (2); suite **412/412** (+1 skip) |
-| B2 | Búsqueda global | ⬜ siguiente | — |
-| B3 | Recordatorios de vencimiento | ⬜ pendiente | — |
+| B2 | Búsqueda global | ✅ hecho 2026-10-12 | `GlobalSearchTest` (7), `GlobalSearchWiringTest` (4); suite **423/423** (+1 skip) |
+| B3 | Recordatorios de vencimiento | ⬜ siguiente | — |
 | B4 | Captura rápida | ⬜ pendiente | — |
 | B5 | Plantillas + purga | ⬜ pendiente | — |
 | B7 | Color por etiqueta | ⬜ pendiente | — |
 | B8 | Subtareas jerárquicas | ⬜ pendiente | — |
+
+### Notas de B2 (lo que se decidió al implementarlo)
+
+- El backend ya existía (`BoardService.findCards`): lo nuevo es el recorrido
+  de **todo el catálogo** (`GlobalSearch`) y la interfaz, así que el trabajo
+  real fue la UI y no la búsqueda.
+- El **tablero activo va primero** en los resultados y buscar **no** cambia el
+  tablero: solo lo abre al elegir un resultado.
+- Cada resultado dice **dónde** coincidió (título/descripción/notas/etiqueta/
+  lista de tareas) y trae un fragmento alrededor de la coincidencia.
+- **20 por tablero** como tope (un tablero enorme no puede ahogar a los demás).
+- Abrir un resultado **limpia los filtros** —y enciende la vista de archivadas
+  si la tarjeta está archivada— porque una tarjeta filtrada no se puede
+  enfocar: el botón ✕ de la barra de filtros ahora limpia de verdad todo
+  (incluidas ★/!).
+- Ctrl+Shift+F es un atajo de escena, no una acción reasignable: los atajos
+  reasignables son los que actúan sobre la tarjeta actual.
 
 ### Notas de B1 (lo que se decidió al implementarlo)
 
@@ -375,7 +392,7 @@ commit `feat(checklist): one-level subtasks (V10)`.
 ## Checklist de la sesión
 
 - [x] B1 — Informe de tiempo
-- [ ] B2 — Búsqueda global
+- [x] B2 — Búsqueda global
 - [ ] B3 — Recordatorios de vencimiento
 - [ ] B4 — Captura rápida con sintaxis
 - [ ] B5 — Plantillas propias + purga de archivadas
