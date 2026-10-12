@@ -1,7 +1,9 @@
 # Roadmap, hallazgos y decisiones
 
-*Última actualización: 2026-09-30 · Sesión 4 (las 8 características: fases
-4.1–4.6 implementadas; 161/161 tests)*
+*Última actualización: 2026-10-12 · Sesión 13 (cierre de la Sesión 11 y las
+seis mejoras pedidas; 395/395 tests). El historial por sesión vive en
+`PLAN.md`; el estado de cada mejora propuesta, en
+[`pending-mejoras-propuestas.md`](pending-mejoras-propuestas.md).*
 
 Este documento concentra: (1) lo que el usuario pidió, (2) hallazgos
 técnicos verificados, (3) decisiones de diseño vigentes con su porqué,
@@ -441,3 +443,60 @@ un aviso.
 3. No avanzar a otra fase sin indicación del usuario.
 4. Commits solo si el usuario lo pide (estilo del repo: mensajes
    descriptivos en inglés).
+
+## 7. Sesión 13 (2026-10-12): hallazgos y decisiones
+
+> Cierra **S11-5** del plan de sesiones y entrega las seis mejoras pedidas en
+> bloque. Detalle de la sesión y checklist manual en `PLAN.md`; estado de cada
+> propuesta en `docs/pending-mejoras-propuestas.md`.
+
+### 7.1 ✔️ Hallazgos verificados (con test, no por lectura de código)
+
+- **Un `Text` construido en código no lleva la clase de estilo `text`.** Los
+  selectores `.card-description .text` de los dos temas, por tanto, no casaban
+  nunca: el fix de la sesión 5 para el tema obscuro era **inerte**. Medido con
+  un test que aplica `dark.css` real sobre el nodo de la descripción:
+  `fill = 0x000000ff` (negro) antes; `#c3cbd6` después. Regla general: al pintar
+  texto nativo por CSS, la clase hay que ponerla en el código.
+- **Un `ScrollPane` recién construido no tiene skin**: durante un `refresh()`
+  su contenido NO está entre `getChildrenUnmodifiable()`, así que cualquier
+  recorrido del grafo iniciado en ese momento (p. ej. el que pinta la tarjeta
+  actual) no ve las tarjetas. Hay que bajar por `ScrollPane.getContent()`. Lo
+  cazó la prueba de comportamiento, no la lectura.
+- **Especificidad CSS en JavaFX:** `.card.pk-color-*` (dos clases) gana a
+  `.card-selected` (una clase) sea cual sea el orden en el archivo. Era la
+  causa de que una tarjeta con color no se distinguiera al ser seleccionada.
+- **`I18n.text` devuelve la clave cuando falta** (comportamiento ya conocido del
+  P0) y las claves pasadas **como argumento** a helpers (`toolButton("⛭",
+  "bulk.process")`) escapaban al `I18nCoverageTest`: era el origen del tooltip
+  con «código de properties». El guardián nuevo las detecta (y detectó al
+  instante una regresión propia al insertar claves).
+- **El clic de ratón no fijaba `cardFocused`**: el resaltado venía solo del
+  foco de JavaFX, así que pulsar una tarjeta no la hacía «la actual» para el
+  resto de atajos. Lo confirmó la prueba que lanza un `MouseEvent` real.
+
+### 7.2 Decisiones
+
+- **Un único estado de «tarjeta actual»** (`cardFocused`) compartido por ratón
+  y teclado, en lugar de un segundo campo: los atajos que ya actuaban sobre la
+  tarjeta enfocada funcionan igual tras un clic. Se limpia al cambiar de
+  tablero (un estado, un tablero visible) y con `Esc`.
+- **Clase CSS propia `.card-current`** en vez de apoyarse en `:focused`: el
+  foco de JavaFX es transitorio y depende del focus owner; el «actual» es un
+  estado del tablero y debe verse aunque el foco esté en otro control.
+- **Una tarjeta seleccionada no recibe estilos inline** (color de tarjeta,
+  prioridad, etiqueta): el estilo inline gana al CSS, así que el aspecto de
+  selección solo es fiable si no compite con él.
+- **Menú «Ver» con aceleradores fijos** `Ctrl+Shift+1` / `Ctrl+Shift+2`, fuera
+  del sistema de atajos configurables (`GlobalShortcuts`) por ahora: el modo de
+  vista es un estado de pantalla, no una acción de tarjeta.
+- **Recorrido del grafo tolerante a skins ausentes**: el resaltado baja por
+  `ScrollPane.getContent()` además de por los hijos.
+
+### 7.3 Verificación
+
+- Suite **395/395 OK** (1 skip: `PhpSyncApiEndpointTest`).
+- `CardCurrentSelectionTest` (5): `BoardController` real sobre BD temporal en un
+  `Scene`, con clics de ratón y acciones de menú reales; `CardThemeCssTest` (4):
+  CSS reales sobre los nodos reales de la tarjeta; `I18nCoverageTest` (3):
+  claves literales, claves indirectas y botones de diálogo.

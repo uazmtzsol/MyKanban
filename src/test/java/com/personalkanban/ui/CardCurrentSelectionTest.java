@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * temporary database, rendered in a scene, where the tests fire the very mouse
  * clicks and menu actions a user produces.
  *
- * <p>Session 11 requirements covered here: clicking a card with the mouse must
+ * <p>Session 13 requirements covered here: clicking a card with the mouse must
  * make it the "current" card (the state the arrow keys move, and the one the
  * card shortcuts act on) with exactly one card marked at a time, and the new
  * "Ver" menu must switch between the board and the processes view from the

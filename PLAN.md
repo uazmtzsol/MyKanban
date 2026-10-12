@@ -4,7 +4,19 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Última actualización: 2026-10-11 · **Sesión 12:** catálogo global de etiquetas con gestor (añadir/renombrar/quitar con barrido entre tableros + etiquetas reservadas), visor de copias de conflicto integrado en el menú (cierra 3.1), atajo Ctrl+L para etiquetas, botón 📦 archivar en la barra de herramientas y fix del bug de notas con markdown — **todo hecho**, una por commit con push; ver la sección «Sesión 12» al final. Suite **385/385 OK** (1 skip: endpoint PHP sin servidor).*
+*Sesión 14 (2026-10-12, **en curso**) · bloque de producto pedido por el usuario: **B1** informe de tiempo, **B2** búsqueda global (Ctrl+Shift+F), **B3** recordatorios de vencimiento, **B4** captura rápida con sintaxis, **B5** plantillas propias + purga de archivadas, **B7** registro de etiquetas con color (cierra B9) y **B8** subtareas jerárquicas. Plan detallado por mejora (alcance, diseño, archivos, i18n, tests, criterio de hecho) en [`docs/plan-sesion-14.md`](docs/plan-sesion-14.md); estado al final de este documento.*
+
+*Última actualización: 2026-10-12 · **Sesión 13:** cierre de la Sesión 11
+(S11-5) y las seis mejoras pedidas en bloque por el usuario: tarjeta «actual»
+al hacer clic con el ratón, foco en el campo del diálogo de etiquetas, menú
+**Ver** con atajos (Ctrl+Shift+1/2), tarjetas seleccionadas claramente
+distinguibles, tooltips correctos (`bulk.process` + banderas ★/!) y descripción
+de tarjeta legible en tema obscuro — **todo hecho**, con pruebas de regresión
+nuevas (incluido un clic de ratón real sobre la UI); ver la sección «Sesión 13»
+al final. Suite **395/395 OK** (1 skip: endpoint PHP sin servidor) y jar
+portable regenerado.*
+
+*Sesión 12 (2026-10-11) · **catálogo global de etiquetas con gestor (añadir/renombrar/quitar con barrido entre tableros + etiquetas reservadas), visor de copias de conflicto integrado en el menú (cierra 3.1), atajo Ctrl+L para etiquetas, botón 📦 archivar en la barra de herramientas y fix del bug de notas con markdown — **todo hecho**, una por commit con push; ver la sección «Sesión 12» al final. Suite **385/385 OK** (1 skip: endpoint PHP sin servidor).*
 
 *Sesión 10 (2026-10-09): cuatro características nuevas pedidas de golpe por el usuario (navegación con teclado, resumen vs. extensa de la tarjeta, exportar tarjeta, limpieza/archivado) — **las 4 hechas**, una por commit con push; ver la sección «Sesión 10» al final. Suite **367/367 OK** (1 skip: endpoint PHP sin servidor).*
 
@@ -177,6 +189,12 @@
 |---|---|---|
 | **P0–P2 + Sesión 3** | Correcciones, etiquetas, vistas, PDF, resize… | 🔄 Código hecho; faltan pruebas manuales pendientes del usuario |
 | **Sesión 4 — 8 características** | Archivo+Salir · saltos de línea · icono · atajos+F1 · fondo personalizable · notas · checklist · procesos+precedencias | 🔄 Código hecho + 161/161 tests; falta prueba manual |
+| **Sesiones 5–9** | Refinamientos UX, procesos/tiempo, WAL fuera, sync §4/§4.1 + conflictos, B6, CI | 🔄 Código hecho + suite verde; falta prueba manual |
+| **Sesión 10 — 4 características** | Teclado completo, resumen/extensa, exportar tarjeta, limpieza/archivado | 🔄 Código hecho + suite verde; falta prueba manual |
+| **Sesión 11 — seis correcciones** | S11-1…S11-5 **hechos**; **S11-6 abierto** (excepción al personalizar atajos) | 🔄 Ver `docs/plan-sesiones.md` |
+| **Sesión 12** | Etiquetas globales, visor de conflictos, Ctrl+L, botón archivar, fix notas markdown | 🔄 Código hecho + suite verde; falta prueba manual |
+| **Sesión 13 (2026-10-12)** | Tarjeta actual al clic, menú Ver, foco en etiquetas, selección visible, tooltips, tema obscuro | 🔄 Código hecho + **395/395**; falta prueba manual |
+| **Sesión 14 (2026-10-12)** | Siete mejoras de producto B1–B5/B7/B8 (informe de tiempo, búsqueda global, recordatorios, captura rápida, plantillas+purga, color de etiquetas, subtareas) | 🔄 En curso; una por commit con push, ver la sección «Sesión 14» |
 | **P3 — Deseable (futuro)** | Impresión · registro de etiquetas · clic en chip = filtrar | ⬜ Bloqueada hasta que el usuario la pida |
 
 Leyenda: ⬜ pendiente · 🔄 en curso · ✅ hecha y probada por el usuario
@@ -537,3 +555,140 @@ empaquetado, 5 commits con push. **Pendiente manual:** probar la app
 (`kanban.bat`): gestor de etiquetas, Ctrl+L, 📦 y las notas pegadas con
 markdown. **Sin tocar (grandes, para sesiones dedicadas):** sync automático
 (3.4), device_id (3.2), fractional index (3.3), jpackage (4.3).
+
+---
+
+## Sesión 13 (2026-10-12): cierre de la Sesión 11 + las seis mejoras pedidas
+
+> **Relación con el plan:** cierra el punto **S11-5** de
+> [`docs/plan-sesiones.md`](docs/plan-sesiones.md) (clic = tarjeta «actual») y
+> añade peticiones nuevas del usuario, todas entregadas en la misma sesión.
+
+### Lo pedido y su estado
+
+- [x] **Tarjeta «actual» con el ratón.** Un clic simple (fuera del modo
+  selección múltiple) fija la tarjeta como actual — el mismo estado que mueven
+  las flechas — así que resalta y los atajos (Ctrl+L, archivar, ★/!) actúan
+  sobre lo que se acaba de clicar. Solo una tarjeta puede ser la actual: al
+  cambiar de tablero se pierde y `Esc` la suelta. La clase CSS es propia
+  (`.card-current`), no depende del foco transitorio de JavaFX.
+  `BoardController.onCardSelected/isCardCurrent`, `CardViewBuilder` y el clic
+  de la vista de procesos.
+- [x] **Foco en el campo de la ventana de etiquetas.** El diálogo «Etiquetas en
+  lote» enfoca el campo al mostrarse (antes lo tenía «Aceptar»); el prompt de
+  una línea (añadir/renombrar etiqueta, tablero o proceso) también enfoca su
+  campo. `Dialogs.bulkLabelsDialog` y `Dialogs.promptText`.
+- [x] **Menú «Ver» + atajos.** Menú nuevo con «Tablero de tarjetas»
+  (`Ctrl+Shift+1`) y «Diagrama de procesos» (`Ctrl+Shift+2`), con el punto de
+  radio marcando el modo activo; los tres accesos (menú, atajos y botón ⇄)
+  pasan por `onSelectView(...)`. Claves nuevas en los 5 bundles y filas nuevas
+  en la ayuda F1.
+- [x] **Tarjetas seleccionadas distinguibles.** Doble causa: la regla
+  `.card-selected` (una clase) perdía frente a `.card.pk-color-*` (dos) y el
+  color se aplicaba *inline* (que gana al CSS). Ahora la regla es
+  `.card.card-selected` (fondo azul + borde sólido + halo) y una tarjeta
+  seleccionada no recibe estilos inline. En los dos temas.
+- [x] **Tooltips.** El texto crudo era la clave `bulk.process`, que no existía
+  en ningún bundle: añadida a los 5 idiomas. Además las banderas ★/! mostraban
+  las etiquetas del dominio («Importante»/«Urgente») en *cualquier* idioma
+  porque el argumento `tipKey` nunca se leía: ahora usan
+  `card.flag.important/urgent`. `I18nCoverageTest` gana un segundo test que
+  revisa también las claves pasadas como argumento a helpers
+  (`toolButton("⛭", "bulk.process")`), que el escaneo anterior no veía.
+- [x] **Descripción legible en tema obscuro.** Los `Text` que construye
+  `MarkdownSummary` no llevaban la clase de estilo `text`, así que la regla
+  `.card-description .text` de `dark.css` **nunca aplicaba** (el fix de la
+  sesión 5 era inerte): el relleno quedaba negro. Ahora llevan la clase;
+  verificado con test que mide el color real.
+
+### Hallazgos técnicos de la sesión (verificados)
+
+1. **Un `Text` creado en código no tiene clase de estilo propia** → los
+   selectores `.card-description .text` no casan. Medido con un test que aplica
+   `dark.css` real: `fill = 0x000000ff` (negro) antes, `#c3cbd6` después.
+2. **Un `ScrollPane` recién construido no tiene skin**, así que durante un
+   `refresh()` su contenido *no* está entre sus hijos: cualquier recorrido del
+   grafo (como el que pinta la tarjeta actual) debe pasar por
+   `ScrollPane.getContent()`. Pillado por la prueba de comportamiento, no
+   leyendo código.
+3. **Especificidad CSS de JavaFX**: `.card.pk-color-*` (dos clases) gana a
+   `.card-selected` (una) sin importar el orden; de ahí que la selección fuera
+   invisible en tarjetas con color.
+4. **`I18n.text` devuelve la clave** cuando falta en el bundle (comportamiento
+   conocido): lo nuevo es que las claves pasadas como argumento eran
+   invisibles para `I18nCoverageTest`; ahora hay una prueba que las caza — y
+   detectó una regresión propia en el acto (`menu.processes` y `help.cardview`
+   borradas al insertar las claves nuevas, restauradas).
+
+### Tests
+
+- Suite completa **395/395 OK** (1 skip: `PhpSyncApiEndpointTest` sin servidor
+  PHP).
+- Nuevos: `CardCurrentSelectionTest` (5) levanta un `BoardController` real
+  sobre una BD temporal en un `Scene` y **lanza clics de ratón y acciones de
+  menú reales**: clic → tarjeta actual, unicidad, sobrevive a un rebuild, en
+  modo selección marca seleccionada (no actual) y el menú «Ver» cambia de modo
+  con sus atajos. `CardThemeCssTest` (4) aplica los CSS reales y comprueba
+  descripción legible (claro y obscuro), selección y tarjeta actual frente al
+  acento de color. `I18nCoverageTest` suma el guardián de claves indirectas.
+- Jar portable regenerado: `mvn -o -Pportable -DskipTests package`.
+
+### Checklist de prueba manual (usuario)
+
+1. **Tarjeta actual:** clic en una tarjeta → se resalta (borde + halo) y `Ctrl+L`
+   abre las etiquetas de *esa* tarjeta; clic en otra → el resalte se mueve y
+   solo queda una; `Esc` lo suelta; cambiar de tablero lo limpia.
+2. **Foco en etiquetas:** con la selección activa, `Ctrl+L` → el cursor está en
+   el campo de texto (puedes escribir sin tocar el ratón).
+3. **Menú Ver:** Alt → «Ver» → «Diagrama de procesos» (o `Ctrl+Shift+1/2`) →
+   cambia de vista y el modo activo aparece marcado; F1 lista los dos atajos.
+4. **Selección:** botón ☐ de una columna → clic en varias tarjetas → todas se
+   ven azules con borde sólido, inconfundibles frente a las no seleccionadas
+   (probarlo también con una tarjeta de color).
+5. **Tooltip del botón de proceso:** en modo selección, pasa el ratón por el
+   botón «⛭ Proceso» de la barra → texto legible, no una clave con puntos;
+   igual con ★/! en cualquier idioma distinto del español.
+6. **Tema obscuro:** `Ctrl+D` → la descripción de las tarjetas se lee (gris
+   claro), no negra.
+7. **(Regresión) Arranque y datos:** abrir con tu BD de siempre → todo sigue
+   igual; los cambios de vista, selección y filtros no tocan los datos.
+
+### Pendiente y conocido (sin tocar en esta sesión)
+
+- **S11-6 abierto (bug real):** «Ayuda → Personalizar atajos de teclado»
+  sigue llamando a `GlobalShortcuts.Action.fromStorageNameOrThrow(...)` con
+  nombres de enum (`NEXT_CARD`), que solo acepta nombres de almacenamiento
+  (`next`): el diálogo y su botón «Restaurar» pueden lanzar
+  `IllegalArgumentException`. Fix planificado (tolerar ambos nombres + llevar
+  el enum en la fila) sin hacer.
+- El tooltip del selector de color muestra el nombre interno del color
+  (`blue`): no existen claves i18n de colores (propuesta B9).
+- El foco del diálogo de etiquetas no tiene prueba automática (es modal);
+  verificado por revisión (propuesta D5).
+- Sin commit: el repo solo se commitea cuando el usuario lo pide.
+
+---
+
+## Sesión 14 (2026-10-12): las siete mejoras de producto B1–B5/B7/B8
+
+Pedido del usuario, en bloque y con la instrucción de **documentar y
+commitear+pushear cada mejora al terminarla**. El plan detallado vive en
+[`docs/plan-sesion-14.md`](docs/plan-sesion-14.md); aquí queda el estado.
+
+| # | Mejora | Estado | Commit |
+|---|---|---|---|
+| B1 | Informe de tiempo (horas por proceso y por semana, export CSV/PDF) | ⬜ planificada | — |
+| B2 | Búsqueda global (Ctrl+Shift+F, cruza tableros; backend `findCards` ya existía) | ⬜ planificada | — |
+| B3 | Recordatorios de vencimiento + vistas «vence hoy / esta semana» + reagendado rápido | ⬜ planificada | — |
+| B4 | Captura rápida con sintaxis en el alta de tarjeta | ⬜ planificada | — |
+| B5 | Plantillas propias guardables + purga de tarjetas archivadas | ⬜ planificada | — |
+| B7 | Registro de etiquetas con color elegido (aprovecha para cerrar B9) | ⬜ planificada | — |
+| B8 | Subtareas jerárquicas (un nivel, migración **V10**) | ⬜ planificada | — |
+
+Decisiones de diseño tomadas en el plan (y su porqué): `#` descartado en la
+captura rápida a favor de `+etiqueta` porque `#` ya identifica etiquetas de
+**proceso**; los recordatorios de vencimiento son **dentro de la app** (banda
+no modal + filtros), no del sistema operativo, porque JavaFX no trae
+notificaciones y `SystemTray` no es verificable en la suite; las subtareas son
+de **un solo nivel**; el informe de tiempo cubre el **tablero activo** y 4
+semanas por defecto.

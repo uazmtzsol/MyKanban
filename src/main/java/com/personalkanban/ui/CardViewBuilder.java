@@ -73,7 +73,7 @@ final class CardViewBuilder {
         // each other or the card's own color.
         // Inline colors win over the stylesheet, so a SELECTED card must not
         // receive the surface / flag / label overrides: the .card-selected
-        // rule is what makes the selection unmistakable (session 11: on a
+        // rule is what makes the selection unmistakable (session 13: on a
         // colored card, whose accent arrives inline, the selection used to be
         // invisible).
         boolean selected = board.isCardSelected(card.id());
@@ -97,7 +97,7 @@ final class CardViewBuilder {
         if (selected) {
             view.getStyleClass().add("card-selected");
         }
-        // The "current" card (session 11): the one a mouse click or the arrow
+        // The "current" card (session 13): the one a mouse click or the arrow
         // keys left selected. Only one card in the whole board carries it.
         if (board.isCardCurrent(card.id())) {
             view.getStyleClass().add("card-current");
@@ -150,7 +150,7 @@ final class CardViewBuilder {
                 return;
             }
             if (event.getClickCount() == 1) {
-                // Session 11 (user request): a plain click makes this the
+                // Session 13 (user request): a plain click makes this the
                 // current card — the same state the arrow keys move — so the
                 // card is selected on sight and the shortcuts that act on the
                 // current card work right after clicking.
@@ -403,7 +403,7 @@ final class CardViewBuilder {
      * Quick-flag toggle (★/!): dimmed when the card lacks the label, vivid
      * when set. One click = one undoable domain transaction.
      *
-     * <p>The tooltip shows the TRANSLATED name (session 11: it used to show
+     * <p>The tooltip shows the TRANSLATED name (session 13: it used to show
      * the domain label itself — "Importante" / "Urgente" — in every language,
      * because the {@code tipKey} argument was never read).</p>
      */

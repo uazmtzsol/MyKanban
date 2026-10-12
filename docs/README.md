@@ -10,11 +10,21 @@ volver a explorar todo el código.
 > trabajo vivo está en `PLAN.md` (raíz del repo); el resto del contexto
 > estable vive aquí.
 >
-> **Estado tras la Sesión 2 (2026-09-29):** P0 corregida, i18n reducido a
-> EN/ES/DE/FR, P1.5 selección múltiple + acciones bulk, plantilla Kanban
-> Estándar al crear tableros, nombre del tablero visible en toolbar y
-> ventana. 100/100 tests OK. Pendiente de prueba manual por el usuario;
-> próximo hito grande: Fase P1 (chips con color + autocompletado).
+> **Estado tras la Sesión 13 (2026-10-12):** sesiones 5–13 entregadas con
+> suite verde (**395/395**, 1 skip: endpoint PHP sin servidor) y jar portable
+> regenerado; sigue pendiente la prueba manual del usuario. De la Sesión 11
+> del plan queda **abierto S11-6** (excepción al personalizar atajos de
+> teclado). El estado vivo está en [`PLAN.md`](../PLAN.md) y el listado
+> verificado hecho / pendiente de cada mejora propuesta, en
+> [`pending-mejoras-propuestas.md`](pending-mejoras-propuestas.md).
+
+> **Sesión 14 en curso (2026-10-12):** el usuario pidió las siete mejoras de
+> producto B1–B5 / B7 / B8 en bloque (informe de tiempo, búsqueda global,
+> recordatorios de vencimiento, captura rápida con sintaxis, plantillas
+> propias, registro de etiquetas con color y subtareas jerárquicas). Plan
+> detallado: [`plan-sesion-14.md`](plan-sesion-14.md), con orden, alcance y
+> criterio de hecho por mejora; cada una se cierra con documentación, tests y
+> commit + push propios.
 
 ## Guía de lectura
 
@@ -27,7 +37,8 @@ volver a explorar todo el código.
 | [`mejoras-propuestas.md`](mejoras-propuestas.md) | Mejoras propuestas (Sesión 9), priorizadas y **sin implementar**, con checkboxes para revisarlas durante las pruebas | Al probar el programa, para decidir el siguiente hito |
 | [`import-merge-tableros.md`](import-merge-tableros.md) | **Propuesta pendiente de conversación**: al importar un tablero que ya existe, fusionarlo en vez de duplicarlo. Qué hace hoy el código, cómo lo resuelven otros programas, diseño propuesto y preguntas abiertas a decidir | Antes de implementar cualquier merge de importación; para discutir cómo debe funcionar |
 | [`plan-sesiones.md`](plan-sesiones.md) | Plan por sesiones para implementar las mejoras recomendadas: fases, criterios de avance, checklist y condición de reanudación | Para saber qué se va a hacer, en qué orden, y por dónde quedó si se interrumpe |
-| [`pending-mejoras-propuestas.md`](pending-mejoras-propuestas.md) | **Listado actualizado del estado de cada mejora propuesta** (fuentes: `docs/mejoras-propuestas.md`, `docs/plan-sesiones.md`, `docs/roadmap-and-decisions.md`, y verificación directa en el código): hecho / sin implementar / pendiente de conversación × 3, con qué decisiones de diseño propone y qué encaje tiene | Para elegir la siguiente mejora sin volver a leer todos los documentos, antes de cualquier sesión de implementación |
+| [`plan-sesion-14.md`](plan-sesion-14.md) | **Plan de la Sesión 14** (en curso): las siete mejoras de producto pedidas en bloque (B1 informe de tiempo, B2 búsqueda global, B3 recordatorios de vencimiento, B4 captura rápida, B5 plantillas + purga, B7 registro de etiquetas con color, B8 subtareas) con alcance, diseño por capas, archivos, claves i18n, tests y criterio de hecho de cada una | Al retomar la Sesión 14 o al revisar por qué cada mejora se diseñó así |
+| [`pending-mejoras-propuestas.md`](pending-mejoras-propuestas.md) | **Listado actualizado (2026-10-12) del estado de cada mejora propuesta** (fuentes: `docs/mejoras-propuestas.md`, `docs/plan-sesiones.md`, `docs/roadmap-and-decisions.md`, y verificación directa en el código): hecho / sin implementar / pendiente de conversación × 3, con qué decisiones de diseño propone y qué encaje tiene | Para elegir la siguiente mejora sin volver a leer todos los documentos, antes de cualquier sesión de implementación |
 | [`adiciones-propuestas.md`](adiciones-propuestas.md) | Mejoras adicionales recomendadas (nueva sesión, **sin implementar**), priorizadas y con criterio de cuándo valen, para decidir qué entra después | Para elegir la siguiente mejora desde una visión más ampla |
 | [`PLAN.md`](../PLAN.md) — *(raíz del repo)* | Roadmap por fases P0–P3 con estado de avance, checklist de pruebas manuales por fase | Al inicio de cada sesión para saber en qué fase vamos |
 

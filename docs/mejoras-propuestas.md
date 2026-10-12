@@ -1,7 +1,10 @@
 # 💡 Mejoras propuestas — para revisar durante las pruebas
 
-> **Estado (2026-10-05):** implementadas **B6**, **D1** y **D3** (ver más
-> abajo y `PLAN.md` Sesión 9). El resto sigue **sin implementar**. Este
+> **Estado (2026-10-12):** implementadas **A1** (2026-10-11, `9606a64`),
+> **B6**, **D1** y **D3**; el resto sigue **sin implementar** (S11-6 del plan
+> de sesiones es un bug abierto, no una mejora de esta lista). El listado
+> verificado hecho / pendiente está en
+> [`pending-mejoras-propuestas.md`](pending-mejoras-propuestas.md). Este
 > documento existe para que no se pierdan las ideas al probar el programa.
 > Marca la casilla `[ ]` → `[x]` de lo que te interese y pídeme que lo
 > implemente en una sesión.
@@ -17,7 +20,7 @@
 
 | # | Mejora | Por qué | Dónde encaja | Prioridad |
 |---|---|---|---|---|
-| A1 | **Visor de copias de conflicto** | `JsonConflictCopyStore` ya escribe `<bdDir>/conflicts/<boardId>-<epoch>.json`, pero no hay forma de *verlas* ni restaurarlas desde la app. Es la última pieza de `docs/sync-design.md` §4.1 | `ui/` nuevo diálogo + puerto de lectura | 🔴 Alta |
+| A1 | **Visor de copias de conflicto** | `JsonConflictCopyStore` ya escribe `<bdDir>/conflicts/<boardId>-<epoch>.json`, pero no hay forma de *verlas* ni restaurarlas desde la app. Es la última pieza de `docs/sync-design.md` §4.1 | `ui/` nuevo diálogo + puerto de lectura | ✅ Hecho (2026-10-11, `9606a64`) |
 | A2 | **`device_id` estable (Fase 1, V10)** | Hoy el desempate de conflictos es una comparación canónica trivial porque el protocolo no tiene identidad de dispositivo (`docs/sync-design.md` §4) | Migración V10 + `sync_meta` | 🟠 Media-alta |
 | A3 | **Fractional index para el orden** | `position` entero se reescribe en cada `save`; al sincronizar produce falsos conflictos de orden (§7) | Dominio (`Board`/`BoardColumn`) + migración | 🟠 Media-alta |
 | A4 | **Sync automático en segundo plano + reintentos con backoff + detección de offline** (Fase 4) | Hoy la sincronización es un botón manual (`Archivo → Sincronizar ahora`) | `application/sync` + `ui` | 🟠 Media |
@@ -25,7 +28,7 @@
 | A6 | **Lápidas con retención** | Sin ellas, un borrado solo se detecta a nivel snapshot; con outbox hacen falta tombstones purgables (§Fase 4) | Persistencia + protocolo | 🟡 Media |
 | A7 | **Cifrado del payload remoto** | Privacidad si algún día se usa un backend de terceros (§7) | `SyncRepository` (adaptador) | 🔵 Baja |
 
-- [ ] A1 — Visor de copias de conflicto
+- [x] A1 — Visor de copias de conflicto  ✅ 2026-10-11
 - [ ] A2 — `device_id` estable
 - [ ] A3 — Fractional index (clave de orden estable)
 - [ ] A4 — Sync automático en segundo plano
@@ -45,6 +48,7 @@
 | B6 | ✅ **Clic en el chip de etiqueta = filtrar por ella** (hecho) | Barato y muy útil (ya está en reserva en `roadmap-and-decisions.md` §4); clic de nuevo = quitar el filtro | `CardViewBuilder` + `BoardController` | ✅ Hecho |
 | B7 | **Registro de etiquetas** (colores elegidos, renombrado propagado, autocompletado global) | Ya reservado como P3 | Migración propia | 🔵 Baja |
 | B8 | **Subtareas jerárquicas** | Hoy el checklist es plano por decisión explícita | Dominio + UI | 🔵 Baja |
+| B9 | **Nombres de color traducidos** | El tooltip del selector de color muestra el nombre interno (`blue`) porque no existe ninguna clave i18n de color (sesión 13) | `ui/Dialogs` + 5 bundles | 🔵 Baja |
 
 - [ ] B1 — Informe/dashboard de tiempo
 - [ ] B2 — Búsqueda global
@@ -54,6 +58,7 @@
 - [x] B6 — Chip de etiqueta clicable = filtrar  ✅ 2026-10-05
 - [ ] B7 — Registro de etiquetas
 - [ ] B8 — Subtareas jerárquicas
+- [ ] B9 — Nombres de color traducidos
 
 ## C. Robustez operativa y distribución
 
@@ -79,19 +84,29 @@
 | D2 | **Arreglar JaCoCo** (0.8.13+ o JDK de build compatible) | Hoy no instrumenta en JDK25 ("Unsupported class file major version 69"); los tests corren igual, pero sin cobertura | `pom.xml` | 🟡 Media |
 | D3 | ✅ **CI con GitHub Actions** (`mvn test` en cada push/PR) | Hoy `.github/` no tiene workflow; la suite es rápida y estable | `.github/workflows/ci.yml` | ✅ Hecho |
 | D4 | **Test E2E del cliente HTTP contra el PHP** | Ya hay verificación manual del adaptador; automatizarla evita regresiones de red | `src/test` (se marca como IT) | 🟡 Media |
+| D5 | **Prueba automática del foco de los diálogos** | El foco inicial (campo de texto en vez de «Aceptar») se arregló en la sesión 13 pero solo se verificó por revisión: es modal y la suite no lo abre | `src/test` (FX toolkit) | 🟢 Baja |
 
 - [x] D1 — Tests de propiedades del merge  ✅ 2026-10-05
 - [ ] D2 — Arreglar JaCoCo
 - [x] D3 — CI con GitHub Actions  ✅ 2026-10-05
 - [ ] D4 — E2E del cliente HTTP
+- [ ] D5 — Prueba del foco en diálogos
 
 ---
 
-## ⭐ Top 3 si hay que elegir
+## ⭐ Top 3 si hay que elegir (actualizado 2026-10-12)
 
-1. **A1 — Visor de copias de conflicto**: cierra de verdad lo recién hecho (§4.1).
-2. **D1 — Tests property-based del merge**: blinda el riesgo real antes de ampliar el sync.
-3. **B1 — Informe de tiempo**: nuevo valor construido sobre algo que ya funciona.
+De la lista original ya están hechos **A1**, **D1** y **D3**, así que el Top 3
+vigente es:
+
+1. **B1 — Informe de tiempo**: es el único de los tres originales que sigue
+   vivo, y el seguimiento de tiempo por tarjeta ya existe: solo falta explotarlo.
+2. **C1 — Backup automático rotativo**: el usuario trabaja con datos reales y
+   hoy una base corrupta no tiene red de seguridad; es tranquilidad barata y
+   cubre el mayor riesgo abierto.
+3. **B2 — Búsqueda global**: con la app ya llena de funciones (tableros,
+   procesos, notas, checklist, etiquetas), encontrar algo es el hueco de
+   usabilidad que más crece.
 
 ## Notas de encaje con lo ya planificado
 

@@ -26,10 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * regressions the user reported are caught here instead of on screen:
  *
  * <ul>
- *   <li>session 11 — the card description stayed black in the dark theme
+ *   <li>session 13 — the card description stayed black in the dark theme
  *       ({@code .card-description .text} never matched, because a Text node
  *       built in code carries no style class of its own);</li>
- *   <li>session 11 — a selected card was indistinguishable from an unselected
+ *   <li>session 13 — a selected card was indistinguishable from an unselected
  *       one, because the {@code .card.pk-color-*} rules that paint a colored
  *       card's accent outranked a single-class {@code .card-selected}.</li>
  * </ul>

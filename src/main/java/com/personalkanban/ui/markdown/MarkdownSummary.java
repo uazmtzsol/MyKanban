@@ -142,7 +142,7 @@ public final class MarkdownSummary {
      * paints the card-front description through the {@code .card-description
      * .text} rule, and a Text built in code has no style class of its own — so
      * without this the description kept its default black fill, which is
-     * invisible on the dark card surface (session 11).
+     * invisible on the dark card surface (session 13).
      */
     private static Text node(String content) {
         Text text = new Text(content);

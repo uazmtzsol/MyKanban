@@ -95,7 +95,7 @@ class I18nCoverageTest {
     }
 
     /**
-     * Second net for the same class of bug (session 11: the bulk-process
+     * Second net for the same class of bug (session 13: the bulk-process
      * button rendered the raw "bulk.process" text). A key handed to a helper
      * as an argument — {@code toolButton("⛭", "bulk.process")},
      * {@code itemOf("file.save", …)} — never appears inside an

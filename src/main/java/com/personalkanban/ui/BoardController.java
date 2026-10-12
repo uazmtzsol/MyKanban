@@ -929,7 +929,7 @@ public final class BoardController {
     }
 
     /**
-     * Mouse click on a card (session 11, user request): makes it the "current"
+     * Mouse click on a card (session 13, user request): makes it the "current"
      * card — the very state the arrow keys move — so the click selects the
      * card, its appearance changes, and the shortcuts that act on the current
      * card (labels, archive, quick flags) apply to whatever was clicked.
@@ -1297,7 +1297,7 @@ public final class BoardController {
         // Session 4: File (renamed from "Base de datos"), Boards, Processes,
         // Language, Help — Preferences and the shortcuts help live in their
         // natural menus.
-        // Session 11 (user request): a "Ver" menu, so both view modes are
+        // Session 13 (user request): a "Ver" menu, so both view modes are
         // reachable with the keyboard (Alt opens the menu bar) and each one
         // carries its own accelerator.
         viewMenu = new Menu(i18n.text("menu.view"));
@@ -1448,7 +1448,7 @@ public final class BoardController {
     }
 
     /**
-     * "Ver" menu (session 11, user request): the two view modes with their own
+     * "Ver" menu (session 13, user request): the two view modes with their own
      * accelerator, so the mode can be chosen with the keyboard — either the
      * accelerator directly, or the menu itself (Alt, arrows, Enter). The active
      * mode carries the radio dot, like the active board / process filter.
@@ -1577,7 +1577,7 @@ public final class BoardController {
 
     private void onOpenBoard(BoardId boardId) {
         service.openBoard(boardId);
-        // Session 11: the current card belongs to the board that was on
+        // Session 13: the current card belongs to the board that was on
         // screen; opening another board starts with none (exactly one card
         // can be current, and switching boards is not a selection).
         cardFocused = null;

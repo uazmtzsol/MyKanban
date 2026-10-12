@@ -1,7 +1,10 @@
-> Estado: **Sesión 11 en curso** (pedido del usuario el 2026-10-09). Sesión 10
-> completada y documentada abajo. Este documento es la cinta de progreso:
-> qué se hará, en qué orden, con qué criterio, y sirve para reanudar si la
-> sesión se interrumpe.
+> Estado: **Sesión 11 cerrada el 2026-10-12** (pedida el 2026-10-09). S11-1 …
+> S11-5 entregados y verificados; **S11-6 sigue abierto** (detalle al final de
+> la sección). Sesión 10 completada y documentada abajo. Este documento es la
+> cinta de progreso: qué se hará, en qué orden, con qué criterio, y sirve para
+> reanudar si la sesión se interrumpe. El estado vivo está en `PLAN.md` y el
+> listado hecho / pendiente de cada mejora en
+> [`docs/pending-mejoras-propuestas.md`](pending-mejoras-propuestas.md).
 
 # Plan por sesiones — mejoras adicionales de Personal Kanban
 
@@ -100,6 +103,17 @@ enum («NEXT_CARD») o la clave i18n al pintar. Arreglo en dos frentes:
 `fromStorageNameOrThrow/isKnownActionName` aceptan nombre de enum O de
 almacenamiento (tolerante, con tests), y el diálogo se reescribe para llevar
 el enum directamente en la fila sin re-parsear nombres.
+
+### Estado de cierre (actualizado 2026-10-12)
+
+| Punto | Estado | Dónde quedó / con qué se cerró |
+|---|---|---|
+| S11-1 Quitar la imagen de fondo | ✅ Hecho | `ui/BackgroundFiles` y su test eliminados; `PreferencesDialog` sin pestaña «Fondo»; claves `prefs.background.*` fuera de los bundles |
+| S11-2 Esquema de colores + contraste | ✅ Hecho | `application/ThemeColors`, `ui/ThemeOverride`, sección «Esquema» en Preferencias con vista previa; `themeManager.overrideStylesheet` |
+| S11-3 Markdown en una nota creaba varias | ✅ Hecho (2026-10-11) | separador nuevo **`%%`** en vez del marcador `<!--pk-note:-->` previsto, con lectura del formato legado; `CardNotes` + `CardNotesTest` |
+| S11-4 Gestión de etiquetas (todos los tableros) | ✅ Hecho (2026-10-11) | catálogo global + `LabelManagerDialog`; el acceso quedó como **Ctrl+L** (`GlobalShortcuts.Action.LABELS`) en lugar del popup `Alt+E` previsto |
+| S11-5 Clic = tarjeta «actual» | ✅ Hecho (2026-10-12) | `BoardController.onCardSelected` + clase `.card-current`; ver «Sesión 13» en `PLAN.md` (se añadieron, además, menú Ver, foco en etiquetas, selección visible, tooltips y tema obscuro) |
+| S11-6 Excepción al abrir «Personalizar atajos» | ⬜ **Pendiente** | `KeyboardShortcutsDialog` sigue pasando nombres de enum a `fromStorageNameOrThrow`, que solo acepta nombres de almacenamiento |
 
 ### Criterios comunes de la sesión
 
@@ -480,19 +494,36 @@ Criterios de hecho:
 | Fase | Planificada | En desarrollo | Hecha | Pendiente para revisión | Notas |
 |---|---|---|---|---|---|
 | **S11-1 — Quitar imagen de fondo** | sí | sí | **sí** | prueba manual | `BackgroundFiles` + tests fuera; pestaña Fondo eliminada; `ui.background*` fuera; `PreferencesDialog.show()` sin args |
-| S11-2 — Esquema de colores | sí | no | no | sí | contraste obscuro + `ThemeColors`/`ThemeOverride` + vista previa + reset |
-| S11-3 — Notas y markdown | sí | no | no | sí | marcador `<!--pk-note:-->` retrocompatible con `## ` legado |
-| S11-4 — Gestión de etiquetas | sí | no | no | sí | todos los tableros, atajo `Alt+E`, predefinidas protegidas |
-| S11-5 — Clic = seleccionada | sí | no | no | sí | clic simple marca `cardFocused` |
-| S11-6 — Excepción atajos | sí | no | no | sí | `fromStorageNameOrThrow` tolerante + diálogo reescrito |
+| **S11-2 — Esquema de colores** | sí | sí | **sí** | prueba manual | contraste del tema obscuro aclarado + `ThemeColors`/`ThemeOverride` + vista previa + reset |
+| **S11-3 — Notas y markdown** | sí | sí | **sí** (2026-10-11, `3c86e5a`) | prueba manual | se implementó el separador `%%` (en vez del marcador `<!--pk-note:-->` previsto), con lectura del formato `## ` legado |
+| **S11-4 — Gestión de etiquetas** | sí | sí | **sí** (2026-10-11, `afb6163`) | prueba manual | catálogo global para todos los tableros con predefinidas protegidas; el atajo quedó como **Ctrl+L** en lugar de `Alt+E` |
+| **S11-5 — Clic = seleccionada** | sí | sí | **sí** (2026-10-12) | prueba manual | `onCardSelected` + clase propia `.card-current`; en esa sesión entraron además el menú Ver, el foco en etiquetas, la selección visible, los tooltips y el tema obscuro |
+| S11-6 — Excepción atajos | sí | no | **no** | sí | `fromStorageNameOrThrow` tolerante + diálogo reescrito — **sigue abierto** (es el único punto de la Sesión 11 sin entregar) |
 | **S10-F1 — Navegación con teclado** | sí | sí | **sí** (`c0ed25f`) | prueba manual | filtros de escena, `CardNavigator`, botones fuera; +20 tests |
 | **S10-F2 — Resumen vs. extensa** | sí | sí | **sí** (`5193d63`) | prueba manual | `LineBudget` (líneas+caracteres) y `\n` entre bloques; +17 tests |
 | **S10-F3 — Exportar tarjeta** | sí | sí | **sí** (`ac5c62a`) | prueba manual | `CardExporter` + `CardPdfWriter`; diálogo con secciones/notas/formato; +14 tests |
 | **S10-F4 — Archivar/borrar tarjetas** | sí | sí | **sí** (`5dc2882`) | prueba manual | etiqueta `Archivada` + papelera de adjuntos + limpieza; +11 tests |
 | Fase A — Navegación por teclado | sí | sí | **sí** (commit `6225456` + `e948e44`, suite verde) | no | completada y verificada en la sesión 9/10 |
-| Fase B — Búsqueda en tablero activo | sí | no | no | sí | depende de que A esté revisada y aprobada |
-| Fase C — Visor de copias de conflicto | sí | no | no | sí | después de B |
+| Fase B — Búsqueda en tablero activo | sí | no | no | sí | la Fase A ya está hecha; puede empezar cuando el usuario quiera (ver `docs/pending-mejoras-propuestas.md` §2.3) |
+| **Fase C — Visor de copias de conflicto** | sí | sí | **sí** (2026-10-11, `9606a64`) | prueba manual | se adelantó a la Fase B: menú Tableros → Ver copias de conflicto… |
 | Fase D — Backup simple | sí | no | no | sí | después de C |
+
+## Sesión 14 — bloque de producto B1–B5/B7/B8 (2026-10-12)
+
+El usuario pidió en bloque las siete mejoras de producto de
+[`mejoras-propuestas.md`](mejoras-propuestas.md) §B que siguen sin
+implementar, con la instrucción de **documentar y commitear+pushear cada una**
+al terminarla. El plan detallado (alcance, diseño por capas, archivos, claves
+ i18n, tests, criterio de hecho, orden y riesgos) vive en
+[`plan-sesion-14.md`](plan-sesion-14.md) para no engordar este documento.
+
+Orden: **B1** informe de tiempo → **B2** búsqueda global → **B3** recordatorios
+de vencimiento → **B4** captura rápida con sintaxis → **B5** plantillas propias
++ purga de archivadas → **B7** registro de etiquetas con color → **B8**
+subtareas jerárquicas (única que exige migración, **V10**).
+
+Esto **no** interrumpe las fases A–D de este documento: la Fase B (búsqueda en
+el tablero activo) queda cubierta de hecho por B2, que además cruza tableros.
 
 ## Mejoras no planeadas (detectar durante el trabajo)
 
