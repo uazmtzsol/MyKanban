@@ -31,6 +31,17 @@ class I18nCoverageTest {
     private static final Pattern TEXT_KEY =
             Pattern.compile("i18n\\.text\\(\"([^\"]+)\"");
 
+    /** Any literal shaped like a key: "card.process.label". */
+    private static final Pattern DOTTED_LITERAL =
+            Pattern.compile("\"([a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)+)\"");
+
+    /**
+     * Dotted literals that are not translations (file names, resource names).
+     * Everything else with that shape must be a key of every bundle.
+     */
+    private static final Set<String> NOT_TRANSLATIONS = Set.of(
+            "board.json", "board.pdf", "kanban.db", "i18n.messages", "user.home");
+
     /** Every bundle shipped with the app (base = English, plus the
      *  explicit English copy that prevents JVM fallback to the system locale). */
     private static final List<String> BUNDLES = List.of(
@@ -81,6 +92,48 @@ class I18nCoverageTest {
         assertThat(english.getProperty("dialog.cancel")).isNotBlank();
         assertThat(spanish.getProperty("dialog.ok")).isNotBlank();
         assertThat(spanish.getProperty("dialog.cancel")).isNotBlank();
+    }
+
+    /**
+     * Second net for the same class of bug (session 11: the bulk-process
+     * button rendered the raw "bulk.process" text). A key handed to a helper
+     * as an argument — {@code toolButton("⛭", "bulk.process")},
+     * {@code itemOf("file.save", …)} — never appears inside an
+     * {@code i18n.text("…")} literal, so the scan above cannot see it, and
+     * {@link I18n#text} then quietly shows the key itself on screen.
+     */
+    @Test
+    void everyDottedStringLiteralInUiIsAKnownKey() throws IOException {
+        Set<String> literals = collectDottedLiterals(uiSourcesRoot());
+        assertThat(literals)
+                .as("expected dotted literals to be found in ui sources")
+                .isNotEmpty();
+
+        for (String bundle : BUNDLES) {
+            Properties properties = loadBundle(bundle);
+            Set<String> unknown = literals.stream()
+                    .filter(literal -> !properties.containsKey(literal))
+                    .filter(literal -> !NOT_TRANSLATIONS.contains(literal))
+                    .collect(Collectors.toSet());
+            assertThat(unknown)
+                    .as("dotted literals in ui code that are not keys of %s", bundle)
+                    .isEmpty();
+        }
+    }
+
+    private static Set<String> collectDottedLiterals(Path uiRoot) throws IOException {
+        Set<String> literals = new HashSet<>();
+        try (Stream<Path> files = Files.walk(uiRoot)) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".java"))
+                    .collect(Collectors.toList())) {
+                Matcher matcher = DOTTED_LITERAL.matcher(
+                        Files.readString(file, StandardCharsets.UTF_8));
+                while (matcher.find()) {
+                    literals.add(matcher.group(1));
+                }
+            }
+        }
+        return literals;
     }
 
     private static Set<String> collectUsedKeys(Path uiRoot) throws IOException {

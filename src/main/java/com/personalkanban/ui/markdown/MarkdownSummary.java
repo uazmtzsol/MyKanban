@@ -128,17 +128,30 @@ public final class MarkdownSummary {
             } else if (child instanceof SoftLineBreak) {
                 // Session 4 request: the card front must SHOW the line breaks
                 // the user typed (a plain newline inside a Text wraps visually).
-                out.add(new Text("\n"));
+                out.add(node("\n"));
             } else if (child instanceof HardLineBreak) {
-                out.add(new Text("\n"));
+                out.add(node("\n"));
             } else {
                 collectInlines(child, out, style);
             }
         }
     }
 
-    private static Text styled(String content, String style) {
+    /**
+     * Every Text the summary creates carries the "text" style class: the theme
+     * paints the card-front description through the {@code .card-description
+     * .text} rule, and a Text built in code has no style class of its own — so
+     * without this the description kept its default black fill, which is
+     * invisible on the dark card surface (session 11).
+     */
+    private static Text node(String content) {
         Text text = new Text(content);
+        text.getStyleClass().add("text");
+        return text;
+    }
+
+    private static Text styled(String content, String style) {
+        Text text = node(content);
         if (style != null && !style.isEmpty()) {
             text.setStyle(style);
         }

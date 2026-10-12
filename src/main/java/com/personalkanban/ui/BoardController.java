@@ -123,6 +123,7 @@ public final class BoardController {
     private Menu boardMenu;
     private Menu databaseMenu;
     private Menu processMenu;
+    private Menu viewMenu;
     private Menu labelsMenu;
     private Menu helpMenu;
     private Label boardNameLabel;
@@ -309,6 +310,7 @@ public final class BoardController {
     private void onClearFocus() {
         if (!dialogs.modalActive()) {
             cardFocused = null;
+            syncCurrentCardHighlight();
             // Move the focus owner off the card so the highlight goes away.
             root.requestFocus();
         }
@@ -550,6 +552,7 @@ public final class BoardController {
             return;
         }
         cardFocused = id;
+        syncCurrentCardHighlight();
         findKanbanCardNode(id).ifPresent(node -> {
             node.requestFocus();
             scrollCardIntoView(node);
@@ -925,6 +928,64 @@ public final class BoardController {
         return selectedCards.contains(cardId);
     }
 
+    /**
+     * Mouse click on a card (session 11, user request): makes it the "current"
+     * card — the very state the arrow keys move — so the click selects the
+     * card, its appearance changes, and the shortcuts that act on the current
+     * card (labels, archive, quick flags) apply to whatever was clicked.
+     * Exactly one card is current at a time.
+     */
+    void onCardSelected(CardId cardId) {
+        if (cardId == null || cardId.equals(cardFocused)) {
+            return;
+        }
+        cardFocused = cardId;
+        syncCurrentCardHighlight();
+    }
+
+    /** Whether this card is the current one ("actual"). */
+    boolean isCardCurrent(CardId cardId) {
+        return cardId != null && cardId.equals(cardFocused);
+    }
+
+    /**
+     * Paints .card-current on exactly one card node (the current one) without
+     * rebuilding the board, so a click only restyles nodes and never disturbs
+     * the scroll position or a drag in progress.
+     */
+    private void syncCurrentCardHighlight() {
+        Node content = boardScroller == null ? null : boardScroller.getContent();
+        if (content instanceof Parent parent) {
+            markCurrentCard(parent);
+        }
+    }
+
+    /**
+     * Recursively tags the card nodes; the current one carries the class.
+     *
+     * <p>A refresh rebuilds the columns, and a freshly built ScrollPane has no
+     * skin yet, so its content is not among its children until the next layout
+     * pass — it has to be visited through {@link ScrollPane#getContent()}, or
+     * the highlight would silently disappear after any board change.</p>
+     */
+    private void markCurrentCard(Node node) {
+        if (node.getUserData() instanceof CardId id) {
+            node.getStyleClass().removeAll("card-current");
+            if (id.equals(cardFocused)) {
+                node.getStyleClass().add("card-current");
+            }
+            return;
+        }
+        if (node instanceof ScrollPane scroll && scroll.getContent() != null) {
+            markCurrentCard(scroll.getContent());
+        }
+        if (node instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                markCurrentCard(child);
+            }
+        }
+    }
+
     /** Rebuilds the bulk action bar (after language/selection-mode changes). */
     private void rebuildSelectionBar() {
         if (selectionBar == null) {
@@ -1236,6 +1297,11 @@ public final class BoardController {
         // Session 4: File (renamed from "Base de datos"), Boards, Processes,
         // Language, Help — Preferences and the shortcuts help live in their
         // natural menus.
+        // Session 11 (user request): a "Ver" menu, so both view modes are
+        // reachable with the keyboard (Alt opens the menu bar) and each one
+        // carries its own accelerator.
+        viewMenu = new Menu(i18n.text("menu.view"));
+        rebuildViewMenu();
         processMenu = new Menu(i18n.text("menu.processes"));
         rebuildProcessMenu();
         // Global labels: the vocabulary is shared by every board, so its
@@ -1244,7 +1310,8 @@ public final class BoardController {
         rebuildLabelsMenu();
         helpMenu = new Menu(i18n.text("menu.help"));
         rebuildHelpMenu();
-        return new MenuBar(databaseMenu, boardMenu, processMenu, labelsMenu, languageMenu, helpMenu);
+        return new MenuBar(databaseMenu, boardMenu, viewMenu, processMenu,
+                labelsMenu, languageMenu, helpMenu);
     }
 
     private void rebuildDatabaseMenu() {
@@ -1380,6 +1447,43 @@ public final class BoardController {
         }
     }
 
+    /**
+     * "Ver" menu (session 11, user request): the two view modes with their own
+     * accelerator, so the mode can be chosen with the keyboard — either the
+     * accelerator directly, or the menu itself (Alt, arrows, Enter). The active
+     * mode carries the radio dot, like the active board / process filter.
+     */
+    private void rebuildViewMenu() {
+        if (viewMenu == null) {
+            return;
+        }
+        RadioMenuItem boardView = new RadioMenuItem(i18n.text("view.board"));
+        boardView.setUserData(Boolean.FALSE);
+        boardView.setAccelerator(
+                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+1"));
+        boardView.setOnAction(e -> onSelectView(false));
+        RadioMenuItem processViewItem = new RadioMenuItem(i18n.text("view.processes"));
+        processViewItem.setUserData(Boolean.TRUE);
+        processViewItem.setAccelerator(
+                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+2"));
+        processViewItem.setOnAction(e -> onSelectView(true));
+        viewMenu.getItems().setAll(boardView, processViewItem);
+        syncViewMenu();
+    }
+
+    /** Marks the radio item of the view mode currently on screen. */
+    private void syncViewMenu() {
+        if (viewMenu == null) {
+            return;
+        }
+        for (MenuItem item : viewMenu.getItems()) {
+            if (item instanceof RadioMenuItem radio
+                    && radio.getUserData() instanceof Boolean wantsProcesses) {
+                radio.setSelected(wantsProcesses == processView);
+            }
+        }
+    }
+
     /** Rebuilds the help menu contents (shortcuts reference lives here). */
     private void rebuildHelpMenu() {
         if (helpMenu == null) {
@@ -1473,6 +1577,10 @@ public final class BoardController {
 
     private void onOpenBoard(BoardId boardId) {
         service.openBoard(boardId);
+        // Session 11: the current card belongs to the board that was on
+        // screen; opening another board starts with none (exactly one card
+        // can be current, and switching boards is not a selection).
+        cardFocused = null;
         rebuildAll();
     }
 
@@ -2735,6 +2843,7 @@ public final class BoardController {
         rebuildBoardMenu(); // keep the active-board marker in sync
         rebuildProcessMenu();
         syncCardViewMenu();
+        syncViewMenu();
         undoRedo.sync();
         updateSelectionBarState();
         // Keep the processes-view keyboard focus across the rebuild.
@@ -2745,11 +2854,29 @@ public final class BoardController {
                 findProcessCardNode(processFocusId).ifPresent(Node::requestFocus);
             }
         }
+        // The "current" card must still exist after the rebuild (the card may
+        // have been deleted or moved), and the node just built needs the
+        // highlight re-painted — a data change rebuilt it from scratch.
+        if (cardFocused != null && service.board().findCard(cardFocused).isEmpty()) {
+            cardFocused = null;
+        }
+        syncCurrentCardHighlight();
     }
 
     /** Switches between the kanban and the processes view. */
     public void onToggleView() {
-        processView = !processView;
+        onSelectView(!processView);
+    }
+
+    /**
+     * Shows the board view (false) or the processes view (true): the toolbar
+     * toggle, the "Ver" menu and its accelerators all land here.
+     */
+    public void onSelectView(boolean processes) {
+        if (processView == processes) {
+            return;
+        }
+        processView = processes;
         refresh();
     }
 

@@ -41,6 +41,8 @@ final class ShortcutsHelpWindow {
             new Row("Ctrl+Z", "help.undo"),
             new Row("Ctrl+Shift+Z", "help.redo"),
             new Row("Ctrl+1 / Ctrl+2 / Ctrl+3", "help.cardview"),
+            new Row("Ctrl+Shift+1", "help.view.board"),
+            new Row("Ctrl+Shift+2", "help.view.processes"),
             new Row("Ctrl+N", "help.new.board"),
             new Row("Ctrl+Shift+P", "help.process.filter.all"),
             new Row("Ctrl+Shift+N", "help.process.filter.none"),

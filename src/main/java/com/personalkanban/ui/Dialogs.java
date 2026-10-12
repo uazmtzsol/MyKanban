@@ -431,6 +431,9 @@ final class Dialogs {
                 ? new BulkLabelsForm(mode.getSelectionModel().getSelectedIndex() == 0,
                         parseLabels(labelsField.getText()))
                 : null);
+        // Session 11 (user request): the focus belongs in the labels field,
+        // not on "Aceptar", so the dialog can be typed into immediately.
+        dialog.setOnShown(event -> javafx.application.Platform.runLater(labelsField::requestFocus));
         return dialog.showAndWait();
     }
 
@@ -814,6 +817,10 @@ final class Dialogs {
         TextInputDialog dialog = new TextInputDialog(initial == null ? "" : initial);
         dialog.setHeaderText(header);
         dialog.setContentText(contentText);
+        // Session 11 (user request): the field is what the user came for, so it
+        // takes the focus instead of the "Aceptar" button.
+        dialog.setOnShown(event -> javafx.application.Platform.runLater(
+                dialog.getEditor()::requestFocus));
         return dialog.showAndWait();
     }
 

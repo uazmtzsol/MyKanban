@@ -205,10 +205,24 @@
     -fx-cursor: hand;
     -fx-border-style: dashed;
 }
-.card-selected {
-    -fx-background-color: #1c2b3f;
-    -fx-border-color: #42a5f5;
+/* The selection rules carry two classes (.card.card-...) on purpose: the
+   .card.pk-color-* rules that paint a colored card's accent have the same
+   specificity, so without it a colored card looked exactly like its
+   unselected self (session 11). */
+.card.card-selected {
+    -fx-background-color: #1d3a5c;
+    -fx-border-color: #64b5f6;
+    -fx-border-style: solid;
     -fx-border-width: 2;
+    -fx-effect: dropshadow(gaussian, #64b5f6, 10, 0.5, 0, 0);
+}
+/* The "current" card (mouse click or arrow keys), so the card the shortcuts
+   act on is unmistakable. */
+.card.card-current {
+    -fx-border-color: #60a5fa;
+    -fx-border-style: solid;
+    -fx-border-width: 2;
+    -fx-effect: dropshadow(gaussian, #60a5fa, 14, 0.6, 0, 0);
 }
 .selection-count { -fx-font-weight: bold; -fx-text-fill: #42a5f5; }
 

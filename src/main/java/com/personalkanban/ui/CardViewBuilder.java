@@ -71,12 +71,20 @@ final class CardViewBuilder {
         // flag/label colors (a later declaration wins), so the
         // priority highlight and the label rules never overwrite
         // each other or the card's own color.
-        StringBuilder style = new StringBuilder(ColorCss.surfaceStyle(card.color(), dark));
-        StylePrefs.StyleColors flagColors = flagColors(service, card, dark);
-        StylePrefs.StyleColors labelColors =
-                service.resolvedLabelStyle(card.labels(), dark).orElse(null);
-        appendColors(style, flagColors != null ? flagColors : labelColors);
-        view.setStyle(style.toString());
+        // Inline colors win over the stylesheet, so a SELECTED card must not
+        // receive the surface / flag / label overrides: the .card-selected
+        // rule is what makes the selection unmistakable (session 11: on a
+        // colored card, whose accent arrives inline, the selection used to be
+        // invisible).
+        boolean selected = board.isCardSelected(card.id());
+        if (!selected) {
+            StringBuilder style = new StringBuilder(ColorCss.surfaceStyle(card.color(), dark));
+            StylePrefs.StyleColors flagColors = flagColors(service, card, dark);
+            StylePrefs.StyleColors labelColors =
+                    service.resolvedLabelStyle(card.labels(), dark).orElse(null);
+            appendColors(style, flagColors != null ? flagColors : labelColors);
+            view.setStyle(style.toString());
+        }
         // Quick-flag highlight classes (user request: (i)/(u)/(iu) must stand
         // out); CSS owns the look per theme.
         if (card.isUrgentAndImportantCard()) {
@@ -86,8 +94,13 @@ final class CardViewBuilder {
         } else if (card.isImportantOnlyCard()) {
             view.getStyleClass().add("card-priority-important");
         }
-        if (board.isCardSelected(card.id())) {
+        if (selected) {
             view.getStyleClass().add("card-selected");
+        }
+        // The "current" card (session 11): the one a mouse click or the arrow
+        // keys left selected. Only one card in the whole board carries it.
+        if (board.isCardCurrent(card.id())) {
+            view.getStyleClass().add("card-current");
         }
 
         // --- Title row: title + quick flags (★ Importante, ! Urgente) ---
@@ -96,9 +109,9 @@ final class CardViewBuilder {
         HBox.setHgrow(title, javafx.scene.layout.Priority.ALWAYS);
         titleRow.getChildren().add(title);
         if (!selectionMode) {
-            titleRow.getChildren().add(flagButton(board, card, Card.LABEL_IMPORTANT,
+            titleRow.getChildren().add(flagButton(i18n, board, card, Card.LABEL_IMPORTANT,
                     "\u2605", "card.flag.important", "card-flag-important"));
-            titleRow.getChildren().add(flagButton(board, card, Card.LABEL_URGENT,
+            titleRow.getChildren().add(flagButton(i18n, board, card, Card.LABEL_URGENT,
                     "!", "card.flag.urgent", "card-flag-urgent"));
             titleRow.getChildren().add(notesButton(i18n, board, card));
             titleRow.getChildren().add(attachmentsButton(i18n, board, card, attachmentCount));
@@ -135,6 +148,13 @@ final class CardViewBuilder {
                     event.consume();
                 }
                 return;
+            }
+            if (event.getClickCount() == 1) {
+                // Session 11 (user request): a plain click makes this the
+                // current card — the same state the arrow keys move — so the
+                // card is selected on sight and the shortcuts that act on the
+                // current card work right after clicking.
+                board.onCardSelected(card.id());
             }
             if (event.getClickCount() == 2) {
                 board.onOpenCardDetail(card.id());
@@ -382,8 +402,12 @@ final class CardViewBuilder {
     /**
      * Quick-flag toggle (★/!): dimmed when the card lacks the label, vivid
      * when set. One click = one undoable domain transaction.
+     *
+     * <p>The tooltip shows the TRANSLATED name (session 11: it used to show
+     * the domain label itself — "Importante" / "Urgente" — in every language,
+     * because the {@code tipKey} argument was never read).</p>
      */
-    private static Button flagButton(BoardController board, Card card, String label,
+    private static Button flagButton(I18n i18n, BoardController board, Card card, String label,
                                      String glyph, String tipKey, String styleClass) {
         Button button = new Button(glyph);
         button.getStyleClass().addAll("card-flag", styleClass);
@@ -392,7 +416,7 @@ final class CardViewBuilder {
         } else {
             button.getStyleClass().add("card-flag-off");
         }
-        button.setTooltip(new Tooltip(label));
+        button.setTooltip(new Tooltip(i18n.text(tipKey)));
         button.setFocusTraversable(false);
         // Narrow columns must never squeeze these into ellipsis/garbled glyphs.
         button.setMinWidth(Region.USE_PREF_SIZE);

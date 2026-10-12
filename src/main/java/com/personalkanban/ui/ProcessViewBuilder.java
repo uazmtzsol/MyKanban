@@ -556,6 +556,9 @@ final class ProcessViewBuilder {
         node.setFocusTraversable(true);
         node.setUserData(card.id());
         node.setOnMouseClicked(event -> {
+            // Session 11: the process-view click also makes the card the
+            // "current" one, so both views share the same state.
+            controller.onCardSelected(card.id());
             controller.onProcessFocus(card.id());
             node.requestFocus();
         });
