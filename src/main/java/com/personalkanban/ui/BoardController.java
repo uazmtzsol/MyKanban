@@ -1467,7 +1467,12 @@ public final class BoardController {
         processViewItem.setAccelerator(
                 javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+2"));
         processViewItem.setOnAction(e -> onSelectView(true));
-        viewMenu.getItems().setAll(boardView, processViewItem);
+        // Session 14 (user request B1): the time report is a way of LOOKING at
+        // the board, so it lives in the "Ver" menu next to the view modes —
+        // no new top-level menu for a single entry.
+        viewMenu.getItems().setAll(boardView, processViewItem,
+                new SeparatorMenuItem(),
+                itemOf("report.time", this::onShowTimeReport));
         syncViewMenu();
     }
 
@@ -1821,6 +1826,11 @@ public final class BoardController {
     /** Opens (or focuses) the fixed-shortcuts reference window (F1). */
     private void onShowShortcutsHelp() {
         ShortcutsHelpWindow.show(i18n, themeManager.stylesheets());
+    }
+
+    /** Opens the (non-modal) time report of the board on screen (B1). */
+    private void onShowTimeReport() {
+        TimeReportWindow.show(service, i18n, themeManager.stylesheets());
     }
 
     /** Opens the editable keyboard-shortcuts dialog (File → Keyboard shortcuts). */

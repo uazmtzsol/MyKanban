@@ -350,9 +350,31 @@ commit `feat(checklist): one-level subtasks (V10)`.
 | Subtareas | Un solo nivel (sin nietos) | Hacer recursivo `parentId` (ya queda en el modelo) |
 | Informe de tiempo | Solo tablero activo, 4 semanas por defecto | Añadir «todos los tableros» y rango por fechas |
 
+## Estado de ejecución
+
+| # | Mejora | Estado | Verificado con |
+|---|---|---|---|
+| B1 | Informe de tiempo | ✅ hecho 2026-10-12 | `TimeReportTest` (9), `TimeReportExportTest` (6), `TimeReportWindowTest` (2); suite **412/412** (+1 skip) |
+| B2 | Búsqueda global | ⬜ siguiente | — |
+| B3 | Recordatorios de vencimiento | ⬜ pendiente | — |
+| B4 | Captura rápida | ⬜ pendiente | — |
+| B5 | Plantillas + purga | ⬜ pendiente | — |
+| B7 | Color por etiqueta | ⬜ pendiente | — |
+| B8 | Subtareas jerárquicas | ⬜ pendiente | — |
+
+### Notas de B1 (lo que se decidió al implementarlo)
+
+- El informe se colgó del menú **Ver** (es una forma de *mirar* el tablero) en vez
+  de crear un menú nuevo de un solo elemento.
+- El CSV usa `;` y **BOM UTF-8** para que Excel en español lo abra bien, y fechas
+  ISO (ordenables); el PDF usa etiquetas de semana localizadas.
+- La fila **Sin proceso** va siempre la última, aunque sea la de más tiempo: es un
+  resto, no un proceso que compita en el ranking.
+- Las semanas sin registros aparecen a `0:00` (un hueco es información).
+
 ## Checklist de la sesión
 
-- [ ] B1 — Informe de tiempo
+- [x] B1 — Informe de tiempo
 - [ ] B2 — Búsqueda global
 - [ ] B3 — Recordatorios de vencimiento
 - [ ] B4 — Captura rápida con sintaxis

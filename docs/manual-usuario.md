@@ -26,7 +26,7 @@ la sincronización online.
 11. [Procesos y vista de procesos](#11-procesos-y-vista-de-procesos)
 12. [Precedencias (dependencias entre tarjetas)](#12-precedencias-dependencias-entre-tarjetas)
 13. [Seguimiento de tiempo](#13-seguimiento-de-tiempo)
-14. [Apariencia: tema, fondo y colores](#14-apariencia-tema-fondo-y-colores)
+14. [Apariencia: tema y colores](#14-apariencia-tema-y-colores)
 15. [Idioma](#15-idioma)
 16. [Atajos de teclado](#16-atajos-de-teclado)
 17. [Deshacer/Rehacer y guardado](#17-deshacerrehacer-y-guardado)
@@ -298,17 +298,35 @@ En la pestaña **Tiempo** del detalle:
 
 Todo el seguimiento de tiempo es **deshacible**.
 
-## 14. Apariencia: tema, fondo y colores
+### Informe de tiempo (Ver -> Informe de tiempo...)
 
-**Archivo → Preferencias**, con dos pestañas:
+El cronómetro alimenta un **informe** de solo lectura del **tablero activo**:
+**Ver -> Informe de tiempo...** abre una ventana no modal con dos tablas.
 
-- **Fondo:** activar una **imagen de fondo**, elegirla, y ajustar su
-  **atenuado** (0–80 %) para que el texto se lea. Si el archivo ya no existe,
-  simplemente no hay fondo (sin error).
-- **Apariencia:** tema **Claro / Oscuro**, colores de **fondo** y **texto**,
-  **colores de resalte** de las señales (Importante, Urgente, Importante y
-  urgente — con botón **Restablecer valores**) y **reglas de color de
-  etiquetas** (añadir/editar/quitar combinaciones de etiquetas).
+- **Tiempo por proceso**, de más a menos tiempo y con el número de tarjetas, y
+  una última fila **Sin proceso** con lo que no pertenece a ningún proceso.
+- **Tiempo por semana** (semanas ISO, de lunes a domingo), con las semanas sin
+  registros a `0:00` para que se vean los huecos.
+
+El rango por defecto son las **4 últimas semanas**; puedes elegir 8, 12 o
+**todo el histórico**, y el botón ↻ recalcula (si hay un cronómetro
+corriendo, cuenta **hasta ahora**).
+
+Dos exportaciones escriben exactamente lo que ves: **Exportar CSV...**
+(separador `;` y fechas ISO, listo para Excel) y **Exportar PDF...**.
+
+Reglas del informe: una entrada cuenta en el rango en el que **empezó**, y una
+entrada de duración cero no aparece. La columna **Minutos** lleva enteros, para
+poder sumarlos en una hoja de cálculo.
+
+## 14. Apariencia: tema y colores
+
+**Archivo → Preferencias**, con la pestaña **Apariencia**: tema **Claro /
+Oscuro**, colores de **fondo** y **texto**, **colores de resalte** de las
+señales (Importante, Urgente, Importante y urgente — con botón
+**Restablecer valores**) y **reglas de color de etiquetas** (añadir, editar o
+quitar combinaciones de etiquetas). La antigua pestaña de **imagen de fondo**
+se retiró en la Sesión 11: hoy la apariencia es solo color.
 
 El **modo oscuro** también se cambia al vuelo con el botón 🌙 o **Ctrl+D**.
 
@@ -327,6 +345,9 @@ de la app:
 | **Ctrl+Z** | Deshacer |
 | **Ctrl+Shift+Z** | Rehacer |
 | **Ctrl+1 / Ctrl+2 / Ctrl+3** | Vista de tarjeta: solo título / + resumen / completa |
+
+| **Ctrl+Shift+1 / Ctrl+Shift+2** | Vista de tablero / vista de procesos |
+| **Ctrl+L** | Añadir o quitar etiquetas a lo seleccionado (o a la tarjeta actual) |
 | **Ctrl+N** | Nuevo tablero |
 | **Ctrl+F** | Enfocar el filtro de etiquetas |
 | **Ctrl+P** | Enfocar el filtro de proceso |

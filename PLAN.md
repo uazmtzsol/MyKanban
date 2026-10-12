@@ -4,7 +4,7 @@
 > checklists). El contexto estable del proyecto vive en `docs/`
 > (ver `docs/README.md`). El usuario elige qué fase ejecutar en cada sesión.
 
-*Sesión 14 (2026-10-12, **en curso**) · bloque de producto pedido por el usuario: **B1** informe de tiempo, **B2** búsqueda global (Ctrl+Shift+F), **B3** recordatorios de vencimiento, **B4** captura rápida con sintaxis, **B5** plantillas propias + purga de archivadas, **B7** registro de etiquetas con color (cierra B9) y **B8** subtareas jerárquicas. Plan detallado por mejora (alcance, diseño, archivos, i18n, tests, criterio de hecho) en [`docs/plan-sesion-14.md`](docs/plan-sesion-14.md); estado al final de este documento.*
+*Sesión 14 (2026-10-12, **en curso**: B1 hecho) · bloque de producto pedido por el usuario: **B1** informe de tiempo, **B2** búsqueda global (Ctrl+Shift+F), **B3** recordatorios de vencimiento, **B4** captura rápida con sintaxis, **B5** plantillas propias + purga de archivadas, **B7** registro de etiquetas con color (cierra B9) y **B8** subtareas jerárquicas. Plan detallado por mejora (alcance, diseño, archivos, i18n, tests, criterio de hecho) en [`docs/plan-sesion-14.md`](docs/plan-sesion-14.md); estado al final de este documento.*
 
 *Última actualización: 2026-10-12 · **Sesión 13:** cierre de la Sesión 11
 (S11-5) y las seis mejoras pedidas en bloque por el usuario: tarjeta «actual»
@@ -677,7 +677,7 @@ commitear+pushear cada mejora al terminarla**. El plan detallado vive en
 
 | # | Mejora | Estado | Commit |
 |---|---|---|---|
-| B1 | Informe de tiempo (horas por proceso y por semana, export CSV/PDF) | ⬜ planificada | — |
+| B1 | Informe de tiempo (horas por proceso y por semana, export CSV/PDF) | ✅ hecho (2026-10-12) | `feat(report): time report by process and week with CSV/PDF export` |
 | B2 | Búsqueda global (Ctrl+Shift+F, cruza tableros; backend `findCards` ya existía) | ⬜ planificada | — |
 | B3 | Recordatorios de vencimiento + vistas «vence hoy / esta semana» + reagendado rápido | ⬜ planificada | — |
 | B4 | Captura rápida con sintaxis en el alta de tarjeta | ⬜ planificada | — |

@@ -4,7 +4,7 @@
 > propuesta en los documentos de planificación, con su estado **verificado
 > contra el código** (no copiado del plan).
 >
-> **Actualizado:** 2026-10-12 (sesión 13). Fuentes cruzadas:
+> **Actualizado:** 2026-10-12 (sesión 14, B1 hecho). Fuentes cruzadas:
 > [`mejoras-propuestas.md`](mejoras-propuestas.md) (A/B/C/D),
 > [`adiciones-propuestas.md`](adiciones-propuestas.md) (1–5),
 > [`plan-sesiones.md`](plan-sesiones.md) (S11-1…S11-6),
@@ -50,6 +50,7 @@
 | Vista de procesos accesible como una vista más (menú + atajo + estado visible) | 1.3 | Menú **Ver** con `Ctrl+Shift+1/2` y marca del modo activo (2026-10-12) |
 | Descripción de tarjeta legible en tema obscuro | 5.1 del PLAN | Clase `text` en `MarkdownSummary` + regla CSS efectiva (2026-10-12) |
 | Tooltips que mostraban claves de properties | §2.2 | `bulk.process` en los 5 bundles + guardián de claves indirectas (2026-10-12) |
+| **Informe de tiempo por proceso y semana (CSV/PDF)** | B1 / 2.2 | `TimeReport` + `TimeReportWindow` en `Ver → Informe de tiempo…` (2026-10-12) |
 
 ---
 
@@ -87,7 +88,6 @@
 
 | Mejora | Id. | Nota |
 |---|---|---|
-| Informe/dashboard de tiempo (horas por proceso/semana, CSV/PDF) | B1 / 2.2 | Mayor valor con el menor código: el dato ya existe |
 | Búsqueda global (Ctrl+Shift+F) entre tableros | B2 / 2.3 | El mayor hueco de uso diario |
 | Recordatorios de vencimiento + vistas «vence hoy/semana» | B3 / 2.1 | El badge de vencida ya existe |
 | Creación rápida con sintaxis (`Título #etiqueta ! @fecha`) | B4 | Parseo puro, sin migración |
