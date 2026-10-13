@@ -13,10 +13,10 @@
 > la fila en la **bitácora** (§3) y **commit + push**. Se documenta **antes** de
 > cerrar la sesión.
 >
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **453/453 OK** (1 skip:
+> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **455/455 OK** (1 skip:
 > endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
-> consolidada, **T1–T5 hechos** (fase 1 y fase 2 completas); siguiente: **T6**
-> (scroll de columna, §2).
+> consolidada, **T1–T6 hechos** (fases 1–2 y el scroll de columna); siguiente:
+> **T7** (qué muestra cada tarjeta, §2/§6.7).
 
 ---
 
@@ -58,7 +58,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 ### Fase 3 — Columnas y navegación
 
-- [ ] **T6 · N-13** ⬜ **Conservar la posición de scroll** de la columna al
+- [x] **T6 · N-13** ✅ **Conservar la posición de scroll** de la columna al
   seleccionar una tarjeta. §6.7.
 - [ ] **T7 · N-14** ⬜ **Botón por tarjeta** para elegir qué ver en la columna:
   descripción / tareas / comentarios. §6.7.
@@ -188,6 +188,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T2 · N-1/N-2** barras alternas + Esc | ✅ | `feat(selection): alternate filter and selection bars, Esc drops the selection` — la barra de filtros se oculta en modo selección y vuelve al salir (también en `refresh()`); la tecla configurada de salida actúa en etapas (desmarca → sale del modo → suelta el foco). `SelectionModeBarsTest` (3) → suite **432/432** |
 | 2026-10-13 | **T3 · N-10/N-11** detalle de tarjeta | ✅ | `feat(card-detail): Esc cancels, note buttons move to the editor header` — manejador de Esc en burbuja (un campo o autocompletado que consuma la tecla la conserva); `MarkdownEditor.addHeaderButton` coloca Añadir/Guardar junto al toggle y Eliminar se queda abajo. `CardDetailWindowTest` (3) → suite **435/435** |
 | 2026-10-13 | **T4 · N-12/BUG-2** filtro «sin etiqueta» | ✅ | `feat(filter): «none of these» and «without labels» label modes` — `LabelFilter.Mode.EXCLUDE` + `withoutLabels()`; el modo del filtro pasa a ser un enum (valor estable, texto localizado) y el campo de texto se desactiva en «Sin etiquetas». `LabelFilterTest` (+2), `LabelFilterModeUiTest` (4, con tarjetas reales filtradas) → suite **441/441** |
+| 2026-10-13 | **T6 · N-13** scroll de columna | ✅ | `fix(columns): keep each column's scroll position across a refresh` — el controlador recuerda el `vvalue` de cada columna antes de reconstruirla y el `ScrollPane` nuevo se crea con esa posición. `ColumnScrollTest` (2, con 40 tarjetas y clic real) → suite **455/455** |
 | 2026-10-13 | **T5 · N-6/B3** vencimientos | ✅ | `feat(due): overdue/today/week filters, startup reminder and quick reschedule` — `DueDigest` (puro: rangos y conteos), `Board.rescheduleCard` + `RescheduleCardCommand` (1 undo), tres toggles mutuamente excluyentes en la barra, aviso no modal clicable y submenú «Reagendar» en la tarjeta. **Hallazgo:** el filtro de la barra solo existía en `visibleColumnsCards()` (navegador); el render de la columna aplica sus filtros en `ColumnViewBuilder`, así que el de vencimientos se añadió también ahí (test de UI lo pilló). `DueDigestTest` (5), `RescheduleCardTest` (4), `DueFilterUiTest` (3) → suite **453/453** |
 
 ---

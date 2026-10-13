@@ -180,6 +180,11 @@ public final class BoardController {
     // bars are alternatives, never shown together (user request, 2026-10-13).
     private HBox filterBar;
 
+    // Vertical scroll of each column's card list, remembered across the
+    // rebuilds a refresh performs (user request, 2026-10-13, N-13: selecting a
+    // card used to send the column back to the top).
+    private final java.util.Map<String, Double> columnScroll = new java.util.HashMap<>();
+
     // Due-date filter (session 15, T5 = N-6 + B3): one scope at a time.
     private DueDigest.Scope dueScope;
     private final java.util.EnumMap<DueDigest.Scope, javafx.scene.control.ToggleButton> dueButtons =
@@ -2291,6 +2296,45 @@ public final class BoardController {
         refresh();
     }
 
+    /** Remembered vertical scroll of a column (0 = top). */
+    double columnScrollOf(String columnId) {
+        return columnScroll.getOrDefault(columnId, 0.0);
+    }
+
+    /**
+     * Reads the scroll position of every column currently on screen, so the
+     * rebuild that follows can put each one back where it was.
+     */
+    private void rememberColumnScroll() {
+        if (columnsRow == null) {
+            return;
+        }
+        for (Node child : columnsRow.getChildren()) {
+            if (!(child.getUserData() instanceof ColumnId columnId)) {
+                continue;
+            }
+            ScrollPane scroll = firstScrollPane(child);
+            if (scroll != null) {
+                columnScroll.put(columnId.value(), scroll.getVvalue());
+            }
+        }
+    }
+
+    private static ScrollPane firstScrollPane(Node node) {
+        if (node instanceof ScrollPane scroll) {
+            return scroll;
+        }
+        if (node instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                ScrollPane found = firstScrollPane(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
     /** Keeps the three due toggles in sync with the chosen scope. */
     private void syncDueButtons() {
         dueButtons.forEach((scope, button) -> button.setSelected(scope == dueScope));
@@ -3167,6 +3211,8 @@ public final class BoardController {
         restoreTrashedAttachments();
         LabelFilter filter = currentLabelFilter();
         LabelFilter quickFilter = currentQuickFlagFilter();
+        // The columns about to be replaced know where the user was looking.
+        rememberColumnScroll();
         columnsRow.getChildren().setAll(
                 ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter, quickFilter,
                         selectionMode, collapsedColumns, themeManager.isDark(), columnWidths));

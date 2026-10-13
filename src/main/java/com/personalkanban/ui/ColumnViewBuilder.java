@@ -206,6 +206,9 @@ final class ColumnViewBuilder {
         ScrollPane cardsScroll = new ScrollPane(cardsBox);
         cardsScroll.setFitToWidth(true);
         cardsScroll.getStyleClass().add("cards-scroll");
+        // Keep the column where the user left it: a refresh rebuilds this
+        // scroll pane, and a fresh one starts at the top (N-13).
+        cardsScroll.setVvalue(board.columnScrollOf(column.id().value()));
         VBox.setVgrow(cardsScroll, javafx.scene.layout.Priority.ALWAYS);
         view.getChildren().add(cardsScroll);
 
