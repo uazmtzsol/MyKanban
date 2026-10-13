@@ -290,6 +290,12 @@ En la barra de filtro:
 Atajo útil: **clic en el chip de una etiqueta** de cualquier tarjeta filtra
 por esa etiqueta al instante; clic sobre el mismo chip otra vez lo quita.
 
+**Color de las etiquetas:** menú **Etiquetas → Gestionar etiquetas...**
+(§catálogo global). Al elegir una etiqueta puedes darle un **color** de la
+paleta o dejarla en **Automático** (color por defecto, derivado del nombre). El
+color elegido pinta el **chip** de esa etiqueta en **todos** los tableros, en
+claro y en oscuro.
+
 Los filtros se combinan entre sí.
 
 ### Búsqueda global (Ctrl+Shift+F)

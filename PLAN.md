@@ -84,7 +84,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 - [x] **T13 · B4** ✅ **Captura rápida con sintaxis** al dar de alta. §7.2.
 - [x] **T14 · B5** ✅ **Plantillas propias** + **purga de archivadas**. §7.3.
-- [ ] **T15 · B7** ⬜ **Color por etiqueta** elegido en el gestor (cierra **B9**,
+- [x] **T15 · B7** ✅ **Color por etiqueta** elegido en el gestor (cierra **B9**,
   nombres de color traducidos). §7.4.
 - [ ] **T16 · B8** ⬜ **Subtareas jerárquicas** de un nivel (migración **V10**).
   §7.5.
@@ -201,6 +201,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T8 · N-3** botón de columna | ✅ | `1c0e5cb` («Realizado T7 y T8…»; el mensaje se quedó corto: la tarea **sí** quedó entera) — el botón ➕ de la toolbar desaparece; la función queda en **Tableros → Agregar columna** y en el menú ⋯ de cada columna, con **añadir a la izquierda / a la derecha** (también en columnas colapsadas). `Board.addColumn(..., insertIndex)` + `AddColumnCommand`/`BoardService.addColumnAt` insertan en el índice pedido en **un** paso de undo. `ColumnInsertAtTest` (4) + `ColumnAddMenuTest` (3) → suite **471/471** |
 | 2026-10-13 | **T13 · B4** captura rápida con sintaxis | ✅ | `feat(capture): quick card capture with inline syntax` — `application/QuickCapture` (puro: `+etiqueta`, `!`/`*`, `@hoy/@mañana/@+3d/@ISO`, fecha inválida se queda en el título, signos dentro de palabras intactos) + `QuickCaptureDialog` (foco en el campo, **vista previa en vivo**, Enter crea y **Más opciones…** precarga el `CardForm` completo); el ➕ de la columna abre la captura rápida y **Ctrl+➕** / la entrada del menú de columna abren el diálogo completo. **Hallazgo:** la vista previa NO puede vivir en `QuickCapture` (necesita i18n y la capa `application` no puede depender de `ui`), así que el formateo está en el diálogo; el parseo sí es puro. `QuickCaptureTest` (13) + `QuickCaptureDialogTest` (4) → suite **488/488** |
 | 2026-10-13 | **T14 · B5** plantillas propias + purga de archivadas | ✅ | `feat(board): user templates and archived-card purge` — `application/BoardTemplate` (puro, JSON propio: columnas con color/WIP/hecho, procesos y modo de vista; **sin tarjetas**), persistido en `board.template.<nombre>`; `BoardService.templates/hasTemplate/saveAsTemplate/removeTemplate/createBoardFromTemplate`; menú **Tableros → Guardar como plantilla… / Plantillas → (aplicar · eliminar)** y las propias dentro del selector de «nuevo tablero». Purga **Tableros → Borrar tarjetas archivadas…** (`archivedCardCount`, `purgeArchivedCards`, adjuntos a la papelera). **Hallazgos:** ① el puerto `SettingsStore` no tenía `remove`, se añadió (SQLite + doble en memoria); ② `BoardColor` **no** es un enum sino un record con hex, así que la plantilla guarda el **hex** (soporta colores propios) y se relee con `fromStored`; ③ el undo es **por tablero**, así que la purga borra tablero a tablero (un paso de undo en cada uno) y restaura el tablero activo al terminar; ④ la vista previa de color de `WipLimit` va como entero (0 = ilimitado). `BoardTemplateTest` (4) + `ArchivedPurgeTest` (5) → suite **497/497** |
+| 2026-10-13 | **T15 · B7** color por etiqueta (cierra B9) | ✅ | `feat(labels): pick a color per label (closes B9)` — el gestor de etiquetas gana un selector de **color** (8 colores de la paleta + **Automático** = borra la regla) que escribe la regla de estilo para **claro y obscuro** (`setLabelStyle`/`clearLabelStyle`) con el color de texto calculado por contraste; `ui/LabelChipStyle` (puro) decide el chip: regla del usuario si existe, si no la clase por hash de siempre. **B9:** los nombres de color ya se traducen (`color.blue`…`color.gray` + `labels.color`/`labels.color.auto`) en el selector de color y en el gestor. **Hallazgo:** el catálogo y las reglas `ui.label.` ya existían (y se editan en Preferencias), así que el hueco era solo el chip + el gestor, no el almacenamiento. `LabelChipStyleTest` (5) → suite **502/502** |
 
 ---
 
@@ -473,7 +474,15 @@ tablero nuevo) y `ArchivedPurgeTest` (solo borra archivadas, cuenta bien, undo).
 **Commits:** `feat(templates): user-defined board templates` y
 `feat(cards): purge archived cards`.
 
-### 7.4 T15 — B7: color por etiqueta (cierra B9)
+### 7.4 T15 — B7: color por etiqueta (cierra B9) — ✅ hecho (2026-10-13)
+
+> **Entregado:** el gestor de etiquetas tiene un selector **Color** (paleta de 8
+> + **Automático**) que escribe la regla `ui.label.<clave>` en claro y obscuro
+> con texto por contraste; `ui/LabelChipStyle` (puro) pinta el chip con esa
+> regla o, si no hay, con el hash de siempre. **B9 cerrado:** los nombres de
+> color se traducen (`color.blue`…, `labels.color`, `labels.color.auto`).
+> **Tests:** `LabelChipStyleTest` (5) → suite **502/502**.
+
 
 **Hallazgo (verificado):** el catálogo global (`LabelCatalog` + gestor) y las
 **reglas de estilo de etiqueta** (`ui.label.<clave>` con color de fondo y texto

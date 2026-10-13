@@ -699,9 +699,14 @@ final class Dialogs {
                 .map(color -> Color.web(color.hex()))
                 .toList());
         picker.valueProperty().addListener((obs, old, value) ->
-                picker.setTooltip(new Tooltip(BoardColor.fromHex(ColorCss.toHex(value)).displayName())));
-        picker.setTooltip(new Tooltip(current.displayName()));
+                picker.setTooltip(new Tooltip(colorName(BoardColor.fromHex(ColorCss.toHex(value))))));
+        picker.setTooltip(new Tooltip(colorName(current)));
         return picker;
+    }
+
+    /** Translated palette name, or the hex of a custom color (B9). */
+    private String colorName(BoardColor color) {
+        return color.isCustom() ? color.hex() : i18n.text("color." + color.name());
     }
 
     private BoardColor selectedColor(ColorPicker picker) {

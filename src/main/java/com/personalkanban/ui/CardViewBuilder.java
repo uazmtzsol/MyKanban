@@ -139,7 +139,7 @@ final class CardViewBuilder {
         addAttachmentsIndicatorIfPresent(i18n, attachmentCount, view);
         addProcessChipIfPresent(board, card, view);
         addRelationBadgesIfPresent(i18n, board, card, view);
-        addLabelChipsIfPresent(i18n, board, card, view);
+        addLabelChipsIfPresent(i18n, board, card, view, dark);
 
         HBox actions = new HBox(4,
                 cardButton(i18n, "\u270E", "card.edit", board, card.id(), true),
@@ -383,17 +383,27 @@ final class CardViewBuilder {
 
     /**
      * Small colored chips per label, e.g. [work] [urgent], on a wrapping
-     * pane. Color is deterministic (hash of the label) over the chip
-     * palette, so the same label always looks the same everywhere.
+     * pane. Color is the one the user chose for the label (T15 · B7) when a
+     * rule exists, else the deterministic hash of the label — so a label with
+     * no rule always looks the same everywhere.
      */
-    private static void addLabelChipsIfPresent(I18n i18n, BoardController board, Card card, VBox view) {
+    private static void addLabelChipsIfPresent(I18n i18n, BoardController board, Card card,
+                                               VBox view, boolean dark) {
         if (card.labels().isEmpty()) {
             return;
         }
         javafx.scene.layout.FlowPane chips = new javafx.scene.layout.FlowPane(4, 3);
         for (String label : card.labels()) {
             Label chip = new Label(label);
-            chip.getStyleClass().addAll("card-label-chip", chipColorClass(label));
+            chip.getStyleClass().add("card-label-chip");
+            LabelChipStyle.Chip style =
+                    LabelChipStyle.of(label, key -> board.labelChipColors(key, dark));
+            if (style.styleClass() != null) {
+                chip.getStyleClass().add(style.styleClass());
+            }
+            if (style.inlineStyle() != null && !style.inlineStyle().isEmpty()) {
+                chip.setStyle(style.inlineStyle());
+            }
             // Clicking a chip filters the board by that label; clicking the
             // same chip again clears the filter (user request).
             chip.setTooltip(new Tooltip(i18n.text("card.label.chip.tip")));
@@ -405,12 +415,6 @@ final class CardViewBuilder {
             chips.getChildren().add(chip);
         }
         view.getChildren().add(chips);
-    }
-
-    /** Deterministic chip color class: label hash → one of 8 palette slots. */
-    private static String chipColorClass(String label) {
-        int index = Math.abs(label.toLowerCase(java.util.Locale.ROOT).hashCode()) % 8;
-        return "chip-color-" + index;
     }
 
     /**

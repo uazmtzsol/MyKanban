@@ -280,6 +280,12 @@ public final class BoardController {
      * shows below the title — description, tasks or notes. No board default:
      * the user picks it card by card from the button on the card.
      */
+    /** Saved chip colors of one label style-rule key, if the user chose any (T15 · B7). */
+    public Optional<com.personalkanban.application.StylePrefs.StyleColors> labelChipColors(
+            String key, boolean dark) {
+        return service.labelStyle(key, dark);
+    }
+
     public void onSetCardContent(CardId cardId, CardViewSettings.Content content) {
         cardViewSettings.setContentOverride(cardId.value(), content);
         service.setCardViewSettings(service.activeBoardId(), cardViewSettings);
@@ -1603,7 +1609,7 @@ public final class BoardController {
 
     /** Opens the global label manager (add / rename / remove across boards). */
     private void onManageLabels() {
-        new LabelManagerDialog(i18n, context.globalLabels(), dialogs, this::refresh).show();
+        new LabelManagerDialog(i18n, context.globalLabels(), service, dialogs, this::refresh).show();
     }
 
     /**

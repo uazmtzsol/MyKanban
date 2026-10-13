@@ -1,8 +1,12 @@
 package com.personalkanban.ui;
 
+import com.personalkanban.application.BoardService;
 import com.personalkanban.application.GlobalLabelsService;
+import com.personalkanban.application.StylePrefs;
+import com.personalkanban.domain.board.BoardColor;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -10,6 +14,8 @@ import javafx.scene.control.ListView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,11 +28,19 @@ import java.util.Optional;
  * <p>
  * Reserved system labels (urgent / important / archived) are listed with a
  * suffix and their rename/remove buttons stay disabled.
+ * <p>
+ * Since T15 · B7 the selected label also gets a <b>color</b> (or
+ * <em>Automatic</em>), which is written as a label style rule for both themes
+ * and paints the chips of every board (B9: the color names are translated).
  */
 final class LabelManagerDialog {
 
+    /** "No chosen color" entry of the color chooser (clears the rule). */
+    private enum Automatic { INSTANCE }
+
     private final I18n i18n;
     private final GlobalLabelsService labels;
+    private final BoardService service;
     private final Dialogs dialogs;
     /** Called after any change that altered card labels (re-renders the board). */
     private final Runnable onChanged;
@@ -34,10 +48,15 @@ final class LabelManagerDialog {
     private ListView<String> list;
     private Button rename;
     private Button remove;
+    private ComboBox<Object> colorBox;
+    /** Guards the color chooser against firing while it is being synced. */
+    private boolean syncingColor;
 
-    LabelManagerDialog(I18n i18n, GlobalLabelsService labels, Dialogs dialogs, Runnable onChanged) {
+    LabelManagerDialog(I18n i18n, GlobalLabelsService labels, BoardService service,
+                       Dialogs dialogs, Runnable onChanged) {
         this.i18n = i18n;
         this.labels = labels;
+        this.service = service;
         this.dialogs = dialogs;
         this.onChanged = onChanged;
     }
@@ -78,7 +97,35 @@ final class LabelManagerDialog {
         hint.setWrapText(true);
 
         HBox buttons = new HBox(10, add, rename, remove);
-        VBox content = new VBox(10, list, buttons, hint);
+
+        // Per-label color (T15 · B7): writes the label style rule of both
+        // themes, so the chips of every board paint with the chosen color.
+        Label colorLabel = new Label(i18n.text("labels.color"));
+        colorBox = new ComboBox<>();
+        colorBox.getItems().add(Automatic.INSTANCE);
+        colorBox.getItems().addAll(BoardColor.palette());
+        colorBox.setCellFactory(view -> new ListCell<>() {
+            @Override
+            protected void updateItem(Object item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else if (item instanceof Automatic) {
+                    setText(i18n.text("labels.color.auto"));
+                    setGraphic(null);
+                } else {
+                    BoardColor color = (BoardColor) item;
+                    setText(colorName(color));
+                    setGraphic(swatch(color));
+                }
+            }
+        });
+        colorBox.setButtonCell(colorBox.getCellFactory().call(null));
+        colorBox.setOnAction(e -> onColorChosen());
+        HBox colorRow = new HBox(10, colorLabel, colorBox);
+
+        VBox content = new VBox(10, list, buttons, colorRow, hint);
         VBox.setVgrow(list, Priority.ALWAYS);
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().setPrefWidth(420);
@@ -93,6 +140,61 @@ final class LabelManagerDialog {
         boolean editable = selected != null && !labels.isReserved(selected);
         rename.setDisable(!editable);
         remove.setDisable(!editable);
+        colorBox.setDisable(selected == null);
+        syncColorBox(selected);
+    }
+
+    /** Shows the selected label's saved color in the chooser (no side effect). */
+    private void syncColorBox(String label) {
+        syncingColor = true;
+        try {
+            String background = label == null ? null : service
+                    .labelStyle(StylePrefs.labelKey(label), false)
+                    .map(StylePrefs.StyleColors::background)
+                    .orElse(null);
+            Object match = Automatic.INSTANCE;
+            if (background != null) {
+                match = BoardColor.fromStored(background);
+            }
+            colorBox.setValue(match);
+        } finally {
+            syncingColor = false;
+        }
+    }
+
+    /** Writes (or clears) the color rule of the selected label. */
+    private void onColorChosen() {
+        if (syncingColor) {
+            return;
+        }
+        String label = list.getSelectionModel().getSelectedItem();
+        Object value = colorBox.getValue();
+        if (label == null || value == null) {
+            return;
+        }
+        String key = StylePrefs.labelKey(label);
+        if (value instanceof Automatic) {
+            service.clearLabelStyle(key);
+        } else {
+            String background = ((BoardColor) value).hex();
+            String text = LabelChipStyle.contrastingText(background);
+            service.setLabelStyle(key, false, background, text);
+            service.setLabelStyle(key, true, background, text);
+        }
+        onChanged.run();
+    }
+
+    /** Translated palette name, or the hex of a custom color (closes B9). */
+    private String colorName(BoardColor color) {
+        return color.isCustom() ? color.hex() : i18n.text("color." + color.name());
+    }
+
+    /** Small square showing one palette color. */
+    private static Rectangle swatch(BoardColor color) {
+        Rectangle rectangle = new Rectangle(12, 12, Color.web(color.hex()));
+        rectangle.setArcWidth(3);
+        rectangle.setArcHeight(3);
+        return rectangle;
     }
 
     private void onAdd() {
