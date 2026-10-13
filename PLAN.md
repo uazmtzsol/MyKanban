@@ -13,9 +13,9 @@
 > la fila en la **bitácora** (§3) y **commit + push**. Se documenta **antes** de
 > cerrar la sesión.
 >
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **429/429 OK** (1 skip:
+> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **432/432 OK** (1 skip:
 > endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
-> consolidada y **T1 (BUG-1) hecho**; siguiente: **T2** (§2).
+> consolidada, **T1 (BUG-1)** y **T2 (N-1/N-2)** hechos; siguiente: **T3** (§2).
 
 ---
 
@@ -41,8 +41,8 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 - [x] **T1 · BUG-1** ✅ «Ayuda → Personalizar atajos de teclado» lanza
   excepción (`fromStorageNameOrThrow` recibe nombres de enum). §5.1.
-- [ ] **T2 · N-1 + N-2** 🔄 En modo selección: **ocultar la barra de filtros** y
-  alternarla con la de selección; **Esc borra la selección** actual. §6.1.
+- [x] **T2 · N-1 + N-2** ✅ En modo selección: **ocultar la barra de filtros**
+  y alternarla con la de selección; **Esc borra la selección** actual. §6.1.
 - [ ] **T3 · N-10 + N-11** ⬜ Detalle de tarjeta: **Esc = Cancelar**; **mover
   «Añadir nota» y «Guardar nota»** junto al botón editor/render («Eliminar
   nota» se queda abajo). §6.5.
@@ -184,6 +184,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 |---|---|---|---|
 | 2026-10-13 | Documentación consolidada en un solo documento + borrado de docs redundantes | ✅ | `docs: consolidate all planning into one document (PLAN.md)` |
 | 2026-10-13 | **T1 · BUG-1** atajos de teclado | ✅ | `fix(shortcuts): resolve actions by enum or storage name` — `fromNameOrThrow` acepta ambos nombres, la fila del diálogo lleva el enum (ya no re-parsea una clave i18n); +6 tests → suite **429/429** |
+| 2026-10-13 | **T2 · N-1/N-2** barras alternas + Esc | ✅ | `feat(selection): alternate filter and selection bars, Esc drops the selection` — la barra de filtros se oculta en modo selección y vuelve al salir (también en `refresh()`); la tecla configurada de salida actúa en etapas (desmarca → sale del modo → suelta el foco). `SelectionModeBarsTest` (3) → suite **432/432** |
 
 ---
 
@@ -234,11 +235,12 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
   `root`, así que en modo selección se ven las dos. *Pedido:* alternarlas.
   *Encaje:* `rebuildSelectionBar()` ya conoce `selectionMode`; alternar
   visibilidad/`managed` de `filterBar` ahí (y al salir del modo).
-- **N-2 — Esc borra la selección.** *Hoy:* `GlobalShortcuts.Action.EXIT` (Esc)
-  llama a `onClearFocus()`, que solo suelta la **tarjeta actual**; no vacía
-  `selectedCards`. *Pedido:* Esc desmarca todas. *Encaje:* si `selectionMode` y
-  la selección no está vacía → `exitSelectionMode()`; si no, comportamiento
-  actual.
+- **N-2 — Esc borra la selección.** ✅ *Hecho (2026-10-13).* La tecla
+  configurada de salida (`GlobalShortcuts.Action.EXIT`, Esc por defecto) actúa
+  en **etapas**, que era la decisión abierta: ① si hay selección, la desmarca y
+  **mantiene** el modo (para poder elegir otro conjunto); ② si no hay nada
+  seleccionado, sale del modo; ③ si no está en modo selección, suelta la tarjeta
+  actual (comportamiento original). `BoardController.onExitKey()`.
 
 ### 6.2 T8/T9/T10 — barra de herramientas principal
 

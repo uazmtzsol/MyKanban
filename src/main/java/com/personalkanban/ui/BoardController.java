@@ -146,6 +146,9 @@ public final class BoardController {
     private ColumnId selectionColumn;
     private final java.util.Set<CardId> selectedCards = new java.util.LinkedHashSet<>();
     private HBox selectionBar;
+    // The card filter bar. It is hidden while selection mode is on: the two
+    // bars are alternatives, never shown together (user request, 2026-10-13).
+    private HBox filterBar;
 
     // Collapsed columns of the active board (UI preference, per board).
     private java.util.Set<String> collapsedColumns = java.util.Set.of();
@@ -311,6 +314,29 @@ public final class BoardController {
         }
     }
 
+    /**
+     * The configured «Exit» key (Esc by default) in the kanban view. It works
+     * in stages so one key covers the three things a user expects:
+     * first it drops the current selection, then it leaves selection mode, and
+     * finally it clears the focused card (the original behavior).
+     */
+    void onExitKey() {
+        if (dialogs.modalActive()) {
+            return;
+        }
+        if (selectionMode && !selectedCards.isEmpty()) {
+            selectedCards.clear();
+            rebuildSelectionBar();
+            refresh();
+            return;
+        }
+        if (selectionMode) {
+            exitSelectionMode();
+            return;
+        }
+        onClearFocus();
+    }
+
     /** Drops the kanban focus, or cancels the active modal dialog if any. */
     private void onClearFocus() {
         if (!dialogs.modalActive()) {
@@ -422,7 +448,7 @@ public final class BoardController {
 
         // Configurable bindings (defaults: Enter edits, Escape drops focus).
         if (matches(GlobalShortcuts.Action.EXIT, event)) {
-            onClearFocus();
+            onExitKey();
             event.consume();
             return;
         }
@@ -667,7 +693,7 @@ public final class BoardController {
         columnWidths = service.columnWidthsOf(service.activeBoardId());
 
         HBox toolbar = buildToolbar();
-        HBox filterBar = buildFilterBar();
+        filterBar = buildFilterBar();
         MenuBar menuBar = buildMenuBar();
 
         columnsRow = new HBox(12);
@@ -1061,7 +1087,21 @@ public final class BoardController {
         boolean visible = selectionMode;
         selectionBar.setVisible(visible);
         selectionBar.setManaged(visible);
+        syncFilterBarVisibility();
         updateSelectionBarState();
+    }
+
+    /**
+     * The filter bar and the selection bar alternate: in selection mode the
+     * card filters are hidden, and they come back when the mode is left.
+     */
+    private void syncFilterBarVisibility() {
+        if (filterBar == null) {
+            return;
+        }
+        boolean visible = !selectionMode;
+        filterBar.setVisible(visible);
+        filterBar.setManaged(visible);
     }
 
     /** Enables actions only when at least one card is selected. */
@@ -2944,6 +2984,7 @@ public final class BoardController {
         syncCardViewMenu();
         syncViewMenu();
         undoRedo.sync();
+        syncFilterBarVisibility();
         updateSelectionBarState();
         // Keep the processes-view keyboard focus across the rebuild.
         if (processView && processFocusId != null) {
