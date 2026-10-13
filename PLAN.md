@@ -88,6 +88,9 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
   nombres de color traducidos). §7.4.
 - [x] **T16 · B8** ✅ **Subtareas jerárquicas** de un nivel (migración **V10**).
   §7.5.
+- [ ] **T23 · B10** ⬜ **Recordatorios programables por tarjeta**: varias fechas
+  (con hora opcional) elegidas en un **calendario** de hoy a la fecha límite, o
+  rellenadas por **diario / cada semana** (migración **V11**). §7.6.
 
 ### Fase 7 — Robustez y distribución
 
@@ -109,7 +112,8 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [ ] 💬 **C-1** Import con *merge* en vez de duplicar tablero.
   [`docs/import-merge-tableros.md`](docs/import-merge-tableros.md).
 - [ ] 💬 **C-2** Impresión de tableros (export HTML vs `PrinterJob`).
-- [ ] 💬 **C-3** Vencimientos: ¿banda interna (actual) o bandeja del sistema?
+- [ ] 💬 **C-3** Vencimientos **y recordatorios** (T23): ¿banda interna (actual)
+  o bandeja del sistema?
 - [ ] 💬 **C-4** Informe de tiempo: ¿solo tablero activo o todos?
 - [ ] 💬 **C-5** H-12 (menor): archivadas visibles en la vista de procesos; el
   toggle «mostrar archivadas» no persiste; resumen del frente configurable;
@@ -171,6 +175,7 @@ empaquetado).
 | T14 | B5 plantillas + purga | 🟡 Media | no | medio |
 | T15 | B7 color por etiqueta | 🔵 Baja | no | medio |
 | T16 | B8 subtareas | 🔵 Baja | **sí (V10)** | alto |
+| T23 | B10 recordatorios por tarjeta | 🟡 Media | **sí (V11)** | medio |
 | T17 | H-2/H-3 backup + integridad | 🟠 Media | no | medio |
 | T18 | H-7/H-8 logging + JaCoCo | 🟡 Media | no | bajo |
 | T19 | H-11/H-10 ayuda + foco | 🔵 Baja | no | bajo |
@@ -179,7 +184,7 @@ empaquetado).
 | T22 | H-1 confirmar fase B | — | no | — |
 
 El detalle de alcance/archivos/tests de **T1–T12** está en §6 y en las entradas
-por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
+por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8.
 
 ---
 
@@ -541,6 +546,89 @@ mover + undo), repositorio (round-trip de `parent_id`, BD V9 migra a V10 sin
 pérdida) y UI (hijos indentados).
 **Criterio:** subtareas persistidas y sobreviven al reinicio. Commit:
 `feat(checklist): one-level subtasks (V10)`.
+
+---
+
+### 7.6 T23 — B10: recordatorios programables por tarjeta (pendiente, sesión 15)
+
+**Requisito (palabras del usuario, 2026-10-13):** «En tarjetas con fechas
+límite, poner recordatorios. Por ejemplo, configurar fechas (y opcionalmente
+horario) en el cual el programa me muestre un mensaje recordándome de la
+actividad. Se deberán poder poner tantos recordatorios como se quiera… El
+mensaje debe ser el mismo, por lo que convendría poner un calendario donde se
+elijan las fechas desde la fecha actual hasta la fecha límite… Otra forma sería
+seleccionar que se quiere diario, o una vez a la semana si la fecha límite es
+varias semanas después». Requisito registrado también en
+`docs/roadmap-and-decisions.md` §1.11.
+
+> **Relación con lo ya hecho (no confundir):** **B3/T5** es **un** aviso al
+> arrancar que resume las tarjetas vencidas o que vencen hoy (banda
+> `due.notice` + filtros). Esto de aquí es **por tarjeta** y **programable**:
+> varios momentos elegidos por el usuario.
+
+**Decisiones de diseño (con porqué):**
+1. **Un recordatorio = un momento** (`fecha` + `hora` opcional), no una regla de
+   repetición en el dominio. «Diario» y «cada semana» son **generadores de la
+   UI** que rellenan esa misma lista; así hay un solo modelo, la lista que se ve
+   en el calendario es la verdad, y el usuario puede borrar días sueltos después
+   de generarlos. *(Evita un motor de recurrencias, su undo y su merge.)*
+2. **Tarjetas con fecha límite**: sin vencimiento no hay recordatorios (el
+   calendario se acota a `[hoy, fecha límite]`, que es lo que pidió el usuario).
+   Un recordatorio posterior a la fecha límite se rechaza al guardar.
+3. **Aviso dentro de la app** (banda no modal + ventana de pendientes), decisión
+   de v1 ya tomada en **B3** y registrada como **C-3**; sin `SystemTray`
+   (no es verificable headless).
+4. **`acknowledged` en el agregado**: un recordatorio se marca como atendido y
+   no vuelve a aparecer, pero sigue en la tarjeta y en el undo/redo/export/sync
+   (si fuera solo estado de UI se perdería al reiniciar y volvería a molestar).
+5. **El motor de disparo es puro** (`ReminderPlan`, sin relojes): la UI le pasa
+   «ahora» cada minuto (`javafx.animation.Timeline`) y al arrancar. Es lo que
+   hace el aviso verificable con tests.
+6. **Sin hora = todo el día**: el recordatorio dispara desde las 00:00 de su
+   fecha. Cuando el usuario pide hora, el diálogo propone **09:00** (editable) y
+   ofrece **Sin hora**, que es el caso más común para «recuérdame ese día».
+
+**Archivos previstos:** dominio `CardReminder(id, LocalDate date, LocalTime time,
+boolean acknowledged)` (lista ordenada en `Card`, con `reminderCount()` y el
+contador de pendientes); `Card.reminders()/addReminder/removeReminder/
+acknowledgeReminder` y lo mismo en `Board`; `CardSnapshot`/`BoardMemento`
+ampliados (round-trip por JSON); comandos `AddReminderCommand`,
+`RemoveReminderCommand`, `AcknowledgeRemindersCommand` (1 undo cada uno);
+`application/ReminderPlan` (puro: `dueNow(cards, now)` → recordatorios
+pendientes ya alcanzados, con la regla «sin hora = desde el inicio de su día»);
+migración **V11** `card_reminder(id PK, card_id FK→card ON DELETE CASCADE,
+position, remind_date TEXT, remind_time TEXT NULL, acknowledged INTEGER)` +
+lectura/escritura en `SqliteBoardRepository`; UI `ui/ReminderDialog` (cuadrícula
+mensual de días conmutables + ‹ › de mes + **Diario** / **Cada semana** + hora
+opcional + lista de los elegidos con borrado), entrada **Recordatorios…** en el
+menú de la tarjeta y 🔔 con el número en la tarjeta; banda de aviso reutilizando
+el estilo de `due.notice`, clicable → abre el detalle de la tarjeta; y un
+`ui/ReminderCalendar` **puro** (rejilla del mes: semanas, días fuera de rango
+deshabilitados) para poder testear la cuadrícula sin JavaFX.
+
+**i18n:** `card.reminders.menu`, `reminders.title`, `reminders.header`,
+`reminders.hint`, `reminders.none`, `reminders.auto.daily`, `reminders.auto.weekly`,
+`reminders.time`, `reminders.time.none`, `reminders.selected.count`,
+`reminders.remove`, `reminders.clear`, `reminders.save`, `reminders.no.due`,
+`reminders.after.due`, `reminders.notice.pending`, `reminders.window.title`,
+`reminders.ack`, `reminders.open`, `card.reminders.badge.tip`.
+
+**Tests previstos:** dominio (`ReminderDomainTest`: añadir/quitar/ordenar/
+duplicados, marcar atendido, borrar la tarjeta se lleva sus recordatorios,
+round-trip del memento, no se acepta un momento posterior al vencimiento); `ReminderPlanTest` (puro: sin hora → a partir de las 00:00; con
+hora → a partir de esa hora; días pasados pendientes siguen disparando; los
+atendidos no; sin fecha límite no hay recordatorios); `ReminderCalendarTest`
+(rejilla del mes, rangos, cambios de mes y de año); repositorio (round-trip de
+`remind_date`/`remind_time`/`acknowledged` y fila legada sin hora); y una prueba
+de cableado en la UI (el menú de la tarjeta abre el diálogo y la tarjeta muestra
+el 🔔).
+
+**Criterio de hecho:** en una tarjeta con fecha límite a 10 días, elegir en el
+calendario 5 días (o pulsar **Diario**), opcionalmente con hora, guardar y ver
+que el 🔔 aparece en la tarjeta; al llegar ese momento la app muestra el aviso
+con el título de la tarjeta, se marca como atendido al pulsarlo y no vuelve a
+insistir; reiniciar no pierde ni repite los avisos. Commit:
+`feat(reminders): per-card reminder schedule with a calendar`.
 
 ---
 

@@ -75,6 +75,19 @@ técnicos verificados, (3) decisiones de diseño vigentes con su porqué,
     ⑦ personalización (imagen de fondo) · ⑧ menú "Base de datos" →
     **Archivo** + **Salir**. Todo implementado en fases 4.1–4.6.
 
+11. **Recordatorios programables por tarjeta** (2026-10-13, sesión 15 — "en
+    tarjetas con fechas límite, poner recordatorios"): configurar **fechas (y
+    opcionalmente horario)** en las que el programa muestre un mensaje
+    recordando la actividad; **tantos recordatorios como se quiera** (ej.: tarea
+    para el viernes de la próxima semana → recordar miércoles, viernes y sábado
+    de esta y lunes y jueves de la próxima); **el mensaje es el mismo**, así que
+    conviene **un calendario donde se elijan los días desde hoy hasta la fecha
+    límite**; y como alternativa rápida, poder marcar **diario** o **una vez a la
+    semana** cuando la fecha límite cae varias semanas después. Plan y diseño en
+    `PLAN.md` §7.6 (**T23 · B10**). Nota: la decisión abierta **C-3** (banda
+    interna vs. bandeja del sistema) sigue vigente; v1 = aviso **dentro de la
+    app**, como el de vencimientos.
+
 ## 2. Hallazgos técnicos (✔️ = verificado empíricamente)
 
 ### 2.1 ✔️ Causa raíz del "Could not save board default-board"
