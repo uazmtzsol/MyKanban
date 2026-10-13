@@ -60,9 +60,9 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 - [x] **T6 · N-13** ✅ **Conservar la posición de scroll** de la columna al
   seleccionar una tarjeta. §6.7.
-- [ ] **T7 · N-14** ⬜ **Botón por tarjeta** para elegir qué ver en la columna:
+- [x] **T7 · N-14** ✅ **Botón por tarjeta** para elegir qué ver en la columna:
   descripción / tareas / comentarios. §6.7.
-- [ ] **T8 · N-3** ⬜ **Quitar el botón «agregar columna»** de la toolbar; la
+- [x] **T8 · N-3** ✅ **Quitar el botón «agregar columna»** de la toolbar; la
   función vive en el menú **Tableros** y en cada columna (**añadir a la
   izquierda / a la derecha**). §6.2.
 
@@ -142,8 +142,15 @@ empaquetado).
    que la tarea lo exija.
 4. **Test nuevo** que falle sin el cambio (mínimo: lógica pura + una prueba de
    que la UI está cableada); **suite completa verde** antes del commit.
-5. **Una tarea = un commit** en inglés, con **push**, y la **bitácora** (§3)
-   actualizada en el mismo commit.
+5. **Cierre obligatorio de cada tarea (regla permanente del usuario).** Antes de
+   dar por terminado algo — una **característica nueva**, el **fix de un
+   problema** o un **avance importante** — hay que: ① **documentar el avance y
+   los hallazgos** (bitácora §3, checklist §1, el detalle que cambie y
+   `docs/manual-usuario.md` si se ve en la UI); ② hacer **el commit** (en
+   inglés, con un mensaje que explique *el porqué*); y ③ **hacer push**. En
+   resumen: **nunca queda trabajo terminado sin documentar ni sin subir**.
+   Los hallazgos nuevos se anotan con su *porqué* aquí o en
+   `docs/roadmap-and-decisions.md`.
 6. No romper BDs existentes del usuario (datos reales).
 
 | # | Tarea | Prioridad | Migración | Riesgo |
@@ -190,6 +197,8 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T4 · N-12/BUG-2** filtro «sin etiqueta» | ✅ | `feat(filter): «none of these» and «without labels» label modes` — `LabelFilter.Mode.EXCLUDE` + `withoutLabels()`; el modo del filtro pasa a ser un enum (valor estable, texto localizado) y el campo de texto se desactiva en «Sin etiquetas». `LabelFilterTest` (+2), `LabelFilterModeUiTest` (4, con tarjetas reales filtradas) → suite **441/441** |
 | 2026-10-13 | **T6 · N-13** scroll de columna | ✅ | `fix(columns): keep each column's scroll position across a refresh` — el controlador recuerda el `vvalue` de cada columna antes de reconstruirla y el `ScrollPane` nuevo se crea con esa posición. `ColumnScrollTest` (2, con 40 tarjetas y clic real) → suite **455/455** |
 | 2026-10-13 | **T5 · N-6/B3** vencimientos | ✅ | `feat(due): overdue/today/week filters, startup reminder and quick reschedule` — `DueDigest` (puro: rangos y conteos), `Board.rescheduleCard` + `RescheduleCardCommand` (1 undo), tres toggles mutuamente excluyentes en la barra, aviso no modal clicable y submenú «Reagendar» en la tarjeta. **Hallazgo:** el filtro de la barra solo existía en `visibleColumnsCards()` (navegador); el render de la columna aplica sus filtros en `ColumnViewBuilder`, así que el de vencimientos se añadió también ahí (test de UI lo pilló). `DueDigestTest` (5), `RescheduleCardTest` (4), `DueFilterUiTest` (3) → suite **453/453** |
+| 2026-10-13 | **T7 · N-14** contenido por tarjeta | ✅ | `feat(card-front): pick the content of each card (description, tasks or notes)` — `CardViewSettings.Content` (DESCRIPTION / CHECKLIST / NOTES) guardado como override por tarjeta en el mismo JSON (sin migración: un archivo sin la sección sigue mostrando la descripción); botón en la tarjeta con menú de radio («comentarios» = las **notas**, confirmado por el usuario) y las tareas marcables desde el frente en 1 undo. `CardViewSettingsTest` (12) + `CardContentUiTest` (3) |
+| 2026-10-13 | **T8 · N-3** botón de columna | ✅ | `1c0e5cb` («Realizado T7 y T8…»; el mensaje se quedó corto: la tarea **sí** quedó entera) — el botón ➕ de la toolbar desaparece; la función queda en **Tableros → Agregar columna** y en el menú ⋯ de cada columna, con **añadir a la izquierda / a la derecha** (también en columnas colapsadas). `Board.addColumn(..., insertIndex)` + `AddColumnCommand`/`BoardService.addColumnAt` insertan en el índice pedido en **un** paso de undo. `ColumnInsertAtTest` (4) + `ColumnAddMenuTest` (3) → suite **471/471** |
 
 ---
 
@@ -249,12 +258,13 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 
 ### 6.2 T8/T9/T10 — barra de herramientas principal
 
-- **T8 · N-3 — Quitar el botón «agregar columna».** *Hoy:* `BoardController`
-  (~línea 699) crea `addColumn` (➕) en la toolbar. *Pedido:* quitarlo; la
-  función debe estar en el menú **Tableros** (comprobar que ya existe) **y** en
-  cada columna, con botón **añadir a la izquierda** y **a la derecha**.
-  *Encaje:* `ColumnViewBuilder` ya tiene menú `⋯` por columna; añadir dos
-  entradas reutilizando `service.addColumn` + reordenar.
+- **T8 · N-3 — Quitar el botón «agregar columna».** ✅ *Hecho (2026-10-13).*
+  El botón ➕ se retiró de `buildToolbar()`; la función vive en **Tableros →
+  Agregar columna** y en el menú `⋯` de **cada** columna con **añadir a la
+  izquierda** / **a la derecha** (también en columnas colapsadas). El dominio
+  gana `Board.addColumn(..., insertIndex)`, el comando `AddColumnCommand`
+  lleva el índice y `BoardService.addColumnAt(...)` lo inserta en **un** paso
+  de undo. Tests: `ColumnInsertAtTest`, `ColumnAddMenuTest`.
 - **T9 · N-5 — Asignar tarjeta a un proceso sin modo selección.** *Hoy:* solo en
   lote o dentro del editor. *Pedido:* acción directa sobre la tarjeta «actual»
   (botón en toolbar o entrada de menú contextual).
@@ -314,7 +324,10 @@ igual. El filtro se sigue compartiendo con la vista de proceso vía
   **vuelve al inicio** (`vvalue` solo se usa para el scroll del tablero, no por
   columna). *Encaje:* guardar/restaurar el `vvalue` por columna alrededor del
   `refresh()` (o refrescar solo la tarjeta afectada).
-- **T7 · N-14 — Elegir qué se ve en la columna, por tarjeta.** *Hoy:*
+- **T7 · N-14 — Elegir qué se ve en la columna, por tarjeta.** ✅ *Hecho
+  (2026-10-13):* `CardViewSettings.Content` + override por tarjeta, botón en la
+  tarjeta y tareas marcables desde el frente. Tests: `CardViewSettingsTest`,
+  `CardContentUiTest`. Detalle original: *Hoy:*
   `CardViewSettings` tiene 3 modos **de detalle** (solo título / +3 líneas /
   completa) con override por tarjeta, pero no permite mostrar **tareas** o
   **comentarios** en el frente. *Pedido:* botón (por tarjeta) para escoger

@@ -110,7 +110,6 @@ De arriba abajo:
 - **Barra de menús:** **Archivo**, **Tableros**, **Ver**,
   **Procesos**, **Etiquetas**, **Idioma**, **Ayuda**.
 - **Barra de herramientas:**
-  - ➕ **Añadir columna**
   - 🔍 **Buscar en todos los tableros** (§10)
   - ⇄ **Cambiar entre kanban y procesos** (vista alternativa, §11)
   - ↶ **Deshacer** · ↷ **Rehacer**
@@ -141,6 +140,8 @@ Menú **Tableros**:
   - **Sin columnas**.
 - **Renombrar tablero...**
 - **Eliminar tablero...** (con confirmación; no se puede eliminar el último).
+- **Agregar columna...** — abre el mismo diálogo de columna y la añade al
+  final del tablero.
 - **Exportar tablero (JSON)...**, **Exportar tablero a PDF...**,
   **Importar tablero (JSON)...** (§19).
 
@@ -158,10 +159,13 @@ insignia de **WIP** (`n/límite`, en rojo cuando está llena), insignia de
 | « | **Colapsar / expandir** la columna |
 | ⋯ | **Menú de columna** (abajo) |
 
-**Menú ⋯ de la columna:** Editar columna · Marcar como **finalizada**
+**Menú ⋯ de la columna:** **Añadir columna a la izquierda** · **Añadir columna
+a la derecha** · — · Editar columna · Marcar como **finalizada**
 (máximo una por tablero) · **Color de fondo...** · **Orden de la columna...**
 (1 = primera) · Colapsar columna · Eliminar columna · — · **Eliminar todas
-las tarjetas** de la columna.
+las tarjetas** de la columna. (El botón ➕ de **añadir columna** ya no está en
+la barra de herramientas: la función vive aquí y en el menú **Tableros**,
+junto a donde quieres la columna nueva.)
 
 Al **editar** una columna puedes cambiar título, descripción, color y el
 **límite WIP** (vacío = ilimitado). Si una columna está llena, la app impide
@@ -179,12 +183,19 @@ despliega: **Notas**, **Lista de tareas** (una por línea; `[x] tarea` = hecha,
 `[ ] tarea` o texto suelto = pendiente), **Proceso** y
 **Tareas previas / posteriores** (mantén **Ctrl** mientras eliges).
 
-**Frente de la tarjeta:** título, resumen de la descripción (según el modo de
-vista, §abajo), **★/!** (clic = activar/desactivar Importante/Urgente),
-**chips de etiquetas**, **fecha límite** (con aviso rojo si está vencida),
-**chip de proceso** (⚬), progreso de lista **☑ hechas/total**, **📝** si tiene
-notas, y contadores de precedencia **←n →n**. Al pasar el ratón aparecen ✎
-(editar) y ✕ (eliminar).
+**Frente de la tarjeta:** título, **contenido elegido** (descripción por
+defecto; ver el botón de contenido, §abajo), **★/!** (clic = activar/desactivar
+Importante/Urgente), **chips de etiquetas**, **fecha límite** (con aviso rojo si
+ya venció), **chip de proceso** (⚬), progreso de lista **☑ hechas/total**,
+**📝** si tiene notas, y contadores de precedencia **←n →n**. Al pasar el ratón
+aparecen ✎ (editar) y ✕ (eliminar).
+
+**Qué muestra el frente (por tarjeta):** un botón en la propia tarjeta elige el
+contenido que aparece bajo el título: **① Descripción** (respetando el modo de
+vista), **② Tareas** — la lista de tareas se puede marcar/desmarcar **desde el
+propio frente**, en un solo paso de deshacer — o **③ Comentarios** (las
+**notas** de la tarjeta). Es una elección por tarjeta y se recuerda al
+reiniciar; por defecto todas muestran la descripción.
 
 **Abrir el detalle:** doble clic sobre la tarjeta (§8).
 

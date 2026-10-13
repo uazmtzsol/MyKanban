@@ -15,7 +15,14 @@ volver a explorar todo el código.
 > esta documentación ANTES de cerrar la sesión. El plan y la bitácora viven en
 > `PLAN.md` (raíz del repo); el contexto estable vive aquí.
 
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **423/423 OK** (1 skip:
+> **Regla de cierre (permanente, pedida por el usuario):** siempre que se
+> termine algo importante — una **característica nueva**, el **fix de un
+> problema** o un avance relevante — hay que ① **documentar el avance y los
+> hallazgos** (bitácora `PLAN.md` §3, checklist §1 y este `manual-usuario.md` si
+> se ve en la UI), ② hacer **commit** con un mensaje que explique el porqué y
+> ③ **push**. Nunca se deja trabajo terminado sin documentar ni sin subir.
+
+> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **471/471 OK** (1 skip:
 > endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
 > consolidada en un solo documento: los antiguos `plan-sesiones.md`,
 > `plan-sesion-14.md`, `pending-mejoras-propuestas.md`, `mejoras-propuestas.md`,
