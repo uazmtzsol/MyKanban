@@ -135,9 +135,36 @@ public final class BoardController {
 
     // Label filter state; survives language-driven rebuilds of the controls.
     private String activeFilterLabels = "";
-    private String activeFilterMode; // null (= show each, "AND" or "OR")
+    private LabelFilterMode activeFilterMode; // null = no mode chosen
+
+    /**
+     * How the label filter combines, and whether it excludes instead (user
+     * request, 2026-10-13: «no tiene la etiqueta X» and «no tiene ninguna
+     * etiqueta»). Each entry carries its i18n key so the control follows the
+     * language without the value changing identity.
+     */
+    enum LabelFilterMode {
+        /** Cards must carry every listed label. */
+        ALL("filter.mode.all"),
+        /** Cards must carry at least one listed label. */
+        ANY("filter.mode.any"),
+        /** Cards must carry none of the listed labels. */
+        NOT("filter.mode.not"),
+        /** Cards must carry no labels at all (the list is ignored). */
+        NO_LABELS("filter.mode.no.labels");
+
+        private final String key;
+
+        LabelFilterMode(String key) {
+            this.key = key;
+        }
+
+        String key() {
+            return key;
+        }
+    }
     private TextField labelFilterField;
-    private ComboBox<String> labelFilterMode;
+    private ComboBox<LabelFilterMode> labelFilterMode;
     // Quick flag filters (★ Importante / ! Urgente); both active = AND (must carry both).
     private final java.util.Set<String> quickFlagFilters = new java.util.LinkedHashSet<>();
 
@@ -801,6 +828,9 @@ public final class BoardController {
         labelFilterField = new TextField(activeFilterLabels);
         labelFilterField.setPromptText(i18n.text("filter.labels.prompt"));
         labelFilterField.setPrefWidth(240);
+        // A rebuild (language, board, database) must restore the state of the
+        // «sin etiquetas» mode too.
+        labelFilterField.setDisable(activeFilterMode == LabelFilterMode.NO_LABELS);
         labelFilterField.textProperty().addListener((obs, old, value) -> {
             activeFilterLabels = value == null ? "" : value;
             refresh();
@@ -810,15 +840,28 @@ public final class BoardController {
                 List::of).setVocabularySupplier(this::filterVocabulary);
 
         labelFilterMode = new ComboBox<>();
-        labelFilterMode.getItems().addAll("AND", "OR");
+        labelFilterMode.getItems().setAll(LabelFilterMode.values());
         labelFilterMode.setPromptText(i18n.text("filter.mode.empty"));
         labelFilterMode.setValue(activeFilterMode);
-        labelFilterMode.setPrefWidth(90);
+        labelFilterMode.setPrefWidth(150);
         labelFilterMode.setTooltip(new Tooltip(i18n.text("filter.mode.tooltip")));
-        labelFilterMode.setOnAction(e -> {
-            activeFilterMode = labelFilterMode.getValue();
-            refresh();
+        // The value is a stable enum; only its rendering is localized.
+        labelFilterMode.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(LabelFilterMode mode) {
+                return mode == null ? "" : i18n.text(mode.key());
+            }
+
+            @Override
+            public LabelFilterMode fromString(String text) {
+                return activeFilterMode;
+            }
         });
+        // React to the VALUE, not to a user action: a programmatic change (the
+        // chip click clearing the mode, a programmatic selection in a test) has
+        // to filter the same way a click does.
+        labelFilterMode.valueProperty().addListener(
+                (observable, was, mode) -> onFilterModeChanged(mode));
 
         Button clearFilter = toolButton("\u2715", "filter.clear");
         clearFilter.setOnAction(e -> clearFilters());
@@ -905,6 +948,7 @@ public final class BoardController {
                 || !quickFlagFilters.isEmpty();
         labelFilterField.clear();
         labelFilterMode.setValue(null);
+        labelFilterField.setDisable(false);
         activeFilterLabels = "";
         activeFilterMode = null;
         activeProcessFilter = null;
@@ -1329,19 +1373,41 @@ public final class BoardController {
             return;
         }
         labelFilterField.setText(LabelChipFilter.toggle(labelFilterField.getText(), label));
+        // Clicking a chip means "show me this label": drop any excluding or
+        // no-labels mode and go back to the plain (implicit AND) filter.
+        activeFilterMode = null;
         if (labelFilterMode != null) {
             labelFilterMode.setValue(null);
+            labelFilterField.setDisable(false);
         }
     }
 
+    /** Applies a label-filter mode chosen in the filter bar. */
+    void onFilterModeChanged(LabelFilterMode mode) {
+        activeFilterMode = mode;
+        // «Sin etiquetas» filters by the absence of labels, so the text field
+        // takes no part: grey it out to say so visibly.
+        if (labelFilterField != null) {
+            labelFilterField.setDisable(mode == LabelFilterMode.NO_LABELS);
+        }
+        refresh();
+    }
+
     private LabelFilter currentLabelFilter() {
+        if (activeFilterMode == LabelFilterMode.NO_LABELS) {
+            return LabelFilter.withoutLabels();
+        }
         var labels = Dialogs.parseLabels(activeFilterLabels);
         if (labels.isEmpty()) {
             return LabelFilter.none();
         }
-        LabelFilter.Mode mode = "OR".equalsIgnoreCase(activeFilterMode)
-                ? LabelFilter.Mode.ANY
-                : LabelFilter.Mode.ALL;
+        LabelFilter.Mode mode = switch (activeFilterMode == null
+                ? LabelFilterMode.ALL
+                : activeFilterMode) {
+            case ALL, NO_LABELS -> LabelFilter.Mode.ALL;
+            case ANY -> LabelFilter.Mode.ANY;
+            case NOT -> LabelFilter.Mode.EXCLUDE;
+        };
         return new LabelFilter(labels, mode);
     }
 

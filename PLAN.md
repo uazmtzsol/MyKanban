@@ -13,9 +13,9 @@
 > la fila en la **bitácora** (§3) y **commit + push**. Se documenta **antes** de
 > cerrar la sesión.
 >
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **435/435 OK** (1 skip:
+> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **441/441 OK** (1 skip:
 > endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
-> consolidada, **T1–T3 hechos**; siguiente: **T4** (§2).
+> consolidada, **T1–T4 hechos**; siguiente: **T5** (vencimientos, §2).
 
 ---
 
@@ -46,7 +46,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [x] **T3 · N-10 + N-11** ✅ Detalle de tarjeta: **Esc = Cancelar**; **mover
   «Añadir nota» y «Guardar nota»** junto al botón editor/render («Eliminar
   nota» se queda abajo). §6.5.
-- [ ] **T4 · N-12 + BUG-2** ⬜ Filtro **«NO tiene la etiqueta X»** y **«no
+- [x] **T4 · N-12 + BUG-2** ✅ Filtro **«NO tiene la etiqueta X»** y **«no
   tiene ninguna etiqueta»**. §6.6.
 
 ### Fase 2 — Filtros y vencimientos
@@ -186,6 +186,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T1 · BUG-1** atajos de teclado | ✅ | `fix(shortcuts): resolve actions by enum or storage name` — `fromNameOrThrow` acepta ambos nombres, la fila del diálogo lleva el enum (ya no re-parsea una clave i18n); +6 tests → suite **429/429** |
 | 2026-10-13 | **T2 · N-1/N-2** barras alternas + Esc | ✅ | `feat(selection): alternate filter and selection bars, Esc drops the selection` — la barra de filtros se oculta en modo selección y vuelve al salir (también en `refresh()`); la tecla configurada de salida actúa en etapas (desmarca → sale del modo → suelta el foco). `SelectionModeBarsTest` (3) → suite **432/432** |
 | 2026-10-13 | **T3 · N-10/N-11** detalle de tarjeta | ✅ | `feat(card-detail): Esc cancels, note buttons move to the editor header` — manejador de Esc en burbuja (un campo o autocompletado que consuma la tecla la conserva); `MarkdownEditor.addHeaderButton` coloca Añadir/Guardar junto al toggle y Eliminar se queda abajo. `CardDetailWindowTest` (3) → suite **435/435** |
+| 2026-10-13 | **T4 · N-12/BUG-2** filtro «sin etiqueta» | ✅ | `feat(filter): «none of these» and «without labels» label modes` — `LabelFilter.Mode.EXCLUDE` + `withoutLabels()`; el modo del filtro pasa a ser un enum (valor estable, texto localizado) y el campo de texto se desactiva en «Sin etiquetas». `LabelFilterTest` (+2), `LabelFilterModeUiTest` (4, con tarjetas reales filtradas) → suite **441/441** |
 
 ---
 
@@ -293,12 +294,15 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 
 ### 6.6 T4 — N-12: filtro «NO tiene etiqueta»
 
-- *Pedido:* mostrar (a) las tarjetas que **no** tienen una etiqueta concreta y
-  (b) las que **no tienen ninguna** etiqueta. *Encaje:*
-  `BoardController.currentLabelFilter()` construye un `LabelFilter` con modo
-  AND/OR sobre etiquetas presentes; hace falta un modo **negación** («no tiene
-  X») y un caso especial «sin etiquetas». Ojo: el filtro se comparte con el
-  render de la vista de proceso (`matchesProcessFilter`).
+✅ *Hecho (2026-10-13).* El dominio gana `LabelFilter.Mode.EXCLUDE` y la fábrica
+`LabelFilter.withoutLabels()` (lista vacía + EXCLUDE = «tarjetas sin ninguna
+etiqueta»); `isEmpty()` distingue «sin filtro» de ese caso. En la UI el control
+de modo pasa a ser un **enum** `LabelFilterMode { ALL, ANY, NOT, NO_LABELS }`
+(antes: cadenas `"AND"/"OR"`), con `StringConverter` para que solo el **texto**
+se traduzca; en `NO_LABELS` el campo de etiquetas se desactiva. La barra reacciona
+al **valor** del combo (no a la acción) para que un cambio programático filtre
+igual. El filtro se sigue compartiendo con la vista de proceso vía
+`matchesProcessFilter`.
 
 ### 6.7 T6/T7 — columnas
 

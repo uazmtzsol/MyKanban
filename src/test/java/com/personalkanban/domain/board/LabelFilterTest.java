@@ -49,6 +49,26 @@ class LabelFilterTest {
     }
 
     @Test
+    void excludeModeRequiresNoneOfTheLabels() {
+        LabelFilter filter = new LabelFilter(List.of("work", "urgent"), LabelFilter.Mode.EXCLUDE);
+        assertThat(filter.matches(cardWith("home"))).isTrue();
+        // An unlabeled card does not carry any of the excluded labels.
+        assertThat(filter.matches(cardWith())).isTrue();
+        assertThat(filter.matches(cardWith("work"))).isFalse();
+        assertThat(filter.matches(cardWith("home", "urgent"))).isFalse();
+        assertThat(filter.isEmpty()).isFalse();
+    }
+
+    @Test
+    void withoutLabelsKeepsOnlyCardsWithNoLabelsAtAll() {
+        LabelFilter filter = LabelFilter.withoutLabels();
+        assertThat(filter.isEmpty()).as("it is a real filter, not 'no filter'").isFalse();
+        assertThat(filter.matches(cardWith())).isTrue();
+        assertThat(filter.matches(cardWith("work"))).isFalse();
+        assertThat(filter.matches(cardWith("work", "home"))).isFalse();
+    }
+
+    @Test
     void filterNormalizesDuplicatesAndBlanks() {
         LabelFilter filter = new LabelFilter(
                 java.util.Arrays.asList("Work", "", "work", null), LabelFilter.Mode.ANY);
