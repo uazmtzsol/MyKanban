@@ -213,6 +213,18 @@ public final class BoardService {
         return execute(command, command::createdColumnId);
     }
 
+    /**
+     * Adds a column at a given position (user request N-3: «add column to the
+     * left / to the right» of an existing one). One command, so one Ctrl+Z
+     * takes the whole thing back; an out-of-range index appends.
+     */
+    public ColumnId addColumnAt(String title, String description, BoardColor color,
+                                WipLimit wipLimit, int insertIndex) {
+        AddColumnCommand command =
+                new AddColumnCommand(title, description, color, wipLimit, insertIndex);
+        return execute(command, command::createdColumnId);
+    }
+
     public void renameColumn(ColumnId columnId, String newTitle) {
         execute(new RenameColumnCommand(columnId, newTitle));
     }

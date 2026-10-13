@@ -15,19 +15,28 @@ public final class AddColumnCommand implements BoardCommand {
     private final String description;
     private final BoardColor color;
     private final WipLimit wipLimit;
+    /** Where the column lands; negative = append (the original behaviour). */
+    private final int insertIndex;
 
     private ColumnId createdId;
 
     public AddColumnCommand(String title, String description, BoardColor color, WipLimit wipLimit) {
+        this(title, description, color, wipLimit, -1);
+    }
+
+    /** Positioned form for «add column to the left / to the right». */
+    public AddColumnCommand(String title, String description, BoardColor color, WipLimit wipLimit,
+                            int insertIndex) {
         this.title = Objects.requireNonNull(title);
         this.description = description == null ? "" : description;
         this.color = Objects.requireNonNull(color);
         this.wipLimit = Objects.requireNonNull(wipLimit);
+        this.insertIndex = insertIndex;
     }
 
     @Override
     public void execute(Board board) {
-        BoardColumn column = board.addColumn(title, description, color, wipLimit);
+        BoardColumn column = board.addColumn(title, description, color, wipLimit, insertIndex);
         createdId = column.id();
     }
 

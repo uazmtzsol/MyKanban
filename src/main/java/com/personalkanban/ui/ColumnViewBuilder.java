@@ -147,6 +147,10 @@ final class ColumnViewBuilder {
         collapse.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
 
         MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
+        MenuItem addLeftItem = addColumnItem(i18n, "column.add.left",
+                () -> board.onAddColumnLeft(column.id()));
+        MenuItem addRightItem = addColumnItem(i18n, "column.add.right",
+                () -> board.onAddColumnRight(column.id()));
         MenuItem editItem = new MenuItem(i18n.text("column.edit"));
         editItem.setOnAction(e -> board.onEditColumn(column.id()));
         MenuItem doneItem = new MenuItem(i18n.text("column.done"));
@@ -161,7 +165,10 @@ final class ColumnViewBuilder {
         deleteItem.setOnAction(e -> board.onRemoveColumn(column.id()));
         MenuItem clearItem = new MenuItem(i18n.text("column.clear.cards"));
         clearItem.setOnAction(e -> board.onClearColumn(column.id()));
-        columnMenu.getItems().setAll(editItem, doneItem, backgroundItem,
+        // User request N-3: «add column» moved out of the toolbar, so each
+        // column offers it where the new column is wanted.
+        columnMenu.getItems().setAll(addLeftItem, addRightItem, new SeparatorMenuItem(),
+                editItem, doneItem, backgroundItem,
                 orderItem, collapseItem, deleteItem,
                 new SeparatorMenuItem(), clearItem);
 
@@ -247,6 +254,10 @@ final class ColumnViewBuilder {
         MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
         MenuItem expandItem = new MenuItem(i18n.text("column.expand"));
         expandItem.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
+        MenuItem addLeftItem = addColumnItem(i18n, "column.add.left",
+                () -> board.onAddColumnLeft(column.id()));
+        MenuItem addRightItem = addColumnItem(i18n, "column.add.right",
+                () -> board.onAddColumnRight(column.id()));
         MenuItem editItem = new MenuItem(i18n.text("column.edit"));
         editItem.setOnAction(e -> board.onEditColumn(column.id()));
         MenuItem doneItem = new MenuItem(i18n.text("column.done"));
@@ -255,8 +266,9 @@ final class ColumnViewBuilder {
         backgroundItem.setOnAction(e -> board.onSetColumnBackground(column.id()));
         MenuItem orderItem = new MenuItem(i18n.text("column.order"));
         orderItem.setOnAction(e -> board.onReorderColumn(column.id()));
-        columnMenu.getItems().setAll(expandItem, editItem, doneItem,
-                backgroundItem, orderItem);
+        columnMenu.getItems().setAll(expandItem, new SeparatorMenuItem(),
+                addLeftItem, addRightItem, new SeparatorMenuItem(),
+                editItem, doneItem, backgroundItem, orderItem);
 
         VBox view = new VBox(6, expand, columnMenu, verticalText, count);
         view.setAlignment(javafx.geometry.Pos.TOP_CENTER);
@@ -293,6 +305,13 @@ final class ColumnViewBuilder {
         button.getStyleClass().addAll("tool-button", styleClass);
         button.setTooltip(new Tooltip(tipKey));
         return button;
+    }
+
+    /** One «add column to the left / to the right» entry of a column menu. */
+    private static MenuItem addColumnItem(I18n i18n, String labelKey, Runnable action) {
+        MenuItem item = new MenuItem(i18n.text(labelKey));
+        item.setOnAction(e -> action.run());
+        return item;
     }
 
     private static MenuButton menuButton(String glyph, String tipKey) {

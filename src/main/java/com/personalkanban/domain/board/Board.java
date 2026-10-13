@@ -61,8 +61,24 @@ public final class Board {
     // ------------------------------------------------------------------
 
     public BoardColumn addColumn(String title, String description, BoardColor color, WipLimit wipLimit) {
+        return addColumn(title, description, color, wipLimit, -1);
+    }
+
+    /**
+     * Adds a column at {@code insertIndex} (clamped). A negative index — or
+     * one past the end — appends, which is the original behaviour; the
+     * positioned form backs «add column to the left / to the right» of an
+     * existing column, so the new column lands exactly where the user asked
+     * with a single undo step.
+     */
+    public BoardColumn addColumn(String title, String description, BoardColor color,
+                                 WipLimit wipLimit, int insertIndex) {
         BoardColumn column = new BoardColumn(title, description, color, wipLimit);
-        columns.add(column);
+        if (insertIndex < 0 || insertIndex >= columns.size()) {
+            columns.add(column);
+        } else {
+            columns.add(insertIndex, column);
+        }
         return column;
     }
 

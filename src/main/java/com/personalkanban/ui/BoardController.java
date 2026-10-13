@@ -790,9 +790,9 @@ public final class BoardController {
         Label brand = new Label("Personal Kanban");
         brand.getStyleClass().add("brand");
 
-        Button addColumn = toolButton("\u2795", "toolbar.add.column");
-        addColumn.setOnAction(e -> onAddColumn());
-
+        // User request N-3: no «add column» button here any more — the action
+        // lives in the Boards menu and in each column's own menu (add to the
+        // left / to the right), which is where the user was looking for it.
         Button viewToggle = toolButton("\u21C4", "toolbar.view.toggle");
         viewToggle.setOnAction(e -> onToggleView());
 
@@ -849,7 +849,7 @@ public final class BoardController {
         // (onBoardKeyPressed): arrows, Alt+arrows, Ctrl+arrows, digits,
         // Enter, Alt+I/U and Delete.
 
-        HBox toolbar = new HBox(8, brand, boardNameLabel, addColumn, viewToggle,
+        HBox toolbar = new HBox(8, brand, boardNameLabel, viewToggle,
                 undoButton, redoButton, save, search, darkMode, exportPdf, archive, cardViewMenu,
                 spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
@@ -1576,6 +1576,8 @@ public final class BoardController {
                 itemOf("board.new", this::onNewBoard),
                 itemOf("board.rename", this::onRenameBoard),
                 itemOf("board.delete", this::onDeleteBoard),
+                new SeparatorMenuItem(),
+                itemOf("board.add.column", this::onAddColumn),
                 new SeparatorMenuItem(),
                 itemOf("board.export", this::onExportBoard),
                 itemOf("board.export.pdf", this::onExportBoardPdf),
@@ -2707,10 +2709,35 @@ public final class BoardController {
     // Intents: columns & cards (invoked by the view builders)
     // ------------------------------------------------------------------
 
+    /** Adds a column at the end of the board (the Boards menu entry, N-3). */
     private void onAddColumn() {
+        addColumnAt(-1);
+    }
+
+    /** Adds a column to the left of the given one (its own index). */
+    public void onAddColumnLeft(com.personalkanban.domain.board.ColumnId columnId) {
+        addColumnAt(columnIndexOf(columnId));
+    }
+
+    /** Adds a column to the right of the given one. */
+    public void onAddColumnRight(com.personalkanban.domain.board.ColumnId columnId) {
+        addColumnAt(columnIndexOf(columnId) + 1);
+    }
+
+    /** Position of a column in the active board (-1 when it is not there). */
+    private int columnIndexOf(com.personalkanban.domain.board.ColumnId columnId) {
+        return service.board().columns().stream().map(BoardColumn::id).toList().indexOf(columnId);
+    }
+
+    /**
+     * Asks for the new column and inserts it at {@code index} in one undoable
+     * step (negative = append). The same dialog as before, so title,
+     * description, color and WIP limit are unchanged.
+     */
+    private void addColumnAt(int index) {
         Optional<Dialogs.ColumnForm> form = dialogs.columnDialog(null);
         form.ifPresent(f -> guarded(() -> {
-            service.addColumn(f.title(), f.description(), f.color(), f.wipLimit());
+            service.addColumnAt(f.title(), f.description(), f.color(), f.wipLimit(), index);
             refresh();
         }));
     }
