@@ -185,6 +185,32 @@ class GlobalShortcutsTest {
     }
 
     @Test
+    void actionNameLookupAcceptsBothTheEnumAndTheStorageName() {
+        // Bug S11-6: callers passed the enum name (as persisted in the JSON)
+        // to a lookup that only knew the storage name, and the shortcuts
+        // dialog blew up with IllegalArgumentException.
+        for (GlobalShortcuts.Action action : GlobalShortcuts.Action.values()) {
+            assertThat(GlobalShortcuts.Action.fromNameOrThrow(action.name()))
+                    .as("enum name %s", action.name())
+                    .isEqualTo(action);
+            assertThat(GlobalShortcuts.Action.fromNameOrThrow(action.storageName()))
+                    .as("storage name of %s", action.name())
+                    .isEqualTo(action);
+            assertThat(GlobalShortcuts.Action.fromStorageNameOrThrow(action.name()))
+                    .isEqualTo(action);
+            assertThat(GlobalShortcuts.Action.isKnownActionName(action.name())).isTrue();
+        }
+    }
+
+    @Test
+    void unknownActionNameStillFailsLoudly() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> GlobalShortcuts.Action.fromNameOrThrow("NOT_AN_ACTION"));
+        assertThat(GlobalShortcuts.Action.isKnownActionName("NOT_AN_ACTION")).isFalse();
+        assertThat(GlobalShortcuts.Action.isKnownActionName(null)).isFalse();
+    }
+
+    @Test
     void equalsAndHashCodeIgnore() {
         // We no longer require the model to be used as a value-object identity;
         // what matters is behavior around get/set/serialization.

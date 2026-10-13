@@ -50,19 +50,42 @@ public final class GlobalShortcuts {
             this.storageName = storageName;
         }
 
-        public static Action fromStorageNameOrThrow(String name) {
-            for (Action a : values()) {
-                if (a.storageName.equals(name)) {
-                    return a;
+        /** Short, stable name of this action ({@code next}, {@code exit}, …). */
+        public String storageName() {
+            return storageName;
+        }
+
+        /**
+         * Resolves an action by either of its two historical names: the
+         * {@link #name()} constant ({@code NEXT_CARD}, the form persisted in
+         * the settings JSON) or the {@code storageName} ({@code next}). The two
+         * coexisted, and callers mixed them up, which threw
+         * {@link IllegalArgumentException} and broke the shortcuts dialog
+         * (bug S11-6). Accepting both keeps old stored values working.
+         */
+        public static Action fromNameOrThrow(String name) {
+            if (name != null) {
+                for (Action a : values()) {
+                    if (a.name().equalsIgnoreCase(name) || a.storageName.equalsIgnoreCase(name)) {
+                        return a;
+                    }
                 }
             }
             throw new IllegalArgumentException("Unknown shortcut action: " + name);
         }
 
+        /** Alias kept for callers that only ever pass a storage name. */
+        public static Action fromStorageNameOrThrow(String name) {
+            return fromNameOrThrow(name);
+        }
+
         /** Accepts any action name present in the persisted JSON, even if unknown now. */
         public static boolean isKnownActionName(String name) {
+            if (name == null) {
+                return false;
+            }
             for (Action a : values()) {
-                if (a.storageName.equals(name)) {
+                if (a.name().equalsIgnoreCase(name) || a.storageName.equalsIgnoreCase(name)) {
                     return true;
                 }
             }

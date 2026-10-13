@@ -29,7 +29,12 @@ final class ShortcutsHelpWindow {
     }
 
     private static Row shortcutSettingRow(GlobalShortcuts.ShortcutSetting setting, GlobalShortcuts shortcuts, I18n i18n) {
-        String actionLabel = i18n.text(new GlobalShortcuts().storageLabelKey(GlobalShortcuts.Action.fromStorageNameOrThrow(setting.action())));
+        // A stored value from an older version may name an action that no
+        // longer exists: show the raw name instead of throwing.
+        String actionLabel = GlobalShortcuts.Action.isKnownActionName(setting.action())
+                ? i18n.text(shortcuts.storageLabelKey(
+                        GlobalShortcuts.Action.fromNameOrThrow(setting.action())))
+                : setting.action();
         String keys = setting.keyCombination().isBlank()
                 ? i18n.text("shortcut.key.unset")
                 : setting.keyCombination();

@@ -7,9 +7,8 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -18,19 +17,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/***
+/**
  * Editable global keyboard shortcuts dialog.
  *
  * <p>Opens on top. The user edits bindings and accepts or cancels. On accept,
  * the dialog persists the updated {@link GlobalShortcuts} via
- * {@link BoardService#saveGlobalShortcuts(GlobalShortcuts)}.
+ * {@link BoardService#saveGlobalShortcuts(GlobalShortcuts)}.</p>
+ *
+ * <p>Each row carries the {@link GlobalShortcuts.Action} itself, never a string
+ * to be parsed back: earlier this dialog round-tripped the row through
+ * {@code Action.fromStorageNameOrThrow} with names that were actually i18n
+ * keys, so opening it threw {@link IllegalArgumentException} (bug S11-6).</p>
  */
 final class KeyboardShortcutsDialog {
 
-    private record RowItem(String actionName,
-                           String currentKey,
-                           String storageKey,
-                           String displayKey) {
+    /** One editable row: the action and the key combination currently bound. */
+    record RowItem(GlobalShortcuts.Action action, String currentKey) {
     }
 
     private final I18n i18n;
@@ -45,37 +47,44 @@ final class KeyboardShortcutsDialog {
         this.shortcuts = shortcuts;
     }
 
-    Optional<GlobalShortcuts> show() {        GlobalShortcuts locator = new GlobalShortcuts();
+    /** The rows to show: one per configurable action, in enum order. */
+    static List<RowItem> rowsOf(GlobalShortcuts shortcuts) {
+        List<RowItem> rows = new ArrayList<>();
         for (GlobalShortcuts.Action action : GlobalShortcuts.Action.values()) {
-            String current = shortcuts.get(action);
-            String actionName = GlobalShortcuts.Action.isKnownActionName(action.name())
-                    ? locator.storageLabelKey(action)
-                    : action.name();
-            items.add(new RowItem(actionName, current, actionName,
-                    buildRowLabel(action, current)));
+            rows.add(new RowItem(action, shortcuts.get(action)));
         }
+        return rows;
+    }
+
+    /** Restores every action to its default binding (the «Restaurar» button). */
+    static void applyDefaults(GlobalShortcuts shortcuts) {
+        GlobalShortcuts defaults = new GlobalShortcuts();
+        for (GlobalShortcuts.Action action : GlobalShortcuts.Action.values()) {
+            shortcuts.set(action, defaults.get(action));
+        }
+    }
+
+    /** Visible text of a row: localized action name — current binding. */
+    static String rowLabel(I18n i18n, GlobalShortcuts shortcuts, RowItem row) {
+        String actionLabel = i18n.text(shortcuts.storageLabelKey(row.action()));
+        String keyLabel = row.currentKey() == null || row.currentKey().isBlank()
+                ? i18n.text("shortcut.key.unset")
+                : row.currentKey();
+        return actionLabel + " — " + keyLabel;
+    }
+
+    Optional<GlobalShortcuts> show() {
+        items.setAll(rowsOf(shortcuts));
 
         ListView<RowItem> list = new ListView<>(items);
-        list.setCellFactory(param -> new ComboListCell(i18n, locator));
+        list.setCellFactory(param -> new ComboListCell(i18n, shortcuts));
         list.setPrefHeight(180);
 
         Button reset = new Button(i18n.text("shortcut.reset"));
         reset.setOnAction(e -> {
-            GlobalShortcuts defaults = new GlobalShortcuts();
-            for (GlobalShortcuts.ShortcutSetting setting : defaults.settings()) {
-                if (GlobalShortcuts.Action.isKnownActionName(setting.action())) {
-                    shortcuts.set(GlobalShortcuts.Action.fromStorageNameOrThrow(setting.action()),
-                            setting.keyCombination());
-                }
-            }
-            for (int i = 0; i < items.size(); i++) {
-                String actionName = items.get(i).actionName();
-                GlobalShortcuts.Action action = GlobalShortcuts.Action.fromStorageNameOrThrow(actionName);
-                String key = shortcuts.get(action);
-                items.set(i, new RowItem(actionName, key,
-                        items.get(i).storageKey,
-                        buildRowLabel(action, key)));
-            }
+            applyDefaults(shortcuts);
+            items.setAll(rowsOf(shortcuts));
+            list.refresh();
         });
 
         Button chooseKey = new Button(i18n.text("shortcut.choose"));
@@ -88,17 +97,9 @@ final class KeyboardShortcutsDialog {
             if (proposed.isBlank()) {
                 return;
             }
-            String selectedActionName = selected.actionName();
-            if (GlobalShortcuts.Action.isKnownActionName(selectedActionName)) {
-                shortcuts.set(GlobalShortcuts.Action.fromStorageNameOrThrow(selectedActionName), proposed);
-            }
+            shortcuts.set(selected.action(), proposed);
             int idx = items.indexOf(selected);
-            GlobalShortcuts.Action selectedAction = GlobalShortcuts.Action.fromStorageNameOrThrow(selectedActionName);
-            items.set(idx, new RowItem(
-                    selectedActionName,
-                    proposed,
-                    selected.storageKey,
-                    buildRowLabel(selectedAction, proposed)));
+            items.set(idx, new RowItem(selected.action(), shortcuts.get(selected.action())));
             list.refresh();
         });
 
@@ -121,15 +122,6 @@ final class KeyboardShortcutsDialog {
         return Optional.empty();
     }
 
-    private String buildRowLabel(GlobalShortcuts.Action action, String current) {
-        GlobalShortcuts locator = new GlobalShortcuts();
-        String actionLabel = i18n.text(locator.storageLabelKey(action));
-        String keyLabel = current.isBlank()
-                ? i18n.text("shortcut.key.unset")
-                : current;
-        return actionLabel + " — " + keyLabel;
-    }
-
     private String readProposedKey(I18n i18n) {
         TextCaptureDialog capture = new TextCaptureDialog(i18n,
                 i18n.text("shortcut.capture.title"),
@@ -138,13 +130,13 @@ final class KeyboardShortcutsDialog {
     }
 
     /** ListView row that renders each shortcut action and its binding. */
-    private static final class ComboListCell extends javafx.scene.control.ListCell<RowItem> {
+    private static final class ComboListCell extends ListCell<RowItem> {
         private final I18n i18n;
-        private final GlobalShortcuts locator;
+        private final GlobalShortcuts shortcuts;
 
-        ComboListCell(I18n i18n, GlobalShortcuts locator) {
+        ComboListCell(I18n i18n, GlobalShortcuts shortcuts) {
             this.i18n = i18n;
-            this.locator = locator;
+            this.shortcuts = shortcuts;
         }
 
         @Override
@@ -154,12 +146,7 @@ final class KeyboardShortcutsDialog {
                 setText(null);
                 setGraphic(null);
             } else {
-                GlobalShortcuts.Action action = GlobalShortcuts.Action.fromStorageNameOrThrow(item.actionName());
-                String actionLabel = i18n.text(locator.storageLabelKey(action));
-                String keyLabel = item.currentKey.isBlank()
-                        ? i18n.text("shortcut.key.unset")
-                        : item.currentKey;
-                setText(actionLabel + " — " + keyLabel);
+                setText(rowLabel(i18n, shortcuts, item));
             }
         }
     }
