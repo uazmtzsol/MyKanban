@@ -321,7 +321,8 @@ igual. El filtro se sigue compartiendo con la vista de proceso vía
   **1) descripción (actual) · 2) tareas (revisar/marcar) · 3) comentarios**; el
   **doble clic** sigue abriendo el detalle. *Encaje:* ampliar
   `CardViewSettings`/`CardViewBuilder` con «contenido» por tarjeta (sin
-  migración). **Decisión C-7:** «comentarios» = ¿notas o comentarios de tiempo?
+  migración). **Decisión C-7 resuelta por el usuario (2026-10-13):**
+  «comentarios» = las **notas** de la tarjeta (no las entradas de tiempo).
 
 ---
 
