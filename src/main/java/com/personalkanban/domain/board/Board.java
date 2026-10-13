@@ -169,6 +169,16 @@ public final class Board {
         card.tag(newLabels);
     }
 
+    /**
+     * Sets (or clears, with {@code null}) the due date of one card — the quick
+     * reschedule of the card menu (session 15, T5), without touching any other
+     * field of the card.
+     */
+    public void rescheduleCard(CardId cardId, LocalDate newDueDate) {
+        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+        card.schedule(newDueDate);
+    }
+
     /** Sets the plain-text notes of one card (session 4.4). */
     public void annotateCard(CardId cardId, String notes) {
         findCard(cardId).orElseThrow(() -> new NotFoundException(cardId)).annotate(notes);

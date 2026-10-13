@@ -13,9 +13,10 @@
 > la fila en la **bitácora** (§3) y **commit + push**. Se documenta **antes** de
 > cerrar la sesión.
 >
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **441/441 OK** (1 skip:
+> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **453/453 OK** (1 skip:
 > endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
-> consolidada, **T1–T4 hechos**; siguiente: **T5** (vencimientos, §2).
+> consolidada, **T1–T5 hechos** (fase 1 y fase 2 completas); siguiente: **T6**
+> (scroll de columna, §2).
 
 ---
 
@@ -51,7 +52,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 ### Fase 2 — Filtros y vencimientos
 
-- [ ] **T5 · N-6 + B3** ⬜ **Vencimientos**: filtros «vencidas / vence hoy /
+- [x] **T5 · N-6 + B3** ✅ **Vencimientos**: filtros «vencidas / vence hoy /
   esta semana», aviso discreto al arrancar y **reagendado rápido** en el menú de
   la tarjeta. §6.3 y §7.1.
 
@@ -187,6 +188,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T2 · N-1/N-2** barras alternas + Esc | ✅ | `feat(selection): alternate filter and selection bars, Esc drops the selection` — la barra de filtros se oculta en modo selección y vuelve al salir (también en `refresh()`); la tecla configurada de salida actúa en etapas (desmarca → sale del modo → suelta el foco). `SelectionModeBarsTest` (3) → suite **432/432** |
 | 2026-10-13 | **T3 · N-10/N-11** detalle de tarjeta | ✅ | `feat(card-detail): Esc cancels, note buttons move to the editor header` — manejador de Esc en burbuja (un campo o autocompletado que consuma la tecla la conserva); `MarkdownEditor.addHeaderButton` coloca Añadir/Guardar junto al toggle y Eliminar se queda abajo. `CardDetailWindowTest` (3) → suite **435/435** |
 | 2026-10-13 | **T4 · N-12/BUG-2** filtro «sin etiqueta» | ✅ | `feat(filter): «none of these» and «without labels» label modes` — `LabelFilter.Mode.EXCLUDE` + `withoutLabels()`; el modo del filtro pasa a ser un enum (valor estable, texto localizado) y el campo de texto se desactiva en «Sin etiquetas». `LabelFilterTest` (+2), `LabelFilterModeUiTest` (4, con tarjetas reales filtradas) → suite **441/441** |
+| 2026-10-13 | **T5 · N-6/B3** vencimientos | ✅ | `feat(due): overdue/today/week filters, startup reminder and quick reschedule` — `DueDigest` (puro: rangos y conteos), `Board.rescheduleCard` + `RescheduleCardCommand` (1 undo), tres toggles mutuamente excluyentes en la barra, aviso no modal clicable y submenú «Reagendar» en la tarjeta. **Hallazgo:** el filtro de la barra solo existía en `visibleColumnsCards()` (navegador); el render de la columna aplica sus filtros en `ColumnViewBuilder`, así que el de vencimientos se añadió también ahí (test de UI lo pilló). `DueDigestTest` (5), `RescheduleCardTest` (4), `DueFilterUiTest` (3) → suite **453/453** |
 
 ---
 
@@ -324,7 +326,21 @@ igual. El filtro se sigue compartiendo con la vista de proceso vía
 
 ## 7. Mejoras de producto (T13–T16)
 
-### 7.1 T5 — B3: recordatorios de vencimiento (con N-6)
+### 7.1 T5 — B3: recordatorios de vencimiento (con N-6) — ✅ hecho (2026-10-13)
+
+**Lo entregado:** `application/DueDigest` (puro: `overdue`/`dueToday`/`dueThisWeek`
+con `WEEK_DAYS = 7`, hoy incluido en la semana; `matches(card, scope, today)`),
+tres `ToggleButton` mutuamente excluyentes en la barra de filtros (clic en el
+activo lo quita), aviso no modal **clicable** que lleva al rango más urgente y
+se aparta al usarse, y submenú **Reagendar** (Hoy / Mañana / +1 semana / Próximo
+lunes / Quitar fecha) en el menú de la tarjeta con un solo paso de undo
+(`RescheduleCardCommand`). El aviso cuenta solo las tarjetas que el filtro de
+proceso/archivadas ya muestra, así que sus números coinciden con lo que verá el
+usuario. **Hallazgo:** el render de la columna aplica sus filtros en
+`ColumnViewBuilder` (no en `visibleColumnsCards()`, que es solo del navegador),
+así que el gate nuevo se añadió en los dos sitios; lo detectó el test de UI.
+
+<details><summary>Diseño original (referencia)</summary>
 
 **Decisión de diseño:** la notificación del **sistema operativo** queda fuera de
 v1 (JavaFX no tiene API; `java.awt.SystemTray` falla en headless y no es
@@ -358,8 +374,9 @@ en «limpiar filtros» y el aviso de arranque; entradas de reagendado en
 
 **Criterio de hecho:** los filtros muestran exactamente las tarjetas esperadas;
 el aviso aparece solo si hay algo vencido o para hoy y lleva al filtro al
-pulsarlo. Commit: `feat(due): due-date reminders, today/week views and quick
-reschedule`.
+pulsarlo.
+
+</details>
 
 ### 7.2 T13 — B4: captura rápida con sintaxis
 

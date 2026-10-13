@@ -3,6 +3,7 @@ package com.personalkanban.ui;
 import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.CardViewSettings;
+import com.personalkanban.application.DueDigest;
 import com.personalkanban.application.GlobalShortcuts;
 import com.personalkanban.application.ThemeColors;
 import com.personalkanban.domain.board.BoardColor;
@@ -44,6 +45,7 @@ import javafx.stage.FileChooser;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -96,6 +98,7 @@ public final class BoardController {
         for (BoardColumn column : service.board().columns()) {
             columns.add(column.cards().stream()
                     .filter(this::matchesProcessFilter)
+                    .filter(this::matchesDueFilter)
                     .filter(labelFilter::matches)
                     .filter(quickFilter::matches)
                     .map(card -> card.id())
@@ -176,6 +179,16 @@ public final class BoardController {
     // The card filter bar. It is hidden while selection mode is on: the two
     // bars are alternatives, never shown together (user request, 2026-10-13).
     private HBox filterBar;
+
+    // Due-date filter (session 15, T5 = N-6 + B3): one scope at a time.
+    private DueDigest.Scope dueScope;
+    private final java.util.EnumMap<DueDigest.Scope, javafx.scene.control.ToggleButton> dueButtons =
+            new java.util.EnumMap<>(DueDigest.Scope.class);
+    // Discreet startup notice (a non-modal band, like the sync notice).
+    private Label dueNotice;
+    private boolean dueNoticeDismissed;
+    // Where the notice takes the user when it is clicked.
+    private DueDigest.Scope dueNoticeJump;
 
     // Collapsed columns of the active board (UI preference, per board).
     private java.util.Set<String> collapsedColumns = java.util.Set.of();
@@ -740,7 +753,19 @@ public final class BoardController {
         syncNotice.setManaged(false);
         syncNotice.setWrapText(true);
         syncNotice.setPadding(new Insets(4, 12, 4, 12));
-        root.getChildren().setAll(menuBar, syncNotice, toolbar, selectionBar, filterBar, boardScroller);
+        // Session 15 (T5): a discreet due-date band, same shape as the sync one.
+        // A new board/language/database starts a new session: the user gets to
+        // see the reminder again.
+        dueNoticeDismissed = false;
+        dueNotice = new Label();
+        dueNotice.getStyleClass().addAll("sync-notice", "due-notice");
+        dueNotice.setVisible(false);
+        dueNotice.setManaged(false);
+        dueNotice.setWrapText(true);
+        dueNotice.setPadding(new Insets(4, 12, 4, 12));
+        dueNotice.setOnMouseClicked(e -> onDueNoticeClicked());
+        root.getChildren().setAll(menuBar, syncNotice, dueNotice, toolbar, selectionBar, filterBar,
+                boardScroller);
         updateBoardIdentity();
         refresh();
     }
@@ -871,6 +896,16 @@ public final class BoardController {
         javafx.scene.control.ToggleButton urgentFilter = quickFlagFilterButton(
                 "!", com.personalkanban.domain.board.Card.LABEL_URGENT, "filter.flag.urgent");
 
+        // Due-date filters (session 15, T5 = N-6): overdue, today, this week.
+        // One scope at a time; clicking the active one clears the filter.
+        dueButtons.clear();
+        javafx.scene.control.ToggleButton overdueFilter = dueScopeButton(
+                "\u26A0", "filter.due.overdue", DueDigest.Scope.OVERDUE);
+        javafx.scene.control.ToggleButton dueTodayFilter = dueScopeButton(
+                "\uD83D\uDCC5", "filter.due.today", DueDigest.Scope.TODAY);
+        javafx.scene.control.ToggleButton dueWeekFilter = dueScopeButton(
+                "\uD83D\uDDD3", "filter.due.week", DueDigest.Scope.WEEK);
+
         // Process filter: "All" and "None" are explicit entries, so the
         // filter is a real tri-state — a chosen process can be undone again
         // and the cards that belong to no process at all can be shown
@@ -926,7 +961,8 @@ public final class BoardController {
         });
 
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
-                importantFilter, urgentFilter, processFilter, archivedFilter);
+                importantFilter, urgentFilter, overdueFilter, dueTodayFilter, dueWeekFilter,
+                processFilter, archivedFilter);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
@@ -945,6 +981,7 @@ public final class BoardController {
                 || activeFilterMode != null
                 || activeProcessFilter != null
                 || processFilterNone
+                || dueScope != null
                 || !quickFlagFilters.isEmpty();
         labelFilterField.clear();
         labelFilterMode.setValue(null);
@@ -953,6 +990,8 @@ public final class BoardController {
         activeFilterMode = null;
         activeProcessFilter = null;
         processFilterNone = false;
+        dueScope = null;
+        syncDueButtons();
         quickFlagFilters.clear();
         if (processFilterCombo != null) {
             processFilterCombo.setValue(i18n.text("filter.process.all"));
@@ -2232,6 +2271,98 @@ public final class BoardController {
         return !processFilterNone || card.processId() == null;
     }
 
+    /**
+     * True when the card passes the active due-date filter (null = all pass).
+     * Package-visible because the column renderer applies it too, next to
+     * {@link #matchesProcessFilter(com.personalkanban.domain.board.Card)}: one
+     * gate for both the drawn cards and the keyboard navigator.
+     */
+    boolean matchesDueFilter(com.personalkanban.domain.board.Card card) {
+        return dueScope == null || DueDigest.matches(card, dueScope, LocalDate.now());
+    }
+
+    /**
+     * Due-date filter intent (session 15, T5 = N-6): one scope at a time;
+     * passing null clears the filter.
+     */
+    void onDueScope(DueDigest.Scope scope) {
+        this.dueScope = scope;
+        syncDueButtons();
+        refresh();
+    }
+
+    /** Keeps the three due toggles in sync with the chosen scope. */
+    private void syncDueButtons() {
+        dueButtons.forEach((scope, button) -> button.setSelected(scope == dueScope));
+    }
+
+    /** One of the three mutually exclusive due-date filter toggles. */
+    private javafx.scene.control.ToggleButton dueScopeButton(String glyph, String tipKey,
+                                                            DueDigest.Scope scope) {
+        javafx.scene.control.ToggleButton button = new javafx.scene.control.ToggleButton(glyph);
+        button.getStyleClass().addAll("tool-button", "filter-flag");
+        button.setTooltip(new Tooltip(i18n.text(tipKey)));
+        button.setFocusTraversable(false);
+        button.setSelected(scope == dueScope);
+        button.setOnAction(e -> onDueScope(button.isSelected() ? scope : null));
+        dueButtons.put(scope, button);
+        return button;
+    }
+
+    /**
+     * The due-date reminder (session 15, T5/B3): how many cards are overdue or
+     * due today, as a discreet band that takes the user to the matching filter
+     * when clicked. Never modal, never interrupting; only the cards that the
+     * current process/archived filter already shows are counted, so the numbers
+     * match exactly what the filters will show.
+     */
+    private void updateDueNotice() {
+        if (dueNotice == null) {
+            return;
+        }
+        List<com.personalkanban.domain.board.Card> candidates = new ArrayList<>();
+        for (BoardColumn column : service.board().columns()) {
+            for (com.personalkanban.domain.board.Card card : column.cards()) {
+                if (matchesProcessFilter(card)) {
+                    candidates.add(card);
+                }
+            }
+        }
+        DueDigest.Counts counts = DueDigest.of(candidates, LocalDate.now()).counts();
+
+        boolean show = !dueNoticeDismissed && dueScope == null && counts.anything();
+        dueNotice.setVisible(show);
+        dueNotice.setManaged(show);
+        if (!show) {
+            return;
+        }
+        List<String> parts = new ArrayList<>();
+        if (counts.overdue() > 0) {
+            parts.add(i18n.text("due.notice.overdue", counts.overdue()));
+        }
+        if (counts.dueToday() > 0) {
+            parts.add(i18n.text("due.notice.today", counts.dueToday()));
+        }
+        dueNotice.setText(String.join("  \u00B7  ", parts));
+        dueNotice.setTooltip(new Tooltip(i18n.text("due.notice.hint")));
+        dueNoticeJump = counts.overdue() > 0 ? DueDigest.Scope.OVERDUE : DueDigest.Scope.TODAY;
+    }
+
+    private void onDueNoticeClicked() {
+        dueNoticeDismissed = true;
+        if (dueNoticeJump != null) {
+            onDueScope(dueNoticeJump);
+        }
+    }
+
+    /** Quick reschedule of one card from its menu (null clears the date). */
+    public void onRescheduleCard(CardId cardId, LocalDate dueDate) {
+        guarded(() -> {
+            service.rescheduleCard(cardId, dueDate);
+            refresh();
+        });
+    }
+
     /** Process filter intent: every card is visible again (no filter). */
     void onFilterProcessAll() {
         activeProcessFilter = null;
@@ -3051,6 +3182,7 @@ public final class BoardController {
         syncViewMenu();
         undoRedo.sync();
         syncFilterBarVisibility();
+        updateDueNotice();
         updateSelectionBarState();
         // Keep the processes-view keyboard focus across the rebuild.
         if (processView && processFocusId != null) {

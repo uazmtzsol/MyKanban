@@ -194,7 +194,7 @@ final class ColumnViewBuilder {
         int cardIndex = 0;
         for (var card : column.cards()) {
             if (labelFilter.matches(card) && quickFilter.matches(card)
-                    && board.matchesProcessFilter(card)) {
+                    && board.matchesProcessFilter(card) && board.matchesDueFilter(card)) {
                 VBox cardView = CardViewBuilder.build(
                         service, i18n, dialogs, board, card, selectionMode, dark);
                 installTopDropEdge(cardView, column.id(), cardIndex, board);

@@ -26,6 +26,7 @@ import com.personalkanban.application.command.RemoveChecklistItemCommand;
 import com.personalkanban.application.command.ToggleChecklistItemCommand;
 import com.personalkanban.application.command.RenameChecklistItemCommand;
 import com.personalkanban.application.command.RemoveProcessCommand;
+import com.personalkanban.application.command.RescheduleCardCommand;
 import com.personalkanban.application.command.ToggleLabelCommand;
 import com.personalkanban.application.command.RemoveCardsCommand;
 import com.personalkanban.application.command.RemoveLabelsCommand;
@@ -367,6 +368,14 @@ public final class BoardService {
 
     public void removeCard(CardId cardId) {
         execute(new RemoveCardCommand(cardId));
+    }
+
+    /**
+     * Quick reschedule of one card (session 15, T5): changes the due date only,
+     * in one undoable step; {@code null} removes the date.
+     */
+    public void rescheduleCard(CardId cardId, LocalDate dueDate) {
+        execute(new RescheduleCardCommand(cardId, dueDate));
     }
 
     // ------------------------------------------------------------------

@@ -10,6 +10,7 @@ import com.personalkanban.ui.markdown.MarkdownSummary;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.Tooltip;
@@ -19,6 +20,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
@@ -195,6 +197,23 @@ final class CardViewBuilder {
             archiveItem.setOnAction(e -> board.onToggleCardLabel(card.id(),
                     com.personalkanban.domain.board.Card.LABEL_ARCHIVED));
             viewMenu.getItems().add(archiveItem);
+            // Session 15 (T5/B3): quick reschedule without opening the card.
+            // Each entry computes its date when it is used, so a window left
+            // open overnight still reschedules from the real "today".
+            Menu reschedule = new Menu(i18n.text("card.reschedule.menu"));
+            reschedule.getItems().add(rescheduleItem(i18n, board, card,
+                    "card.reschedule.today", day -> day));
+            reschedule.getItems().add(rescheduleItem(i18n, board, card,
+                    "card.reschedule.tomorrow", day -> day.plusDays(1)));
+            reschedule.getItems().add(rescheduleItem(i18n, board, card,
+                    "card.reschedule.next.week", day -> day.plusDays(7)));
+            reschedule.getItems().add(rescheduleItem(i18n, board, card,
+                    "card.reschedule.next.monday",
+                    day -> day.with(java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY))));
+            reschedule.getItems().add(new javafx.scene.control.SeparatorMenuItem());
+            reschedule.getItems().add(rescheduleItem(i18n, board, card,
+                    "card.reschedule.clear", day -> null));
+            viewMenu.getItems().add(reschedule);
             view.setOnContextMenuRequested(event -> {
                 CardViewSettings.Mode effective = settings.effectiveMode(card.id().value());
                 // Only the "reset override" entry depends on the card having
@@ -214,6 +233,18 @@ final class CardViewBuilder {
 
         installDragSource(view, card.id());
         return view;
+    }
+
+    /**
+     * One entry of the reschedule submenu: {@code offset} turns the day the user
+     * clicks on into the new due date (null clears the date).
+     */
+    private static MenuItem rescheduleItem(I18n i18n, BoardController board, Card card,
+                                           String labelKey,
+                                           java.util.function.UnaryOperator<LocalDate> offset) {
+        MenuItem item = new MenuItem(i18n.text(labelKey));
+        item.setOnAction(e -> board.onRescheduleCard(card.id(), offset.apply(LocalDate.now())));
+        return item;
     }
 
     /** Custom highlight colors of the card's quick-flag state, if any. */
