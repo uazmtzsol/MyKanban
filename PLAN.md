@@ -14,7 +14,7 @@
 > cerrar la sesión.
 >
 > **Estado (2026-10-13):** rama `ImprovementsV1`; suite **455/455 OK** (1 skip:
-> endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
+> endpoint PHP sin servidor); migraciones hasta **V10**. Documentación
 > consolidada, **T1–T6 hechos** (fases 1–2 y el scroll de columna); siguiente:
 > **T7** (qué muestra cada tarjeta, §2/§6.7).
 
@@ -86,7 +86,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [x] **T14 · B5** ✅ **Plantillas propias** + **purga de archivadas**. §7.3.
 - [x] **T15 · B7** ✅ **Color por etiqueta** elegido en el gestor (cierra **B9**,
   nombres de color traducidos). §7.4.
-- [ ] **T16 · B8** ⬜ **Subtareas jerárquicas** de un nivel (migración **V10**).
+- [x] **T16 · B8** ✅ **Subtareas jerárquicas** de un nivel (migración **V10**).
   §7.5.
 
 ### Fase 7 — Robustez y distribución
@@ -202,6 +202,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T13 · B4** captura rápida con sintaxis | ✅ | `feat(capture): quick card capture with inline syntax` — `application/QuickCapture` (puro: `+etiqueta`, `!`/`*`, `@hoy/@mañana/@+3d/@ISO`, fecha inválida se queda en el título, signos dentro de palabras intactos) + `QuickCaptureDialog` (foco en el campo, **vista previa en vivo**, Enter crea y **Más opciones…** precarga el `CardForm` completo); el ➕ de la columna abre la captura rápida y **Ctrl+➕** / la entrada del menú de columna abren el diálogo completo. **Hallazgo:** la vista previa NO puede vivir en `QuickCapture` (necesita i18n y la capa `application` no puede depender de `ui`), así que el formateo está en el diálogo; el parseo sí es puro. `QuickCaptureTest` (13) + `QuickCaptureDialogTest` (4) → suite **488/488** |
 | 2026-10-13 | **T14 · B5** plantillas propias + purga de archivadas | ✅ | `feat(board): user templates and archived-card purge` — `application/BoardTemplate` (puro, JSON propio: columnas con color/WIP/hecho, procesos y modo de vista; **sin tarjetas**), persistido en `board.template.<nombre>`; `BoardService.templates/hasTemplate/saveAsTemplate/removeTemplate/createBoardFromTemplate`; menú **Tableros → Guardar como plantilla… / Plantillas → (aplicar · eliminar)** y las propias dentro del selector de «nuevo tablero». Purga **Tableros → Borrar tarjetas archivadas…** (`archivedCardCount`, `purgeArchivedCards`, adjuntos a la papelera). **Hallazgos:** ① el puerto `SettingsStore` no tenía `remove`, se añadió (SQLite + doble en memoria); ② `BoardColor` **no** es un enum sino un record con hex, así que la plantilla guarda el **hex** (soporta colores propios) y se relee con `fromStored`; ③ el undo es **por tablero**, así que la purga borra tablero a tablero (un paso de undo en cada uno) y restaura el tablero activo al terminar; ④ la vista previa de color de `WipLimit` va como entero (0 = ilimitado). `BoardTemplateTest` (4) + `ArchivedPurgeTest` (5) → suite **497/497** |
 | 2026-10-13 | **T15 · B7** color por etiqueta (cierra B9) | ✅ | `feat(labels): pick a color per label (closes B9)` — el gestor de etiquetas gana un selector de **color** (8 colores de la paleta + **Automático** = borra la regla) que escribe la regla de estilo para **claro y obscuro** (`setLabelStyle`/`clearLabelStyle`) con el color de texto calculado por contraste; `ui/LabelChipStyle` (puro) decide el chip: regla del usuario si existe, si no la clase por hash de siempre. **B9:** los nombres de color ya se traducen (`color.blue`…`color.gray` + `labels.color`/`labels.color.auto`) en el selector de color y en el gestor. **Hallazgo:** el catálogo y las reglas `ui.label.` ya existían (y se editan en Preferencias), así que el hueco era solo el chip + el gestor, no el almacenamiento. `LabelChipStyleTest` (5) → suite **502/502** |
+| 2026-10-13 | **T16 · B8** subtareas de un nivel (V10) | ✅ | `feat(checklist): one-level subtasks (V10)` — migración **V10** (`ALTER TABLE card_checklist_item ADD COLUMN parent_id TEXT` + índice, sin FK: la integridad la lleva el agregado); `ChecklistItem.parentId` (con constructor de 3 args para no tocar llamadas previas), `Card.addChecklistItem(text, parentId)` con **un solo nivel** validado, `checklistChildrenOf`/`subtaskCount`/`subtaskTotalCount`, **borrar un padre borra sus hijos** e indentar/desindentar (`setChecklistItemParent`) en 1 undo; `MoveChecklistItemCommand` + `BoardService.moveChecklistItem`; `SetChecklistFromLines` acepta **dos espacios = subtarea**; la UI del detalle pinta subtareas indentadas con su propio menú (**Añadir subtarea**, **Sangrar**, **Quitar sangría**) y el contador ☑ cubre ambos niveles; el merge de sync viaja con `parentId`. **Hallazgos:** ① `SyncMerge` construía `ChecklistItem` a 3 args, hizo falta migrar ese punto (el campo se mergea con LWW como los demás); ② añadir un componente al record habría roto 6 llamadas en tests: se añadió un constructor de 3 args equivalente a «sin padre»; ③ una fila sin `parent_id` (formato pre-V10) se lee como ítem de primer nivel. `ChecklistHierarchyTest` (7) + `SqliteChecklistSubtaskTest` (3) → suite **512/512** |
 
 ---
 
@@ -504,7 +505,18 @@ claro vs obscuro) + round-trip de la regla escrita por el gestor.
 **Criterio:** elegir color y ver la etiqueta pintada así en todos los tableros.
 Commit: `feat(labels): pick and persist a color per label (closes B9)`.
 
-### 7.5 T16 — B8: subtareas jerárquicas (un nivel)
+### 7.5 T16 — B8: subtareas jerárquicas (un nivel) — ✅ hecho (2026-10-13)
+
+> **Entregado:** migración **V10** (`parent_id` + índice; una fila sin
+> `parent_id` se lee como ítem de primer nivel), `ChecklistItem.parentId` con
+> **un solo nivel** validado en el agregado, borrar un padre borra sus hijos,
+> indentar/desindentar en un paso de undo (`MoveChecklistItemCommand`), **dos
+> espacios = subtarea** en el formulario avanzado, y la UI del detalle con
+> subtareas indentadas y menú propio. El `SyncMerge` mergea `parentId` como un
+> campo más. **Reversión anotada en §8.4** (el checklist era plano por decisión
+> explícita). **Tests:** `ChecklistHierarchyTest` (7),
+> `SqliteChecklistSubtaskTest` (3) → suite **512/512**.
+
 
 **Aviso:** el roadmap registraba el checklist **plano** por decisión explícita
 del usuario; la sesión 14 lo pide, así que **se implementa** (reversión a anotar
@@ -563,8 +575,11 @@ pérdida) y UI (hijos indentados).
 
 - **H-1**: confirmar si la **búsqueda en el tablero activo** (fase B histórica)
   se da por cerrada con **B2** (búsqueda global).
-- Anotar la **reversión** de la decisión «checklist plano» (T16) y registrar las
-  decisiones nuevas de §6/§7 en el historial.
+- **Reversión registrada (2026-10-13, T16 · B8):** el roadmap fijaba el
+  checklist **plano** por decisión explícita del usuario; la sesión 14 pidió
+  **subtareas de un nivel**, así que se implementaron (migración **V10**). La
+  decisión anterior queda revertida; sigue vigente el límite de **un nivel**
+  (sin nietos) y el máximo de 50 ítems por tarjeta.
 
 ---
 

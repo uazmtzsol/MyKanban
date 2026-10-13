@@ -123,11 +123,29 @@ public final class Card {
     // ------------------------------------------------------------------
 
     ChecklistItem addChecklistItem(String text) {
+        return addChecklistItem(text, null);
+    }
+
+    /**
+     * Adds a checklist item, optionally as a subtask of {@code parentId}
+     * (T16 · B8, one level only: a subtask of a subtask is rejected).
+     */
+    ChecklistItem addChecklistItem(String text, String parentId) {
         if (checklist.size() >= MAX_CHECKLIST_ITEMS) {
             throw new IllegalArgumentException(
                     "A card may have at most " + MAX_CHECKLIST_ITEMS + " checklist items");
         }
-        ChecklistItem item = ChecklistItem.newItem(text);
+        ChecklistItem item;
+        if (parentId == null || parentId.isBlank()) {
+            item = ChecklistItem.newItem(text);
+        } else {
+            ChecklistItem parent = itemOrThrow(parentId);
+            if (parent.isSubtask()) {
+                throw new IllegalArgumentException(
+                        "A subtask cannot have subtasks: " + parentId);
+            }
+            item = ChecklistItem.newSubtask(text, parentId);
+        }
         checklist.add(item);
         return item;
     }
@@ -159,10 +177,57 @@ public final class Card {
         throw new IllegalArgumentException("Unknown checklist item: " + itemId);
     }
 
+    /**
+     * Removes one checklist item; removing a parent also removes its subtasks
+     * (they cannot outlive their parent in a one-level hierarchy).
+     */
     void removeChecklistItem(String itemId) {
-        if (!checklist.removeIf(item -> item.id().equals(itemId))) {
-            throw new IllegalArgumentException("Unknown checklist item: " + itemId);
+        itemOrThrow(itemId); // unknown ids must still fail
+        checklist.removeIf(item -> item.id().equals(itemId)
+                || itemId.equals(item.parentId()));
+    }
+
+    /** Direct children of one item, in list order. */
+    public List<ChecklistItem> checklistChildrenOf(String parentId) {
+        return checklist.stream()
+                .filter(item -> parentId.equals(item.parentId()))
+                .toList();
+    }
+
+    /** How many subtasks hang under one item. */
+    public int subtaskCount(String parentId) {
+        return checklistChildrenOf(parentId).size();
+    }
+
+    /**
+     * Moves one item under {@code parentId} (null = back to top level), used
+     * by the indent/outdent actions. One level is enforced in both directions:
+     * the target cannot be a subtask, and an item with subtasks cannot become
+     * one.
+     */
+    void setChecklistItemParent(String itemId, String parentId) {
+        ChecklistItem item = itemOrThrow(itemId);
+        if (parentId == null || parentId.isBlank()) {
+            replaceItem(itemId, existing -> existing.withParent(null));
+            return;
         }
+        if (parentId.equals(itemId)) {
+            throw new IllegalArgumentException("A checklist item cannot be its own parent");
+        }
+        ChecklistItem parent = itemOrThrow(parentId);
+        if (parent.isSubtask()) {
+            throw new IllegalArgumentException("A subtask cannot have subtasks: " + parentId);
+        }
+        if (!checklistChildrenOf(itemId).isEmpty()) {
+            throw new IllegalArgumentException(
+                    "An item with subtasks cannot become a subtask: " + itemId);
+        }
+        replaceItem(itemId, existing -> existing.withParent(parentId));
+    }
+
+    /** Total subtasks of the card (any parent). */
+    public long subtaskTotalCount() {
+        return checklist.stream().filter(ChecklistItem::isSubtask).count();
     }
 
     /** Lookup by id (used by convert-to-card); unknown ids throw. */

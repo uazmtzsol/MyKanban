@@ -205,6 +205,18 @@ public final class Board {
         return findCard(cardId).orElseThrow(() -> new NotFoundException(cardId)).addChecklistItem(text);
     }
 
+    /** Adds a subtask of {@code parentId} to one card (T16 · B8). */
+    public ChecklistItem addChecklistItem(CardId cardId, String text, String parentId) {
+        return findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .addChecklistItem(text, parentId);
+    }
+
+    /** Indents (parentId) or outdents (null) one checklist item (T16 · B8). */
+    public void setChecklistItemParent(CardId cardId, String itemId, String parentId) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .setChecklistItemParent(itemId, parentId);
+    }
+
     /** Renames one checklist item of one card. */
     public void renameChecklistItem(CardId cardId, String itemId, String newText) {
         findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
@@ -432,8 +444,13 @@ public final class Board {
     public void setChecklistFromLines(CardId cardId, List<String> lines) {
         Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
         List<ChecklistItem> rebuilt = new ArrayList<>();
+        // T16 · B8: two leading spaces (or a tab) turn a line into a subtask
+        // of the last top-level item above it.
+        String currentParentId = null;
         for (String line : lines) {
-            String raw = line == null ? "" : line.strip();
+            String rawLine = line == null ? "" : line;
+            boolean indented = rawLine.startsWith("  ") || rawLine.startsWith("\t");
+            String raw = rawLine.strip();
             String lower = raw.toLowerCase(java.util.Locale.ROOT);
             // Single assignment per branch keeps done/text effectively final
             // for the lambdas below.
@@ -457,7 +474,13 @@ public final class Board {
                     .findFirst()
                     .map(item -> item.withDone(done))
                     .orElseGet(() -> ChecklistItem.newItem(text).withDone(done));
+            existing = (indented && currentParentId != null)
+                    ? existing.withParent(currentParentId)
+                    : existing.withParent(null);
             rebuilt.add(existing);
+            if (!existing.isSubtask()) {
+                currentParentId = existing.id();
+            }
         }
         card.replaceChecklist(rebuilt);
     }

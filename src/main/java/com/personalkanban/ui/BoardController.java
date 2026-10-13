@@ -2596,6 +2596,33 @@ public final class BoardController {
         });
     }
 
+    /** Adds a subtask of an existing checklist item (T16 · B8). */
+    public void onChecklistAddSubtask(com.personalkanban.domain.board.CardId cardId,
+                                      String parentId, String text) {
+        guarded(() -> {
+            service.addChecklistItem(cardId, text, parentId);
+            refresh();
+        });
+    }
+
+    /** Indents a checklist item under the previous top-level one (T16 · B8). */
+    public void onChecklistIndent(com.personalkanban.domain.board.CardId cardId,
+                                  String itemId, String parentId) {
+        guarded(() -> {
+            service.moveChecklistItem(cardId, itemId, parentId);
+            refresh();
+        });
+    }
+
+    /** Outdents a subtask back to top level (T16 · B8). */
+    public void onChecklistOutdent(com.personalkanban.domain.board.CardId cardId,
+                                   String itemId) {
+        guarded(() -> {
+            service.moveChecklistItem(cardId, itemId, null);
+            refresh();
+        });
+    }
+
     public void onChecklistRename(com.personalkanban.domain.board.CardId cardId,
                                   String itemId, String newText) {
         guarded(() -> {

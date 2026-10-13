@@ -459,26 +459,79 @@ final class CardDetailWindow {
     private void refreshChecklist() {
         checklistBox.getChildren().clear();
         board.cardById(cardId).ifPresent(current -> {
+            // T16 · B8: subtasks render indented right where they sit in the
+            // list, and the menu offers their own actions (outdent, no
+            // nesting); a parent cannot be indented under another item.
+            String previousTopLevelId = null;
             for (ChecklistItem item : current.checklist()) {
+                boolean hasChildren = current.subtaskCount(item.id()) > 0;
                 CheckBox done = new CheckBox(item.text());
                 done.setSelected(item.done());
                 done.getStyleClass().add("checklist-item");
+                if (item.isSubtask()) {
+                    done.getStyleClass().add("checklist-subtask");
+                    VBox.setMargin(done, new javafx.geometry.Insets(0, 0, 0, 26));
+                }
                 done.setWrapText(true);
                 done.setOnAction(e -> {
                     board.onChecklistToggle(cardId, item.id(), done.isSelected());
                     refreshChecklist();
                 });
-                ContextMenu menu = new ContextMenu(
-                        menuItem(i18n.text("checklist.rename"), () -> renameItem(item)),
-                        menuItem(i18n.text("checklist.convert"), () -> convertItem(item)),
-                        menuItem(i18n.text("checklist.remove"), () -> removeItem(item)));
+                MenuItem addSubtask = menuItem(i18n.text("checklist.add.subtask"),
+                        () -> addSubtask(item));
+                final String indentUnder = previousTopLevelId;
+                MenuItem indent = menuItem(i18n.text("checklist.indent"),
+                        () -> indentItem(item, indentUnder));
+                indent.setDisable(previousTopLevelId == null || hasChildren);
+                MenuItem outdent = menuItem(i18n.text("checklist.outdent"),
+                        () -> outdentItem(item));
+                MenuItem rename = menuItem(i18n.text("checklist.rename"),
+                        () -> renameItem(item));
+                MenuItem convert = menuItem(i18n.text("checklist.convert"),
+                        () -> convertItem(item));
+                MenuItem remove = menuItem(i18n.text("checklist.remove"),
+                        () -> removeItem(item));
+                ContextMenu menu = item.isSubtask()
+                        ? new ContextMenu(outdent, rename, convert, remove)
+                        : new ContextMenu(addSubtask, indent, rename, convert, remove);
                 done.setOnContextMenuRequested(e -> {
                     menu.show(done, e.getScreenX(), e.getScreenY());
                     e.consume();
                 });
                 checklistBox.getChildren().add(done);
+                if (!item.isSubtask()) {
+                    previousTopLevelId = item.id();
+                }
             }
         });
+    }
+
+    /** Asks for the text of a new subtask of {@code parent} (T16 · B8). */
+    private void addSubtask(ChecklistItem parent) {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setHeaderText(i18n.text("checklist.add.subtask"));
+        dialog.setContentText(i18n.text("checklist.subtask.prompt"));
+        dialog.showAndWait().ifPresent(text -> {
+            if (text != null && !text.isBlank()) {
+                board.onChecklistAddSubtask(cardId, parent.id(), text);
+                refreshChecklist();
+            }
+        });
+    }
+
+    /** Indents {@code item} under the previous top-level item. */
+    private void indentItem(ChecklistItem item, String parentId) {
+        if (parentId == null) {
+            return;
+        }
+        board.onChecklistIndent(cardId, item.id(), parentId);
+        refreshChecklist();
+    }
+
+    /** Sends a subtask back to the top level. */
+    private void outdentItem(ChecklistItem item) {
+        board.onChecklistOutdent(cardId, item.id());
+        refreshChecklist();
     }
 
     private MenuItem menuItem(String text, Runnable action) {

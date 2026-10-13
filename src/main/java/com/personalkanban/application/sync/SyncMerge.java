@@ -351,7 +351,12 @@ public final class SyncMerge {
         Boolean done = lww("checklist[" + r.id() + "].done",
                 b == null ? null : b.done(), l.done(), r.done(),
                 "card", cardId, conflicts);
-        return new ChecklistItem(r.id(), text, Boolean.TRUE.equals(done));
+        // T16 · B8: the parent travels with the item and is merged the same way,
+        // so indentation changes sync like any other field.
+        String parent = lww("checklist[" + r.id() + "].parent",
+                b == null ? null : b.parentId(), l.parentId(), r.parentId(),
+                "card", cardId, conflicts);
+        return new ChecklistItem(r.id(), text, Boolean.TRUE.equals(done), parent);
     }
 
     private static List<CardLink> mergeLinks(List<CardLink> base, List<CardLink> local,

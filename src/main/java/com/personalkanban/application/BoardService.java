@@ -20,6 +20,7 @@ import com.personalkanban.application.command.MoveCardCommand;
 import com.personalkanban.application.command.MoveCardToSlotCommand;
 import com.personalkanban.application.command.MoveColumnCommand;
 import com.personalkanban.application.command.MoveCardsCommand;
+import com.personalkanban.application.command.MoveChecklistItemCommand;
 import com.personalkanban.application.command.NoteCardCommand;
 import com.personalkanban.application.command.RecolorCardsCommand;
 import com.personalkanban.application.command.RemoveChecklistItemCommand;
@@ -538,6 +539,21 @@ public final class BoardService {
     public String addChecklistItem(CardId cardId, String text) {
         AddChecklistItemCommand command = new AddChecklistItemCommand(cardId, text);
         return execute(command, command::createdItemId);
+    }
+
+    /** Adds a subtask of {@code parentId}; returns the created item's id (T16 · B8). */
+    public String addChecklistItem(CardId cardId, String text, String parentId) {
+        AddChecklistItemCommand command =
+                new AddChecklistItemCommand(cardId, text, parentId);
+        return execute(command, command::createdItemId);
+    }
+
+    /**
+     * Indents (parentId) or outdents (null) one checklist item, undoable
+     * (user request T16 · B8).
+     */
+    public void moveChecklistItem(CardId cardId, String itemId, String parentId) {
+        execute(new MoveChecklistItemCommand(cardId, itemId, parentId));
     }
 
     /** Marks or unmarks one checklist item, undoable. */

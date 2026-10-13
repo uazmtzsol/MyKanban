@@ -258,6 +258,13 @@ pestañas:
   elimínalas (clic derecho sobre un ítem). **Convertir en tarjeta** crea una
   tarjeta nueva en la **misma columna** con ese título y quita el ítem del
   checklist. Límite: 50 ítems por tarjeta, 120 caracteres por ítem.
+  - **Subtareas (un nivel):** el menú de una tarea ofrece **Añadir subtarea**
+    (se muestra **indentada** bajo su tarea) y **Sangrar / Quitar sangría** para
+    convertir una tarea en subtarea o al revés. Borrar una tarea borra también
+    sus subtareas, y el contador **☑ n/m** incluye las dos. En el formulario
+    avanzado, **dos espacios** al principio de una línea la convierten en
+    subtarea de la anterior. No hay más de un nivel (una subtarea no tiene
+    subtareas).
 - **Tiempo** — cronómetro por tarjeta (§13).
 
 Cada pestaña guarda como una **transacción deshacible** (Ctrl+Z lo revierte).

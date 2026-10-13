@@ -22,8 +22,8 @@ volver a explorar todo el código.
 > se ve en la UI), ② hacer **commit** con un mensaje que explique el porqué y
 > ③ **push**. Nunca se deja trabajo terminado sin documentar ni sin subir.
 
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **502/502 OK** (1 skip:
-> endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
+> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **512/512 OK** (1 skip:
+> endpoint PHP sin servidor); migraciones hasta **V10**. Documentación
 > consolidada en un solo documento: los antiguos `plan-sesiones.md`,
 > `plan-sesion-14.md`, `pending-mejoras-propuestas.md`, `mejoras-propuestas.md`,
 > `adiciones-propuestas.md`, `design.md` y las notas de sesión se retiraron

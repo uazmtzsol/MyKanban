@@ -1,8 +1,8 @@
 # Arquitectura y mapa de código
 
-*Última actualización: 2026-09-30 (Sesión 4: notas, checklist, procesos,
-precedencias, menú Archivo, atajos+F1, fondo personalizable, icono de app;
-migraciones V5–V7; 161/161 tests)*
+*Última actualización: 2026-10-13 (sesión 14: informe de tiempo, búsqueda
+global, vencimientos, captura rápida, plantillas, color por etiqueta, subtareas;
+migraciones V1–V10; **512/512 tests**. El plan y la bitácora viven en `PLAN.md`.)*
 
 Referencia para saber **dónde** va cada cambio sin re-explorar. Rutas relativas
 a `src/main/java/com/personalkanban/`.
@@ -130,7 +130,10 @@ card             (id TEXT PK, column_id TEXT NOT NULL FK→board_column ON DELET
                   process_id TEXT NULL FK→process ON DELETE SET NULL)  -- V7
 card_checklist_item (id TEXT PK, card_id FK→card ON DELETE CASCADE,
                   position INTEGER NOT NULL, text TEXT NOT NULL,
-                  done INTEGER NOT NULL DEFAULT 0)                     -- V6
+                  done INTEGER NOT NULL DEFAULT 0,
+                  parent_id TEXT NULL)                                 -- V6 + V10
+                  -- V10 (T16 · B8): parent_id = subtarea de un nivel; NULL =
+                  -- tarea de primer nivel. Sin FK: el agregado (Card) valida.
 card_link        (from_card_id FK→card ON DELETE CASCADE,
                   to_card_id FK→card ON DELETE CASCADE,
                   PRIMARY KEY (from_card_id, to_card_id))              -- V7

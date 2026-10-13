@@ -34,7 +34,8 @@ public final class SchemaMigrator {
             "/db/migration/V6__card_checklist.sql",
             "/db/migration/V7__dependencies_and_processes.sql",
             "/db/migration/V8__timeline.sql",
-            "/db/migration/V9__done_and_column_background.sql"
+            "/db/migration/V9__done_and_column_background.sql",
+            "/db/migration/V10__checklist_subtasks.sql"
     );
 
     private final Database database;

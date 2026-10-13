@@ -11,17 +11,26 @@ public final class AddChecklistItemCommand implements BoardCommand {
 
     private final CardId cardId;
     private final String text;
+    private final String parentId;
 
     private String createdItemId;
 
     public AddChecklistItemCommand(CardId cardId, String text) {
+        this(cardId, text, null);
+    }
+
+    /** Adds a subtask of {@code parentId} (null = top-level item, T16 · B8). */
+    public AddChecklistItemCommand(CardId cardId, String text, String parentId) {
         this.cardId = Objects.requireNonNull(cardId);
         this.text = Objects.requireNonNull(text);
+        this.parentId = parentId;
     }
 
     @Override
     public void execute(Board board) {
-        ChecklistItem item = board.addChecklistItem(cardId, text);
+        ChecklistItem item = parentId == null
+                ? board.addChecklistItem(cardId, text)
+                : board.addChecklistItem(cardId, text, parentId);
         createdItemId = item.id();
     }
 

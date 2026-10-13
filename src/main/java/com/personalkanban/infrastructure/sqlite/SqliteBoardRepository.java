@@ -260,8 +260,8 @@ public final class SqliteBoardRepository implements BoardRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         String checklistSql = """
-                INSERT INTO card_checklist_item (id, card_id, position, text, done)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO card_checklist_item (id, card_id, position, text, done, parent_id)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """;
         String timelineSql = """
                 INSERT INTO timeline (id, card_id, started_at, ended_at, comment)
@@ -340,6 +340,7 @@ public final class SqliteBoardRepository implements BoardRepository {
             statement.setInt(3, position++);
             statement.setString(4, item.text());
             statement.setInt(5, item.done() ? 1 : 0);
+            statement.setString(6, item.parentId());
             statement.addBatch();
         }
     }
@@ -487,7 +488,7 @@ public final class SqliteBoardRepository implements BoardRepository {
     private List<ChecklistItem> readChecklist(CardId cardId) {
         List<ChecklistItem> items = new ArrayList<>();
         String sql = """
-                SELECT id, text, done FROM card_checklist_item
+                SELECT id, text, done, parent_id FROM card_checklist_item
                 WHERE card_id = ? ORDER BY position
                 """;
         try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
@@ -497,7 +498,8 @@ public final class SqliteBoardRepository implements BoardRepository {
                     items.add(new ChecklistItem(
                             resultSet.getString("id"),
                             resultSet.getString("text"),
-                            resultSet.getInt("done") != 0));
+                            resultSet.getInt("done") != 0,
+                            resultSet.getString("parent_id")));
                 }
             }
         } catch (SQLException e) {
