@@ -137,11 +137,23 @@ Menú **Tableros**:
   - **Plantilla Kanban Estándar** (Por hacer · Haciendo · Hecho),
   - **Personalizadas** — un número (p. ej. `4`) o nombres separados por comas
     (p. ej. `Ideas, En curso, Revisión, Hecho`); máximo **12** columnas,
-  - **Sin columnas**.
+  - **Sin columnas**,
+  - tus **plantillas propias** guardadas (§abajo).
 - **Renombrar tablero...**
 - **Eliminar tablero...** (con confirmación; no se puede eliminar el último).
 - **Agregar columna...** — abre el mismo diálogo de columna y la añade al
   final del tablero.
+- **Guardar como plantilla...** — guarda la **estructura** del tablero activo
+  (columnas con su color y límite WIP, procesos y modo de vista) con un nombre.
+  Las tarjetas **no** se guardan: al aplicar la plantilla el tablero nace vacío.
+  Si ya existe una plantilla con ese nombre, se pide confirmación.
+- **Plantillas** — submenú con tus plantillas; cada una ofrece **Aplicar
+  (nuevo tablero)…** (pide el nombre del tablero nuevo) y **Eliminar
+  plantilla** (los tableros ya creados no se tocan).
+- **Borrar tarjetas archivadas...** — cuenta las tarjetas con la etiqueta
+  interna de archivado en **todos** los tableros y, tras confirmar, las borra
+  (sus archivos van a la papelera). El borrado se puede deshacer con
+  **Ctrl+Z** en cada tablero afectado.
 - **Exportar tablero (JSON)...**, **Exportar tablero a PDF...**,
   **Importar tablero (JSON)...** (§19).
 

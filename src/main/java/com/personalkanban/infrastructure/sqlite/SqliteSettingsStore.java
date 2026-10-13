@@ -47,6 +47,17 @@ public final class SqliteSettingsStore implements SettingsStore {
     }
 
     @Override
+    public void remove(String key) {
+        String sql = "DELETE FROM app_setting WHERE key = ?";
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
+            statement.setString(1, key);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not delete setting '" + key + "'", e);
+        }
+    }
+
+    @Override
     public List<String> keys(String prefix) {
         String sql = "SELECT key FROM app_setting WHERE key LIKE ? ORDER BY key";
         List<String> keys = new ArrayList<>();

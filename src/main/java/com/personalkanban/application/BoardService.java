@@ -205,6 +205,137 @@ public final class BoardService {
     }
 
     // ------------------------------------------------------------------
+    // User-defined board templates (user request T14 · B5.1)
+    // ------------------------------------------------------------------
+
+    /** Settings-key prefix of the user's saved board templates. */
+    public static final String TEMPLATE_PREFIX = "board.template.";
+
+    /** The user's saved templates, sorted by name (case-insensitive). */
+    public List<BoardTemplate> templates() {
+        List<BoardTemplate> found = new ArrayList<>();
+        for (String key : settings.keys(TEMPLATE_PREFIX)) {
+            settings.get(key).flatMap(BoardTemplate::fromJson).ifPresent(found::add);
+        }
+        found.sort(java.util.Comparator.comparing(BoardTemplate::name,
+                String.CASE_INSENSITIVE_ORDER));
+        return found;
+    }
+
+    /** True when a template with this name is already stored (overwrite guard). */
+    public boolean hasTemplate(String name) {
+        return name != null && !name.isBlank()
+                && settings.get(TEMPLATE_PREFIX + name.strip()).isPresent();
+    }
+
+    /**
+     * Saves the active board's <b>structure</b> as a named template: columns
+     * (title, description, color, WIP limit, done flag), process names and the
+     * card-view mode. Cards are never part of a template.
+     */
+    public void saveAsTemplate(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("A template needs a name");
+        }
+        List<BoardTemplate.TemplateColumn> columns = activeBoard.columns().stream()
+                .map(column -> new BoardTemplate.TemplateColumn(column.title(),
+                        column.description(), column.color(), column.wipLimit(), column.isDone()))
+                .toList();
+        List<String> processNames = activeBoard.processList().stream()
+                .map(Process::name)
+                .toList();
+        BoardTemplate template = new BoardTemplate(name, columns, processNames,
+                cardViewSettingsOf(activeBoard.id()).boardDefault());
+        settings.put(TEMPLATE_PREFIX + template.name(), template.toJson());
+    }
+
+    /** Deletes a stored template; an absent name is a no-op. */
+    public void removeTemplate(String name) {
+        if (name != null && !name.isBlank()) {
+            settings.remove(TEMPLATE_PREFIX + name.strip());
+        }
+    }
+
+    /**
+     * Creates a new board from a template and makes it active: columns in
+     * order (at most one marked done), process names, and the card-view mode.
+     * No cards are copied — the board starts empty on purpose.
+     */
+    public BoardId createBoardFromTemplate(BoardTemplate template, String boardName) {
+        BoardId id = createBoard(boardName);
+        openBoard(id);
+        List<ColumnId> created = new ArrayList<>();
+        for (BoardTemplate.TemplateColumn column : template.columns()) {
+            created.add(addColumn(column.title(), column.description(), column.color(),
+                    column.wipLimit()));
+        }
+        for (int i = 0; i < template.columns().size() && i < created.size(); i++) {
+            if (template.columns().get(i).done()) {
+                setColumnDone(created.get(i), true);
+                break; // the domain keeps at most one done column per board
+            }
+        }
+        for (String processName : template.processNames()) {
+            addProcess(processName);
+        }
+        CardViewSettings cardView = cardViewSettingsOf(id);
+        cardView.setBoardDefault(template.viewMode());
+        setCardViewSettings(id, cardView);
+        return id;
+    }
+
+    // ------------------------------------------------------------------
+    // Purge of archived cards (user request T14 · B5.2)
+    // ------------------------------------------------------------------
+
+    /** Archived cards of one board, read-only (other boards stay private). */
+    public List<CardId> archivedCardsOf(BoardId boardId) {
+        requireInCatalog(boardId);
+        Board board = boardId.equals(activeBoard.id())
+                ? activeBoard
+                : restoredPrivateBoard(boardId);
+        return board.allCards().stream()
+                .filter(card -> card.hasLabelIgnoreCase(Card.LABEL_ARCHIVED))
+                .map(Card::id)
+                .toList();
+    }
+
+    /** How many archived cards the whole database holds. */
+    public int archivedCardCount() {
+        return catalog.stream()
+                .mapToInt(descriptor -> archivedCardsOf(descriptor.id()).size())
+                .sum();
+    }
+
+    /**
+     * Deletes every archived card of every board. The undo history is per
+     * board, so each board's deletion is one undoable step on that board; the
+     * board that was active at the start is restored at the end, which is
+     * where the user's Ctrl+Z will work.
+     *
+     * @return the number of cards actually deleted
+     */
+    public int purgeArchivedCards() {
+        BoardId original = activeBoard.id();
+        int removed = 0;
+        for (BoardDescriptor descriptor : List.copyOf(catalog)) {
+            List<CardId> archived = archivedCardsOf(descriptor.id());
+            if (archived.isEmpty()) {
+                continue;
+            }
+            if (!descriptor.id().equals(activeBoard.id())) {
+                openBoard(descriptor.id());
+            }
+            removeCards(archived);
+            removed += archived.size();
+        }
+        if (!original.equals(activeBoard.id())) {
+            openBoard(original);
+        }
+        return removed;
+    }
+
+    // ------------------------------------------------------------------
     // Column use cases
     // ------------------------------------------------------------------
 

@@ -21,6 +21,11 @@ public final class InMemorySettingsStore implements SettingsStore {
     }
 
     @Override
+    public void remove(String key) {
+        values.remove(key);
+    }
+
+    @Override
     public List<String> keys(String prefix) {
         return values.keySet().stream()
                 .filter(key -> key.startsWith(prefix))

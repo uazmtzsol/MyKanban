@@ -2,6 +2,7 @@ package com.personalkanban.ui;
 
 import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
+import com.personalkanban.application.BoardTemplate;
 import com.personalkanban.application.CardViewSettings;
 import com.personalkanban.application.DueDigest;
 import com.personalkanban.application.GlobalShortcuts;
@@ -1580,6 +1581,11 @@ public final class BoardController {
                 new SeparatorMenuItem(),
                 itemOf("board.add.column", this::onAddColumn),
                 new SeparatorMenuItem(),
+                itemOf("board.save.template", this::onSaveBoardTemplate),
+                templatesMenu(),
+                new SeparatorMenuItem(),
+                itemOf("cleanup.archived", this::onPurgeArchived),
+                new SeparatorMenuItem(),
                 itemOf("board.export", this::onExportBoard),
                 itemOf("board.export.pdf", this::onExportBoardPdf),
                 itemOf("board.import", this::onImportBoard),
@@ -1827,17 +1833,35 @@ public final class BoardController {
     private void onNewBoard() {
         Optional<String> name = dialogs.promptText(i18n.text("board.new"), "");
         name.flatMap(this::validatedBoardName).ifPresent(n -> {
-            Optional<Dialogs.NewBoardColumns> choice = dialogs.newBoardColumnsDialog();
+            // The user's own templates are offered next to the fixed ones
+            // (T14 · B5.1).
+            List<String> templateNames = service.templates().stream()
+                    .map(BoardTemplate::name)
+                    .toList();
+            Optional<Dialogs.NewBoardChoice> choice = dialogs.newBoardColumnsDialog(templateNames);
             if (choice.isEmpty()) {
                 return; // cancelled: create nothing
             }
+            Dialogs.NewBoardChoice picked = choice.get();
+            if (picked.templateName() != null) {
+                service.templates().stream()
+                        .filter(template -> template.name().equals(picked.templateName()))
+                        .findFirst()
+                        .ifPresent(template -> {
+                            service.createBoardFromTemplate(template, n);
+                            rebuildAll();
+                            dialogs.info(i18n.text("board.columns.created",
+                                    template.columns().size(), n));
+                        });
+                return;
+            }
             List<String> columnTitles;
-            if (choice.get() == Dialogs.NewBoardColumns.STANDARD) {
+            if (picked.kind() == Dialogs.NewBoardColumns.STANDARD) {
                 columnTitles = List.of(
                         i18n.text("board.kanban.todo"),
                         i18n.text("board.kanban.doing"),
                         i18n.text("board.kanban.done"));
-            } else if (choice.get() == Dialogs.NewBoardColumns.CUSTOM) {
+            } else if (picked.kind() == Dialogs.NewBoardColumns.CUSTOM) {
                 String columnsAnswer = dialogs.promptText(
                         i18n.text("board.columns.header"),
                         i18n.text("board.columns.prompt"), "").orElse("");
@@ -1858,7 +1882,7 @@ public final class BoardController {
                 createdColumns.add(
                         service.addColumn(title, "", BoardColor.DEFAULT, WipLimit.unlimited()));
             }
-            if (choice.get() == Dialogs.NewBoardColumns.STANDARD
+            if (picked.kind() == Dialogs.NewBoardColumns.STANDARD
                     && !createdColumns.isEmpty()) {
                 // The standard template ends with "Hecho": that is
                 // the board's single "finalizado" column (user
@@ -1867,6 +1891,89 @@ public final class BoardController {
             }
             rebuildAll();
             dialogs.info(i18n.text("board.columns.created", columnTitles.size(), n));
+        });
+    }
+
+    /** Submenu listing the user's saved board templates (T14 · B5.1). */
+    private Menu templatesMenu() {
+        Menu menu = new Menu(i18n.text("board.templates"));
+        List<BoardTemplate> templates = service.templates();
+        if (templates.isEmpty()) {
+            MenuItem none = new MenuItem(i18n.text("template.empty"));
+            none.setDisable(true);
+            menu.getItems().add(none);
+            return menu;
+        }
+        for (BoardTemplate template : templates) {
+            Menu entry = new Menu(template.name());
+            MenuItem apply = new MenuItem(i18n.text("template.apply"));
+            apply.setOnAction(e -> onApplyTemplate(template));
+            MenuItem delete = new MenuItem(i18n.text("template.delete"));
+            delete.setOnAction(e -> onDeleteTemplate(template));
+            entry.getItems().setAll(apply, delete);
+            menu.getItems().add(entry);
+        }
+        return menu;
+    }
+
+    /** Saves the active board's structure (no cards) as a named template. */
+    private void onSaveBoardTemplate() {
+        BoardDescriptor active = service.boards().stream()
+                .filter(descriptor -> descriptor.id().equals(service.activeBoardId()))
+                .findFirst()
+                .orElseThrow();
+        Optional<String> name = dialogs.promptText(i18n.text("board.save.template"), active.name());
+        name.flatMap(this::validatedBoardName).ifPresent(templateName -> {
+            if (service.hasTemplate(templateName)
+                    && !dialogs.confirm(i18n.text("template.name.exists"))) {
+                return;
+            }
+            guarded(() -> {
+                service.saveAsTemplate(templateName);
+                rebuildAll();
+                dialogs.info(i18n.text("template.saved", templateName));
+            });
+        });
+    }
+
+    /** Creates a brand-new board from a saved template. */
+    private void onApplyTemplate(BoardTemplate template) {
+        Optional<String> name = dialogs.promptText(i18n.text("template.apply"), template.name());
+        name.flatMap(this::validatedBoardName).ifPresent(boardName -> guarded(() -> {
+            service.createBoardFromTemplate(template, boardName);
+            rebuildAll();
+            dialogs.info(i18n.text("board.columns.created", template.columns().size(), boardName));
+        }));
+    }
+
+    /** Deletes a saved template (the boards already created from it stay). */
+    private void onDeleteTemplate(BoardTemplate template) {
+        if (!dialogs.confirm(i18n.text("template.delete") + ": " + template.name())) {
+            return;
+        }
+        service.removeTemplate(template.name());
+        rebuildAll();
+    }
+
+    /**
+     * Deletes every archived card of every board (T14 · B5.2), sending their
+     * attachments to the trash. Each affected board gets its own undo step.
+     */
+    private void onPurgeArchived() {
+        int count = service.archivedCardCount();
+        if (count == 0) {
+            dialogs.info(i18n.text("cleanup.archived.none"));
+            return;
+        }
+        if (!dialogs.confirm(i18n.text("cleanup.archived.confirm", count))) {
+            return;
+        }
+        service.boards().forEach(descriptor ->
+                service.archivedCardsOf(descriptor.id()).forEach(this::trashAttachments));
+        guarded(() -> {
+            int removed = service.purgeArchivedCards();
+            rebuildAll();
+            dialogs.info(i18n.text("cleanup.archived.done", removed));
         });
     }
 

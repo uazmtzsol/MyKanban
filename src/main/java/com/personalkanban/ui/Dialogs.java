@@ -927,28 +927,50 @@ final class Dialogs {
     enum NewBoardColumns { STANDARD, CUSTOM, EMPTY }
 
     /**
+     * The answer of the new-board chooser: either one of the fixed ways to
+     * seed the columns or one of the user's saved templates (T14 · B5.1).
+     */
+    record NewBoardChoice(NewBoardColumns kind, String templateName) {
+
+        static NewBoardChoice of(NewBoardColumns kind) {
+            return new NewBoardChoice(kind, null);
+        }
+
+        static NewBoardChoice ofTemplate(String name) {
+            return new NewBoardChoice(null, name);
+        }
+    }
+
+    /**
      * Asks how to seed the columns of a new board. The standard Kanban
      * template (three columns) is preselected because it is the most common
      * choice; the labels are localized and the answer is mapped back by
-     * label, not by enum name.
+     * label, not by enum name. The user's own templates (T14 · B5.1) are
+     * offered alongside the fixed ones.
      */
-    Optional<NewBoardColumns> newBoardColumnsDialog() {
+    Optional<NewBoardChoice> newBoardColumnsDialog(List<String> userTemplateNames) {
         String standard = i18n.text("board.columns.choice.standard");
         String custom = i18n.text("board.columns.choice.custom");
         String empty = i18n.text("board.columns.choice.empty");
-        ChoiceDialog<String> dialog = new ChoiceDialog<>(standard,
-                List.of(standard, custom, empty));
+        List<String> choices = new java.util.ArrayList<>(List.of(standard, custom, empty));
+        if (userTemplateNames != null) {
+            choices.addAll(userTemplateNames);
+        }
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(standard, choices);
         dialog.setTitle(i18n.text("board.new"));
         dialog.setHeaderText(i18n.text("board.columns.choice.header"));
         dialog.setContentText(i18n.text("board.columns.choice.label"));
         return dialog.showAndWait().map(answer -> {
             if (answer.equals(custom)) {
-                return NewBoardColumns.CUSTOM;
+                return NewBoardChoice.of(NewBoardColumns.CUSTOM);
             }
             if (answer.equals(empty)) {
-                return NewBoardColumns.EMPTY;
+                return NewBoardChoice.of(NewBoardColumns.EMPTY);
             }
-            return NewBoardColumns.STANDARD;
+            if (answer.equals(standard)) {
+                return NewBoardChoice.of(NewBoardColumns.STANDARD);
+            }
+            return NewBoardChoice.ofTemplate(answer);
         });
     }
 

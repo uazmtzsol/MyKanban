@@ -15,6 +15,12 @@ public interface SettingsStore {
     void put(String key, String value);
 
     /**
+     * Deletes a setting (e.g. a removed board template). Deleting an absent
+     * key is not an error.
+     */
+    void remove(String key);
+
+    /**
      * Every stored key that starts with {@code prefix} (e.g. {@code
      * "ui.label."}), so the preferences UI can enumerate the rules a
      * user has already defined. Sorted for stable display. Implementations

@@ -83,7 +83,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 ### Fase 6 — Mejoras de producto (sesión 14 en curso)
 
 - [x] **T13 · B4** ✅ **Captura rápida con sintaxis** al dar de alta. §7.2.
-- [ ] **T14 · B5** ⬜ **Plantillas propias** + **purga de archivadas**. §7.3.
+- [x] **T14 · B5** ✅ **Plantillas propias** + **purga de archivadas**. §7.3.
 - [ ] **T15 · B7** ⬜ **Color por etiqueta** elegido en el gestor (cierra **B9**,
   nombres de color traducidos). §7.4.
 - [ ] **T16 · B8** ⬜ **Subtareas jerárquicas** de un nivel (migración **V10**).
@@ -200,6 +200,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T7 · N-14** contenido por tarjeta | ✅ | `feat(card-front): pick the content of each card (description, tasks or notes)` — `CardViewSettings.Content` (DESCRIPTION / CHECKLIST / NOTES) guardado como override por tarjeta en el mismo JSON (sin migración: un archivo sin la sección sigue mostrando la descripción); botón en la tarjeta con menú de radio («comentarios» = las **notas**, confirmado por el usuario) y las tareas marcables desde el frente en 1 undo. `CardViewSettingsTest` (12) + `CardContentUiTest` (3) |
 | 2026-10-13 | **T8 · N-3** botón de columna | ✅ | `1c0e5cb` («Realizado T7 y T8…»; el mensaje se quedó corto: la tarea **sí** quedó entera) — el botón ➕ de la toolbar desaparece; la función queda en **Tableros → Agregar columna** y en el menú ⋯ de cada columna, con **añadir a la izquierda / a la derecha** (también en columnas colapsadas). `Board.addColumn(..., insertIndex)` + `AddColumnCommand`/`BoardService.addColumnAt` insertan en el índice pedido en **un** paso de undo. `ColumnInsertAtTest` (4) + `ColumnAddMenuTest` (3) → suite **471/471** |
 | 2026-10-13 | **T13 · B4** captura rápida con sintaxis | ✅ | `feat(capture): quick card capture with inline syntax` — `application/QuickCapture` (puro: `+etiqueta`, `!`/`*`, `@hoy/@mañana/@+3d/@ISO`, fecha inválida se queda en el título, signos dentro de palabras intactos) + `QuickCaptureDialog` (foco en el campo, **vista previa en vivo**, Enter crea y **Más opciones…** precarga el `CardForm` completo); el ➕ de la columna abre la captura rápida y **Ctrl+➕** / la entrada del menú de columna abren el diálogo completo. **Hallazgo:** la vista previa NO puede vivir en `QuickCapture` (necesita i18n y la capa `application` no puede depender de `ui`), así que el formateo está en el diálogo; el parseo sí es puro. `QuickCaptureTest` (13) + `QuickCaptureDialogTest` (4) → suite **488/488** |
+| 2026-10-13 | **T14 · B5** plantillas propias + purga de archivadas | ✅ | `feat(board): user templates and archived-card purge` — `application/BoardTemplate` (puro, JSON propio: columnas con color/WIP/hecho, procesos y modo de vista; **sin tarjetas**), persistido en `board.template.<nombre>`; `BoardService.templates/hasTemplate/saveAsTemplate/removeTemplate/createBoardFromTemplate`; menú **Tableros → Guardar como plantilla… / Plantillas → (aplicar · eliminar)** y las propias dentro del selector de «nuevo tablero». Purga **Tableros → Borrar tarjetas archivadas…** (`archivedCardCount`, `purgeArchivedCards`, adjuntos a la papelera). **Hallazgos:** ① el puerto `SettingsStore` no tenía `remove`, se añadió (SQLite + doble en memoria); ② `BoardColor` **no** es un enum sino un record con hex, así que la plantilla guarda el **hex** (soporta colores propios) y se relee con `fromStored`; ③ el undo es **por tablero**, así que la purga borra tablero a tablero (un paso de undo en cada uno) y restaura el tablero activo al terminar; ④ la vista previa de color de `WipLimit` va como entero (0 = ilimitado). `BoardTemplateTest` (4) + `ArchivedPurgeTest` (5) → suite **497/497** |
 
 ---
 
@@ -436,7 +437,19 @@ palabras; vacío → sin título; duplicados; recorte) + prueba del diálogo
 con etiqueta, bandera urgente y fecha. Commit: `feat(capture): quick card
 capture with inline syntax`.
 
-### 7.3 T14 — B5: plantillas propias + purga de archivadas
+### 7.3 T14 — B5: plantillas propias + purga de archivadas — ✅ hecho (2026-10-13)
+
+> **Entregado (con desviaciones anotadas):** `BoardTemplate` puro + menú
+> **Tableros → Guardar como plantilla…**, submenú **Plantillas** (aplicar /
+> eliminar) y las propias añadidas al selector de plantilla de «nuevo
+> tablero»; purga **Tableros → Borrar tarjetas archivadas…** con confirmación
+> por número y adjuntos a la papelera. **Desviaciones documentadas:** el
+> puerto `SettingsStore` gana `remove(String)` (no existía); el color se guarda
+> como **hex** porque `BoardColor` es un record, no un enum; y como el undo es
+> **por tablero**, la purga trabaja tablero a tablero (un paso de deshacer en
+> cada uno) restaurando al final el tablero activo. **Tests:**
+> `BoardTemplateTest` (4), `ArchivedPurgeTest` (5) → suite **497/497**.
+
 
 **B5.1 plantillas:** `application/BoardTemplate.java` (puro, JSON propio):
 nombre + columnas (título, descripción, color, WIP, `done`) + nombres de
