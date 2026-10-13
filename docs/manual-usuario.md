@@ -176,12 +176,27 @@ También puedes ajustar el **ancho** de las columnas arrastrando su borde.
 
 ## 7. Tarjetas
 
-**Crear:** botón ➕ de la columna (o «Añadir tarjeta»). El diálogo de tarjeta
-tiene los campos básicos (**Título**, **Descripción**, **Color**,
-**Fecha límite**, **Etiquetas**) y una casilla **☑ Opciones avanzadas** que
-despliega: **Notas**, **Lista de tareas** (una por línea; `[x] tarea` = hecha,
-`[ ] tarea` o texto suelto = pendiente), **Proceso** y
-**Tareas previas / posteriores** (mantén **Ctrl** mientras eliges).
+**Crear (captura rápida):** el botón ➕ de la columna abre un campo de una línea
+con **vista previa en vivo**. Escribe el título y usa la sintaxis en línea:
+
+| Escribe | Efecto |
+|---|---|
+| `+casa` | añade a la etiqueta «casa» (`+urgente` / `+importante` = las banderas ! / ★) |
+| `!` | marca **urgente** |
+| `*` | marca **importante** |
+| `@hoy`, `@mañana`, `@+3d`, `@2026-10-20` | **fecha límite** (una fecha inválida se queda en el título) |
+
+El resto del texto es el título (los signos dentro de una palabra no se tocan:
+`C++`, `a*b`). Pulsa **Enter** (o **Añadir**) para crear la tarjeta; **Más
+opciones…** abre el diálogo completo con lo ya escrito.
+
+**Diálogo completo:** **Ctrl + ➕** sobre la columna o la entrada **«Añadir
+tarjeta (diálogo completo)…»** del menú **⋯**. Tiene los campos básicos
+(**Título**, **Descripción**, **Color**, **Fecha límite**, **Etiquetas**) y una
+casilla **☑ Opciones avanzadas** que despliega: **Notas**, **Lista de tareas**
+(una por línea; `[x] tarea` = hecha, `[ ] tarea` o texto suelto = pendiente),
+**Proceso** y **Tareas previas / posteriores** (mantén **Ctrl** mientras
+eliges).
 
 **Frente de la tarjeta:** título, **contenido elegido** (descripción por
 defecto; ver el botón de contenido, §abajo), **★/!** (clic = activar/desactivar

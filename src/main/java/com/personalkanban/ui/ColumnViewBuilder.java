@@ -133,7 +133,20 @@ final class ColumnViewBuilder {
         wip.getStyleClass().add(column.isFull() ? "wip-full" : "wip-ok");
 
         Button addCard = iconButton("\uFF0B", "pk-add-card", i18n.text("column.add.card"));
-        addCard.setOnAction(e -> board.onAddCard(column.id()));
+        // Quick capture (user request T13 · B4): a plain click opens the
+        // one-line dialog; Ctrl+click goes straight to the full card dialog.
+        boolean[] fullDialog = {false};
+        addCard.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED,
+                event -> fullDialog[0] = event.isControlDown());
+        addCard.setOnAction(e -> {
+            boolean full = fullDialog[0];
+            fullDialog[0] = false;
+            if (full) {
+                board.onAddCardFull(column.id());
+            } else {
+                board.onAddCard(column.id());
+            }
+        });
 
         // Priority sort (user request): (★+!) to the top, then (!), then (★);
         // everything else keeps its order. One undoable step.
@@ -147,6 +160,10 @@ final class ColumnViewBuilder {
         collapse.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
 
         MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
+        // The full card dialog stays reachable without keyboard modifiers
+        // (T13 · B4): a plain entry here, plus Ctrl+click on the ➕ above.
+        MenuItem addCardItem = new MenuItem(i18n.text("column.add.card.full"));
+        addCardItem.setOnAction(e -> board.onAddCardFull(column.id()));
         MenuItem addLeftItem = addColumnItem(i18n, "column.add.left",
                 () -> board.onAddColumnLeft(column.id()));
         MenuItem addRightItem = addColumnItem(i18n, "column.add.right",
@@ -167,7 +184,8 @@ final class ColumnViewBuilder {
         clearItem.setOnAction(e -> board.onClearColumn(column.id()));
         // User request N-3: «add column» moved out of the toolbar, so each
         // column offers it where the new column is wanted.
-        columnMenu.getItems().setAll(addLeftItem, addRightItem, new SeparatorMenuItem(),
+        columnMenu.getItems().setAll(addCardItem, new SeparatorMenuItem(),
+                addLeftItem, addRightItem, new SeparatorMenuItem(),
                 editItem, doneItem, backgroundItem,
                 orderItem, collapseItem, deleteItem,
                 new SeparatorMenuItem(), clearItem);
@@ -254,6 +272,8 @@ final class ColumnViewBuilder {
         MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
         MenuItem expandItem = new MenuItem(i18n.text("column.expand"));
         expandItem.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
+        MenuItem addCardItem = new MenuItem(i18n.text("column.add.card.full"));
+        addCardItem.setOnAction(e -> board.onAddCardFull(column.id()));
         MenuItem addLeftItem = addColumnItem(i18n, "column.add.left",
                 () -> board.onAddColumnLeft(column.id()));
         MenuItem addRightItem = addColumnItem(i18n, "column.add.right",
@@ -267,6 +287,7 @@ final class ColumnViewBuilder {
         MenuItem orderItem = new MenuItem(i18n.text("column.order"));
         orderItem.setOnAction(e -> board.onReorderColumn(column.id()));
         columnMenu.getItems().setAll(expandItem, new SeparatorMenuItem(),
+                addCardItem, new SeparatorMenuItem(),
                 addLeftItem, addRightItem, new SeparatorMenuItem(),
                 editItem, doneItem, backgroundItem, orderItem);
 

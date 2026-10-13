@@ -82,7 +82,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 ### Fase 6 — Mejoras de producto (sesión 14 en curso)
 
-- [ ] **T13 · B4** ⬜ **Captura rápida con sintaxis** al dar de alta. §7.2.
+- [x] **T13 · B4** ✅ **Captura rápida con sintaxis** al dar de alta. §7.2.
 - [ ] **T14 · B5** ⬜ **Plantillas propias** + **purga de archivadas**. §7.3.
 - [ ] **T15 · B7** ⬜ **Color por etiqueta** elegido en el gestor (cierra **B9**,
   nombres de color traducidos). §7.4.
@@ -199,6 +199,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | **T5 · N-6/B3** vencimientos | ✅ | `feat(due): overdue/today/week filters, startup reminder and quick reschedule` — `DueDigest` (puro: rangos y conteos), `Board.rescheduleCard` + `RescheduleCardCommand` (1 undo), tres toggles mutuamente excluyentes en la barra, aviso no modal clicable y submenú «Reagendar» en la tarjeta. **Hallazgo:** el filtro de la barra solo existía en `visibleColumnsCards()` (navegador); el render de la columna aplica sus filtros en `ColumnViewBuilder`, así que el de vencimientos se añadió también ahí (test de UI lo pilló). `DueDigestTest` (5), `RescheduleCardTest` (4), `DueFilterUiTest` (3) → suite **453/453** |
 | 2026-10-13 | **T7 · N-14** contenido por tarjeta | ✅ | `feat(card-front): pick the content of each card (description, tasks or notes)` — `CardViewSettings.Content` (DESCRIPTION / CHECKLIST / NOTES) guardado como override por tarjeta en el mismo JSON (sin migración: un archivo sin la sección sigue mostrando la descripción); botón en la tarjeta con menú de radio («comentarios» = las **notas**, confirmado por el usuario) y las tareas marcables desde el frente en 1 undo. `CardViewSettingsTest` (12) + `CardContentUiTest` (3) |
 | 2026-10-13 | **T8 · N-3** botón de columna | ✅ | `1c0e5cb` («Realizado T7 y T8…»; el mensaje se quedó corto: la tarea **sí** quedó entera) — el botón ➕ de la toolbar desaparece; la función queda en **Tableros → Agregar columna** y en el menú ⋯ de cada columna, con **añadir a la izquierda / a la derecha** (también en columnas colapsadas). `Board.addColumn(..., insertIndex)` + `AddColumnCommand`/`BoardService.addColumnAt` insertan en el índice pedido en **un** paso de undo. `ColumnInsertAtTest` (4) + `ColumnAddMenuTest` (3) → suite **471/471** |
+| 2026-10-13 | **T13 · B4** captura rápida con sintaxis | ✅ | `feat(capture): quick card capture with inline syntax` — `application/QuickCapture` (puro: `+etiqueta`, `!`/`*`, `@hoy/@mañana/@+3d/@ISO`, fecha inválida se queda en el título, signos dentro de palabras intactos) + `QuickCaptureDialog` (foco en el campo, **vista previa en vivo**, Enter crea y **Más opciones…** precarga el `CardForm` completo); el ➕ de la columna abre la captura rápida y **Ctrl+➕** / la entrada del menú de columna abren el diálogo completo. **Hallazgo:** la vista previa NO puede vivir en `QuickCapture` (necesita i18n y la capa `application` no puede depender de `ui`), así que el formateo está en el diálogo; el parseo sí es puro. `QuickCaptureTest` (13) + `QuickCaptureDialogTest` (4) → suite **488/488** |
 
 ---
 
@@ -393,7 +394,20 @@ pulsarlo.
 
 </details>
 
-### 7.2 T13 — B4: captura rápida con sintaxis
+### 7.2 T13 — B4: captura rápida con sintaxis — ✅ hecho (2026-10-13)
+
+> **Entregado:** `application/QuickCapture.parse(raw, today) → Draft(title,
+> labels, dueDate)` (puro) y `ui/QuickCaptureDialog` (campo con el foco, vista
+> previa en vivo, Enter = crear, **Más opciones…** = `Dialogs.cardDialog`
+> precargado). El ➕ de la columna abre la captura rápida; **Ctrl+➕**, la
+> entrada «Añadir tarjeta (diálogo completo)…» del menú ⋯ de la columna y
+> «Más opciones…» mantienen el diálogo completo. La previsualización se formatea
+> en el diálogo (no en `QuickCapture`) porque necesita i18n y `application` no
+> puede depender de `ui`. **i18n:** `quick.title`, `quick.prompt`, `quick.hint`,
+> `quick.preview.labels`, `quick.preview.due`, `quick.empty`, `quick.more`,
+> `quick.add`, `column.add.card.full`. **Tests:** `QuickCaptureTest`,
+> `QuickCaptureDialogTest` → suite **488/488**.
+
 
 | Marca | Significado | Nota |
 |---|---|---|

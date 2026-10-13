@@ -5,6 +5,7 @@ import com.personalkanban.application.BoardService;
 import com.personalkanban.application.CardViewSettings;
 import com.personalkanban.application.DueDigest;
 import com.personalkanban.application.GlobalShortcuts;
+import com.personalkanban.application.QuickCapture;
 import com.personalkanban.application.ThemeColors;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
@@ -2742,9 +2743,39 @@ public final class BoardController {
         }));
     }
 
+    /**
+     * Quick capture (user request T13 · B4): the column's ➕ opens a one-line
+     * field with inline syntax. Enter creates the card right away; «More
+     * options…» hands the parsed draft to the full dialog instead.
+     */
     public void onAddCard(com.personalkanban.domain.board.ColumnId columnId) {
+        new QuickCaptureDialog(i18n).showAndWait(LocalDate.now()).ifPresent(result -> {
+            if (result.action() == QuickCaptureDialog.Action.CREATE) {
+                QuickCapture.Draft draft = result.draft();
+                if (!draft.canCreate()) {
+                    return;
+                }
+                guarded(() -> {
+                    service.addCard(columnId, draft.title(), "", BoardColor.DEFAULT,
+                            draft.dueDate(), draft.labels());
+                    refresh();
+                });
+            } else if (result.action() == QuickCaptureDialog.Action.MORE) {
+                onAddCardFull(columnId, QuickCaptureDialog.toCardForm(result.draft()));
+            }
+        });
+    }
+
+    /** The classic full card dialog for a new card (Ctrl+➕ / column menu). */
+    public void onAddCardFull(com.personalkanban.domain.board.ColumnId columnId) {
+        onAddCardFull(columnId, null);
+    }
+
+    /** Full card dialog, optionally prefilled by quick capture. */
+    private void onAddCardFull(com.personalkanban.domain.board.ColumnId columnId,
+                               Dialogs.CardForm initial) {
         Optional<Dialogs.CardForm> form = dialogs.cardDialog(
-                null, globalLabelVocabulary(), service.processes(),
+                initial, globalLabelVocabulary(), service.processes(),
                 service.board().allCards(), List.of(), List.of());
         form.ifPresent(f -> guarded(() -> {
             var created = service.addCard(columnId, f.title(), f.description(), f.color(),
