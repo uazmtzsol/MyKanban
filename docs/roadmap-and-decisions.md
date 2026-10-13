@@ -1,14 +1,11 @@
 # Roadmap, hallazgos y decisiones
 
-*Última actualización: 2026-10-12 · Sesión 13 (cierre de la Sesión 11 y las
-seis mejoras pedidas; 395/395 tests). El historial por sesión vive en
-`PLAN.md`; el estado de cada mejora propuesta, en
-[`pending-mejoras-propuestas.md`](pending-mejoras-propuestas.md).*
+*Última actualización: 2026-10-13. El **plan, el checklist y el estado** viven
+en [`../PLAN.md`](../PLAN.md) (documento único de trabajo).*
 
 Este documento concentra: (1) lo que el usuario pidió, (2) hallazgos
 técnicos verificados, (3) decisiones de diseño vigentes con su porqué,
-(4) preferencias de trabajo. El estado de ejecución por fase vive en
-`PLAN.md` (raíz del repo) — actualizar ambos al avanzar.
+(4) preferencias de trabajo. Al avanzar, actualizar también `PLAN.md`.
 
 ---
 
@@ -447,8 +444,7 @@ un aviso.
 ## 7. Sesión 13 (2026-10-12): hallazgos y decisiones
 
 > Cierra **S11-5** del plan de sesiones y entrega las seis mejoras pedidas en
-> bloque. Detalle de la sesión y checklist manual en `PLAN.md`; estado de cada
-> propuesta en `docs/pending-mejoras-propuestas.md`.
+> bloque. Detalle de la sesión y checklist manual en [`../PLAN.md`](../PLAN.md).
 
 ### 7.1 ✔️ Hallazgos verificados (con test, no por lectura de código)
 

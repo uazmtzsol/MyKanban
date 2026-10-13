@@ -491,5 +491,5 @@ mensajes claros (sin red, 401 clave rechazada, 413 demasiado grande, error  del 
 ---
 
 *¿Algo falta o no coincide con lo que ves? Anótalo y lo corregimos en la
-siguiente sesión. Las ideas de mejora pendientes están en
-[`mejoras-propuestas.md`](mejoras-propuestas.md).*
+siguiente sesión. Lo pendiente y el plan de trabajo viven en
+[`../PLAN.md`](../PLAN.md).*
