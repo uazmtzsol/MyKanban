@@ -124,6 +124,16 @@ final class CardDetailWindow {
         stage.setScene(scene);
         stage.setTitle(i18n.text("card.detail.title") + " \u2014 " + card.title());
 
+        // Esc behaves like «Cancelar» (user request, 2026-10-13): it closes the
+        // window without saving. It is a bubbling handler, so a control that
+        // consumes the key first — a text field, an open autocomplete list —
+        // keeps it and the window stays open.
+        scene.addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == javafx.scene.input.KeyCode.ESCAPE) {
+                stage.close();
+            }
+        });
+
         refreshChecklist();
         refreshTime();
     }
@@ -171,10 +181,11 @@ final class CardDetailWindow {
 
         noteTitleField.setPromptText(i18n.text("card.notes.title.prompt"));
 
-        Button add = noteButton("card.notes.add", this::addNote);
-        Button save = noteButton("card.notes.save", this::saveCurrentNote);
+        // User request (2026-10-13): «Añadir nota» and «Guardar nota» belong on
+        // the editor's own header row, next to the edit/render toggle; only
+        // «Eliminar nota» stays at the bottom of the pane.
         Button remove = noteButton("card.notes.remove", this::removeNote);
-        HBox actions = new HBox(8, add, save, remove);
+        HBox actions = new HBox(8, remove);
         actions.setAlignment(Pos.CENTER_LEFT);
 
         VBox editor = new VBox(4, noteTitleField, notesEditor.node());
@@ -184,6 +195,9 @@ final class CardDetailWindow {
         HBox split = new HBox(10, notesList, editor);
         VBox.setVgrow(split, Priority.ALWAYS);
         VBox pane = new VBox(6, caption, split, actions);
+        // A window is built once per open, so these land on the header once.
+        notesEditor.addHeaderButton(noteButton("card.notes.add", this::addNote));
+        notesEditor.addHeaderButton(noteButton("card.notes.save", this::saveCurrentNote));
         reloadNotes();
         return pane;
     }

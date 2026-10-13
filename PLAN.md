@@ -13,9 +13,9 @@
 > la fila en la **bitácora** (§3) y **commit + push**. Se documenta **antes** de
 > cerrar la sesión.
 >
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **432/432 OK** (1 skip:
+> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **435/435 OK** (1 skip:
 > endpoint PHP sin servidor); migraciones hasta **V9**. Documentación
-> consolidada, **T1 (BUG-1)** y **T2 (N-1/N-2)** hechos; siguiente: **T3** (§2).
+> consolidada, **T1–T3 hechos**; siguiente: **T4** (§2).
 
 ---
 
@@ -43,7 +43,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
   excepción (`fromStorageNameOrThrow` recibe nombres de enum). §5.1.
 - [x] **T2 · N-1 + N-2** ✅ En modo selección: **ocultar la barra de filtros**
   y alternarla con la de selección; **Esc borra la selección** actual. §6.1.
-- [ ] **T3 · N-10 + N-11** ⬜ Detalle de tarjeta: **Esc = Cancelar**; **mover
+- [x] **T3 · N-10 + N-11** ✅ Detalle de tarjeta: **Esc = Cancelar**; **mover
   «Añadir nota» y «Guardar nota»** junto al botón editor/render («Eliminar
   nota» se queda abajo). §6.5.
 - [ ] **T4 · N-12 + BUG-2** ⬜ Filtro **«NO tiene la etiqueta X»** y **«no
@@ -185,6 +185,7 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 | 2026-10-13 | Documentación consolidada en un solo documento + borrado de docs redundantes | ✅ | `docs: consolidate all planning into one document (PLAN.md)` |
 | 2026-10-13 | **T1 · BUG-1** atajos de teclado | ✅ | `fix(shortcuts): resolve actions by enum or storage name` — `fromNameOrThrow` acepta ambos nombres, la fila del diálogo lleva el enum (ya no re-parsea una clave i18n); +6 tests → suite **429/429** |
 | 2026-10-13 | **T2 · N-1/N-2** barras alternas + Esc | ✅ | `feat(selection): alternate filter and selection bars, Esc drops the selection` — la barra de filtros se oculta en modo selección y vuelve al salir (también en `refresh()`); la tecla configurada de salida actúa en etapas (desmarca → sale del modo → suelta el foco). `SelectionModeBarsTest` (3) → suite **432/432** |
+| 2026-10-13 | **T3 · N-10/N-11** detalle de tarjeta | ✅ | `feat(card-detail): Esc cancels, note buttons move to the editor header` — manejador de Esc en burbuja (un campo o autocompletado que consuma la tecla la conserva); `MarkdownEditor.addHeaderButton` coloca Añadir/Guardar junto al toggle y Eliminar se queda abajo. `CardDetailWindowTest` (3) → suite **435/435** |
 
 ---
 
@@ -281,11 +282,14 @@ por tarea; el de **T13–T16** (B4–B8) en §7; el resto en §8.
 
 ### 6.5 T3 — N-10/N-11: ventana de detalle
 
-- **N-10 — Esc = Cancelar.** *Hoy:* `CardDetailWindow` no maneja Esc. *Pedido:*
-  Esc como pulsar **Cancelar** y cerrar.
-- **N-11 — Reubicar los botones de nota.** *Pedido:* juntar **Añadir nota +
-  Guardar nota + toggle editor/render** en el mismo grupo; **«Eliminar nota» se
-  queda en la parte inferior**.
+- **N-10 — Esc = Cancelar.** ✅ *Hecho (2026-10-13).* `CardDetailWindow`
+  registra un manejador de `KEY_PRESSED` **en burbuja** sobre la escena: si
+  nadie consumió la tecla antes (un campo de texto, una lista de autocompletado)
+  cierra la ventana igual que **Cancelar**.
+- **N-11 — Reubicar los botones de nota.** ✅ *Hecho (2026-10-13).* Nuevo
+  `MarkdownEditor.addHeaderButton(...)`: **Añadir nota** y **Guardar nota** van en
+  la fila de cabecera del editor, junto al toggle editor/render; **«Eliminar
+  nota»** se queda al pie del panel de notas.
 
 ### 6.6 T4 — N-12: filtro «NO tiene etiqueta»
 

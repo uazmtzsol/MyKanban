@@ -2,6 +2,7 @@ package com.personalkanban.ui;
 
 import com.personalkanban.ui.markdown.Markdown;
 import com.personalkanban.ui.theme.ThemeManager;
+import javafx.scene.control.Button;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
@@ -29,6 +30,7 @@ final class MarkdownEditor {
     private final ToggleButton toggle = new ToggleButton();
     private final StackPane center = new StackPane(editor, preview);
     private final VBox root = new VBox(4);
+    private final HBox header = new HBox(8);
     private final I18n i18n;
     private final ThemeManager themeManager;
 
@@ -58,7 +60,7 @@ final class MarkdownEditor {
 
         toggle.getStyleClass().add("md-mode-toggle");
         toggle.setOnAction(e -> applyMode());
-        HBox header = new HBox(8, toggle);
+        header.getChildren().add(toggle);
 
         root.getChildren().addAll(header, center);
         VBox.setVgrow(center, Priority.ALWAYS);
@@ -69,6 +71,15 @@ final class MarkdownEditor {
     /** The whole editor (header + surface). */
     Pane node() {
         return root;
+    }
+
+    /**
+     * Adds an extra button to the editor's own header row, next to the
+     * edit/view mode toggle. The host uses it to keep its actions (save, add)
+     * on the same line as the mode switch instead of far below the surface.
+     */
+    void addHeaderButton(Button button) {
+        header.getChildren().add(button);
     }
 
     /** Current markdown source, regardless of the visible mode. */
