@@ -273,6 +273,17 @@ public final class BoardController {
         refresh();
     }
 
+    /**
+     * Per-card content choice (user request N-14): what this card's front
+     * shows below the title — description, tasks or notes. No board default:
+     * the user picks it card by card from the button on the card.
+     */
+    public void onSetCardContent(CardId cardId, CardViewSettings.Content content) {
+        cardViewSettings.setContentOverride(cardId.value(), content);
+        service.setCardViewSettings(service.activeBoardId(), cardViewSettings);
+        refresh();
+    }
+
     /** Clears every per-card override (all cards follow the board default). */
     public void onResetCardViewModes() {
         cardViewSettings.clearOverrides();
@@ -1385,6 +1396,15 @@ public final class BoardController {
             case TITLE_ONLY -> "cardview.mode.title";
             case TITLE_PREVIEW -> "cardview.mode.preview";
             case FULL -> "cardview.mode.full";
+        };
+    }
+
+    /** i18n key of a per-card content choice (N-14). */
+    static String cardContentTextKey(CardViewSettings.Content content) {
+        return switch (content) {
+            case DESCRIPTION -> "card.content.description";
+            case CHECKLIST -> "card.content.checklist";
+            case NOTES -> "card.content.notes";
         };
     }
 

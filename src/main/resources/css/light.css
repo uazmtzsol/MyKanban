@@ -366,6 +366,15 @@
 .checklist-item .check-box {
     -fx-wrap-text: true;
 }
+/* Session 16 (N-14): the tasks / notes a card can show instead of the descriptions */
+.card-checklist-preview .check-box {
+    -fx-font-size: 11px;
+    -fx-text-fill: #4b5563;
+}
+.card-notes-preview-text {
+    -fx-font-size: 11px;
+    -fx-text-fill: #4b5563;
+}
 .shortcut-keys { -fx-font-size: 13px; }
 .shortcut-action { -fx-font-size: 13px; -fx-text-fill: #374151; }
 .prefs-file-label {

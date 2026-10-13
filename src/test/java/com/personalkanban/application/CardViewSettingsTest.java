@@ -52,6 +52,83 @@ class CardViewSettingsTest {
     }
 
     @Test
+    void contentIsChosenPerCardAndDefaultsToTheDescription() {
+        CardViewSettings settings = new CardViewSettings();
+        assertThat(settings.effectiveContent("c1"))
+                .isEqualTo(CardViewSettings.Content.DESCRIPTION);
+        assertThat(settings.hasContentOverride("c1")).isFalse();
+
+        settings.setContentOverride("c1", CardViewSettings.Content.CHECKLIST);
+
+        assertThat(settings.effectiveContent("c1")).isEqualTo(CardViewSettings.Content.CHECKLIST);
+        assertThat(settings.hasContentOverride("c1")).isTrue();
+        assertThat(settings.effectiveContent("c2"))
+                .as("the choice is per card")
+                .isEqualTo(CardViewSettings.Content.DESCRIPTION);
+    }
+
+    @Test
+    void askingForTheDescriptionAgainDropsTheOverride() {
+        CardViewSettings settings = new CardViewSettings();
+        settings.setContentOverride("c1", CardViewSettings.Content.NOTES);
+
+        settings.setContentOverride("c1", CardViewSettings.Content.DESCRIPTION);
+        assertThat(settings.hasContentOverride("c1")).isFalse();
+
+        settings.setContentOverride("c1", CardViewSettings.Content.NOTES);
+        settings.setContentOverride("c1", null);
+        assertThat(settings.hasContentOverride("c1")).isFalse();
+        assertThat(settings.contentOverrideCount()).isZero();
+    }
+
+    @Test
+    void clearingEveryOverrideAlsoClearsTheContentChoices() {
+        CardViewSettings settings = new CardViewSettings();
+        settings.setContentOverride("c1", CardViewSettings.Content.NOTES);
+
+        settings.clearOverrides();
+
+        assertThat(settings.contentOverrideCount()).isZero();
+        assertThat(settings.effectiveContent("c1"))
+                .isEqualTo(CardViewSettings.Content.DESCRIPTION);
+    }
+
+    @Test
+    void jsonRoundTripPreservesTheContentChoices() {
+        CardViewSettings settings = new CardViewSettings();
+        settings.setContentOverride("c9", CardViewSettings.Content.CHECKLIST);
+
+        CardViewSettings restored = CardViewSettings.fromJson(settings.toJson());
+
+        assertThat(restored.effectiveContent("c9")).isEqualTo(CardViewSettings.Content.CHECKLIST);
+        assertThat(restored.effectiveContent("c1")).isEqualTo(CardViewSettings.Content.DESCRIPTION);
+    }
+
+    /**
+     * Settings written before N-14 have no {@code content} section at all:
+     * every card has to keep showing the description.
+     */
+    @Test
+    void settingsWithoutAContentSectionKeepTheDescription() {
+        CardViewSettings restored =
+                CardViewSettings.fromJson("{\"default\":\"TITLE_ONLY\",\"overrides\":{}}");
+
+        assertThat(restored.boardDefault()).isEqualTo(CardViewSettings.Mode.TITLE_ONLY);
+        assertThat(restored.contentOverrideCount()).isZero();
+        assertThat(restored.effectiveContent("c1"))
+                .isEqualTo(CardViewSettings.Content.DESCRIPTION);
+    }
+
+    @Test
+    void anUnknownContentNameDegradesToDefaults() {
+        CardViewSettings restored = CardViewSettings.fromJson("{\"content\":{\"c1\":\"SIDEWAYS\"}}");
+
+        assertThat(restored.contentOverrideCount()).isZero();
+        assertThat(restored.effectiveContent("c1"))
+                .isEqualTo(CardViewSettings.Content.DESCRIPTION);
+    }
+
+    @Test
     void jsonRoundTripPreservesDefaultsAndOverrides() {
         CardViewSettings settings = new CardViewSettings();
         settings.setBoardDefault(CardViewSettings.Mode.TITLE_ONLY);

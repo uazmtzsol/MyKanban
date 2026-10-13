@@ -6,11 +6,14 @@ import com.personalkanban.application.StylePrefs;
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.CardNotes;
+import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.ui.markdown.MarkdownSummary;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
+import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.Tooltip;
@@ -44,6 +47,12 @@ final class CardViewBuilder {
      */
     static final int PREVIEW_MAX_CHARS = 120;
 
+    /**
+     * Notes content (N-14): the card front shows a short digest, not the whole
+     * note — a long note would otherwise make one card taller than the column.
+     */
+    static final int NOTES_PREVIEW_MAX_CHARS = 160;
+
     private static final DateTimeFormatter DUE_FORMAT =
             DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM);
 
@@ -54,6 +63,7 @@ final class CardViewBuilder {
                       Card card, boolean selectionMode, boolean dark) {
         var settings = board.currentCardViewSettings();
         var mode = settings.effectiveMode(card.id().value());
+        var content = settings.effectiveContent(card.id().value());
         // One folder listing per card render feeds both the button state and
         // the attachment badge.
         int attachmentCount = board.attachmentCountOf(card.id());
@@ -115,12 +125,13 @@ final class CardViewBuilder {
                     "\u2605", "card.flag.important", "card-flag-important"));
             titleRow.getChildren().add(flagButton(i18n, board, card, Card.LABEL_URGENT,
                     "!", "card.flag.urgent", "card-flag-urgent"));
+            titleRow.getChildren().add(contentButton(i18n, board, card, content));
             titleRow.getChildren().add(notesButton(i18n, board, card));
             titleRow.getChildren().add(attachmentsButton(i18n, board, card, attachmentCount));
         }
         view.getChildren().add(titleRow);
 
-        addDescriptionByMode(view, card, mode);
+        addContentArea(board, i18n, card, mode, content, view);
 
         addDueBadgeIfPresent(i18n, card, view);
         addChecklistProgressIfPresent(i18n, card, view);
@@ -428,6 +439,114 @@ final class CardViewBuilder {
             summary.setPrefWidth(220);
             view.getChildren().add(summary);
         }
+    }
+
+    /**
+     * Content menu of the card (user request N-14): one button per card to
+     * choose what the column shows for it — the description (default), the
+     * task list (checkable in place) or the notes. The glyph already tells
+     * which one is on, and double-click still opens the whole detail window.
+     */
+    private static MenuButton contentButton(I18n i18n, BoardController board, Card card,
+                                            CardViewSettings.Content content) {
+        MenuButton button = new MenuButton(contentGlyph(content));
+        button.getStyleClass().addAll("tool-button", "pk-card-content");
+        button.setTooltip(new Tooltip(i18n.text("card.content.button.tip")));
+        button.setFocusTraversable(false);
+        button.setMinWidth(Region.USE_PREF_SIZE);
+        button.setMinHeight(Region.USE_PREF_SIZE);
+        for (CardViewSettings.Content option : CardViewSettings.Content.values()) {
+            RadioMenuItem item = new RadioMenuItem(
+                    i18n.text(BoardController.cardContentTextKey(option)));
+            item.setUserData(option);
+            item.setSelected(option == content);
+            item.setOnAction(e -> board.onSetCardContent(card.id(), option));
+            button.getItems().add(item);
+        }
+        return button;
+    }
+
+    /** Glyph naming the content a card currently shows. */
+    private static String contentGlyph(CardViewSettings.Content content) {
+        return switch (content) {
+            case CHECKLIST -> "\u2611";
+            case NOTES -> "\uD83D\uDCDD";
+            default -> "\u25A4";
+        };
+    }
+
+    /**
+     * The area under the title: whatever the card's content choice says.
+     * Only DESCRIPTION follows the view mode; tasks and notes are shown
+     * because the user asked for them on this card, in every mode.
+     */
+    private static void addContentArea(BoardController board, I18n i18n, Card card,
+                                       CardViewSettings.Mode mode,
+                                       CardViewSettings.Content content, VBox view) {
+        switch (content) {
+            case CHECKLIST -> addChecklistIfPresent(board, card, view);
+            case NOTES -> addNotesPreviewIfPresent(i18n, card, view);
+            default -> addDescriptionByMode(view, card, mode);
+        }
+    }
+
+    /**
+     * The card's tasks, checkable without opening the detail window
+     * (user request N-14: «tareas (revisar/marcar)»). One click is one
+     * undoable domain transaction, like the checklist tab's checkboxes.
+     */
+    private static void addChecklistIfPresent(BoardController board, Card card, VBox view) {
+        if (card.checklist().isEmpty()) {
+            return;
+        }
+        VBox box = new VBox(2);
+        box.getStyleClass().add("card-checklist-preview");
+        for (ChecklistItem item : card.checklist()) {
+            CheckBox done = new CheckBox(item.text());
+            done.setSelected(item.done());
+            done.setWrapText(true);
+            done.getStyleClass().add("checklist-item");
+            done.setFocusTraversable(false);
+            done.setOnAction(e -> board.onChecklistToggle(card.id(), item.id(), done.isSelected()));
+            box.getChildren().add(done);
+        }
+        view.getChildren().add(box);
+    }
+
+    /**
+     * The card's notes as a short digest (user request N-14, «comentarios» =
+     * notas): each note's title plus the beginning of its body. The whole
+     * text is still one double-click away, and the notes button opens the
+     * editor.
+     */
+    private static void addNotesPreviewIfPresent(I18n i18n, Card card, VBox view) {
+        CardNotes notes = CardNotes.parse(card.notes());
+        if (notes.isEmpty()) {
+            return;
+        }
+        VBox box = new VBox(2);
+        box.getStyleClass().add("card-notes-preview");
+        for (CardNotes.Note note : notes.notes()) {
+            String title = note.title().isEmpty()
+                    ? i18n.text("card.notes.untitled") : note.title();
+            String body = abbreviate(note.body(), NOTES_PREVIEW_MAX_CHARS);
+            Label text = new Label(body.isEmpty() ? title : title + "\n" + body);
+            text.setWrapText(true);
+            text.setPrefWidth(220);
+            text.getStyleClass().add("card-notes-preview-text");
+            box.getChildren().add(text);
+        }
+        view.getChildren().add(box);
+    }
+
+    /** Cuts text at a character bound, marking the cut with an ellipsis. */
+    private static String abbreviate(String text, int maxChars) {
+        String flat = text == null ? "" : text.strip();
+        if (flat.length() <= maxChars) {
+            return flat;
+        }
+        int cut = flat.lastIndexOf(' ', maxChars);
+        return flat.substring(0, cut < maxChars / 2 ? maxChars : cut).strip() + "\u2026";
     }
 
     /**
