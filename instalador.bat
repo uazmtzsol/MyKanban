@@ -94,8 +94,14 @@ if "%TYPE%"=="exe" (
     echo      Launch "%DEST%\%APP_NAME%\%APP_NAME%.exe" ^(no installation^).
 )
 echo.
-echo      Drop a Windows icon at src\main\resources\icons\app.ico and
-echo      rerun to use it instead of the default Java icon.
+if defined ICON_OPT (
+    echo      App icon: src\main\resources\icons\app.ico
+) else (
+    echo      No custom icon found. Drop a Windows .ico at
+    echo      src\main\resources\icons\app.ico and rerun to brand the app.
+)
+echo      Note: if the icon looks unchanged, Windows cached it - rename or
+echo      move the .exe, or run "ie4uinit.exe -show" and restart Explorer.
 popd
 endlocal
 exit /b 0
