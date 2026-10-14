@@ -732,6 +732,160 @@ alterna** el estado (y el handler lo ve ya alternado), pero **no hace nada en un
   decisión anterior queda revertida; sigue vigente el límite de **un nivel**
   (sin nietos) y el máximo de 50 ítems por tarjeta.
 
+### 8.5 Plan de ejecución de los pendientes (2026-10-14)
+
+**Orden acordado con el usuario** (coste/beneficio y riesgo primero): ① **T12**
+(bug abierto, barato y visible), ② **T9** (corrección pequeña), ③ **T17**
+(robustez: el riesgo real con datos vivos), ④ **T10**, ⑤ **T11**, ⑥ **T18**,
+⑦ **T19**, ⑧ **T22**, ⑨ **T20**, ⑩ **T21**. Las conversaciones **C-1…C-5** no se
+implementan sin una decisión explícita del usuario: se preguntan al llegar a
+ellas.
+
+Reglas de siempre (§2): hexagonal, i18n en los **5** bundles, sin dependencias
+nuevas, un **test que falle sin el cambio**, suite completa verde antes del
+commit y cierre documentado (docs + commit + push).
+
+#### T12 — N-8: las relaciones se borran al clic en una flecha 🐞
+**Causa (verificada en el código, no es un borrado múltiple):** el conector de
+un enlace existente lleva un **área de clic invisible de 16 px**
+(`ProcessViewBuilder.connector`) y **un clic simple lo desenlaza**
+(`onArrangeArrow` → `service.unlinkCards`). El dominio borra **solo** ese par
+(`Board.unlinkCards`), así que la pérdida no es masiva: el problema es que una
+acción destructiva quedó **a un clic de distancia**, contra la regla ya cerrada
+«acciones destructivas lejos del clic accidental» (§10). Además esa área invade
+el hueco de 72 px entre tarjetas, así que un clic cerca del borde derecho de una
+tarjeta también desenlaza.
+**Corrección:** el clic en un conector **enlazado** pide **confirmación**
+(`process.unlink.confirm` con los dos títulos); el conector **sugerido**
+(punteado, no destructivo) sigue enlazando de inmediato; el tooltip dice qué va
+a pasar; el camino de teclado (Ctrl+Shift+←/→) es explícito y no cambia.
+**Archivos:** `ui/ProcessViewBuilder` (clase de estilo del área de clic +
+tooltips), `ui/BoardController.onArrangeArrow`, i18n ×5.
+**Tests:** `ProcessViewLinkTest` (UI real: un proceso sin enlaces dibuja el
+conector punteado y el clic **enlaza** sin diálogo; el conector enlazado expone
+su área de clic con clase y tooltip) + aserción de que `onArrangeArrow` confirma
+**antes** de `unlinkCards` (mismo patrón que `KeyboardNavigationTest`).
+**Criterio de hecho:** un clic accidental en una flecha no borra nada sin
+preguntar, y enlazar sigue costando un clic.
+
+#### T9 — N-5: asignar una tarjeta a un proceso sin modo selección
+**Alcance:** hoy solo se puede en lote (modo selección) o dentro del formulario
+avanzado. Falta el gesto directo sobre la tarjeta actual.
+**Diseño:** entrada **«Proceso ▸»** en el menú contextual de la tarjeta (y en el
+menú de teclado de la tarjeta actual, reutilizando el diálogo de proceso que ya
+usa el lote) con la lista de procesos del tablero + «Ninguno»; marcando actúa
+sobre la tarjeta actual, sin entrar en modo selección. Reutiliza
+`dialogs.chooseProcess`/`BulkProcessForm` y `BoardService.assignProcess`.
+**Archivos:** `ui/CardViewBuilder` (menú), `ui/BoardController` (`onAssignProcessToCard`),
+`ui/Dialogs` si hace falta una variante de 1 tarjeta, i18n ×5.
+**Tests:** servicio (asignar sin selección = 1 undo), UI (el menú de la tarjeta
+ofrece la entrada y la tarjeta queda asignada).
+**Criterio:** una tarjeta de la columna se asigna a un proceso sin marcar nada.
+
+#### T17 — H-2 + H-3: backup automático rotativo + integridad (🟠 prioridad real)
+**Alcance:** ① copia de seguridad de la BD **al arrancar** (y antes de
+migraciones) en `backups/` junto a la BD, con **rotación** (N más recientes, p.
+ej. 10) y sin bloquear la UI; ② `PRAGMA integrity_check` al abrir + aviso claro
+si falla, con **reparación** guiada (recuperar a partir del backup más reciente
+en lugar de tocar la base rota).
+**Diseño:** `infrastructure/sqlite/BackupService` (puro en su política de
+rotación: `Files` + orden por fecha; la copia usa la API de SQLite o copia del
+archivo con la conexión cerrada) + `Database.integrity()` y un punto único en
+`AppContext.openAt()` que copia, verifica y avisa. Nada de JavaFX en infra.
+**Archivos:** `infrastructure/sqlite/Database`, `AppContext`, i18n ×5,
+`docs/manual-usuario.md` (§18) y PLAN/roadmap.
+**Tests:** `BackupRotationTest` (puro: crea N+1 copias y deja las N más nuevas,
+no rota las de otro día), `SqliteIntegrityTest` (BD sana pasa; BD con la cabecera
+rota falla y el aviso no rompe el arranque), y prueba de que el arranque crea la
+copia con datos reales (leer el fichero copiado y contar tableros).
+**Criterio:** tras arrancar hay copia en `backups/`, la política de rotación
+está probada y una base corrupta no se abre en silencio.
+
+#### T10 — N-4: copiar / pegar tarjetas
+**Alcance:** botón en la toolbar (y Ctrl+C/Ctrl+V sobre la tarjeta actual o la
+selección) que **copia** las tarjetas marcadas y las **pega como nuevas** en la
+columna de destino (la actual de la vista o la de la tarjeta actual), con
+`(copia)` en el título, etiquetas/checklist/descripción y **sin** enlaces ni
+recordatorios (no se duplican dependencias ni avisos), y **un** paso de undo.
+**Diseño:** `application/Clipboard` (puro: `copy(cards)`, `paste(board, column) →
+cantidad`) + `command/PasteCardsCommand`; el portapapeles es interno de la app
+(el del sistema traería texto suelto y otra semántica).
+**Tests:** `ClipboardTest` (contenido, ids nuevos, sin enlaces/recordatorios,
+WIP del destino, undo en 1 paso) + UI (pegar en la columna actual crea N).
+**Criterio:** copiar 2 tarjetas y pegarlas crea 2 nuevas en el destino, con 1
+undo y sin arrastrar dependencias.
+
+#### T11 — N-7 + N-9: vista de proceso
+**Alcance:** ① al crear una tarjeta desde la flecha verde (nueva
+predecesora/sucesora) el diálogo pide **título** (y ofrece **proceso** y
+vencimiento) en vez de crear una tarjeta vacía llamada «Nueva tarjeta»; ②
+«elegir tarjeta existente» ofrece **solo las tarjetas del proceso** (hoy todas).
+**Archivos:** `BoardController.onProcessAddNewRelation` (diálogo reutilizando
+`CardForm` con `processId` preseleccionado) y `onProcessLinkExisting` (filtro por
+proceso), i18n ×5.
+**Tests:** UI (la flecha verde abre un formulario con el proceso del ancla
+puesto) y unidad del filtro (la lista del selector contiene solo los miembros).
+**Criterio:** crear desde el diagrama produce una tarjeta con nombre y proceso,
+y el selector de enlace no ofrece tarjetas de otro proceso.
+
+#### T18 — H-7 + H-8: logging persistente y JaCoCo
+**Alcance:** ① log rotativo en `logs/kanban.log` (nivel, marca de tiempo,
+rotación por día y tamaño) con `java.util.logging` —sin dependencias— y volcado
+del error de arranque que hoy solo se ve en un diálogo; ② **JaCoCo**: hoy el
+agente 0.8.12 no instrumenta clases de JDK 25 (`Unsupported class file major
+version 69`) y la suite debe correrse con `-Djacoco.skip=true`.
+**Diseño H-8:** buscar en `~/.m2` una versión del plugin que soporte Java 25; si
+no está (build offline), dejar `jacoco.skip` **por defecto** en el `pom.xml` con
+comentario que explique cómo reactivarlo cuando haya red, y registrar el bloqueo
+en el roadmap. No se silencia ningún fallo: la suite sigue corriendo entera, solo
+sin instrumentación.
+**Tests:** `LogRotationTest` (puro: tamaño/fecha rotan y conservan N ficheros),
+cableado (un error de arranque escribe la causa raíz en el log) y comprobación de
+que `mvn test` funciona sin `-Djacoco.skip`.
+**Criterio:** `mvn test` corre limpio sin flags extra y cualquier fallo deja
+rastro en disco.
+
+#### T19 — H-11 + H-10: ayuda F1 completa y foco de los diálogos
+**Alcance:** ① `ShortcutsHelpWindow` con **todas** las teclas de tarjeta
+(flechas, 1–9, Ctrl+1/2/3, `Alt+I/U`, `Supr`, atajos reasignables) leídas de las
+mismas fuentes que el manejador, para que no puedan divergir; ② prueba de que
+cada diálogo abre con el foco donde debe (campo principal, no Cancelar).
+**Tests:** `ShortcutsHelpCoverageTest` (toda acción reasignable aparece en la
+ayuda) y `DialogFocusTest` (foco inicial por diálogo).
+**Criterio:** la ayuda no miente (cobertura automática) y el foco inicial está
+comprobado, no revisado a ojo.
+
+#### T22 — H-1: cerrar la búsqueda en el tablero activo
+**Alcance:** decisión, no código: la fase B histórica pedía buscar en el tablero
+activo y **B2** ya trae búsqueda **global** (`Ctrl+Shift+F`, dice en qué tablero
+está cada resultado). Propuesta por defecto: **cerrar H-1** con B2 y registrar la
+reversión/cierre en el roadmap, dejando el filtro de etiquetas del tablero como
+búsqueda dentro del tablero.
+**Criterio:** el roadmap deja de listar H-1 como pendiente (o pasa a tarea real
+si el usuario la quiere).
+
+#### T20 — H-4 + H-5: sync avanzado (sesión propia)
+**Alcance (grande, no cabe en un turno pequeño):** `device_id` estable (3.2),
+*fractional index* para el orden (3.3), sync **automático** con backoff (3.4),
+outbox/deltas en lugar de snapshot, lápidas con retención y cifrado del payload.
+**Plan:** ir por partes con el diseño de `docs/sync-design.md`: (a) `device_id` +
+automático con backoff (visible y barato), (b) fractional index de columnas y
+tarjetas, (c) outbox/deltas + lápidas, (d) cifrado. Cada parte con su migración
+(`V12+`) y su prueba de merge, y **sin romper** el formato de export JSON.
+**Criterio por parte:** dos equipos siguen convergiendo y el usuario puede dejar
+el sync en automático sin pensar.
+
+#### T21 — H-6: empaquetado nativo + auto-actualización (sesión propia)
+**Alcance:** `jpackage` (instalador por SO, icono, sin JRE previo) y
+actualización. Requiere la toolchain (`jpackage` está en el JDK 25 local) y una
+decisión de distribución (¿firma? ¿GitHub Releases?).
+**Criterio mínimo:** un instalador reproducible por plataforma con los launchers
+actuales intactos; la auto-actualización, solo si el usuario la quiere.
+
+#### C-1…C-5 (conversación, no implementar sin respuesta)
+C-1 import con *merge*; C-2 impresión de tableros; C-3 bandeja del sistema para
+avisos; C-4 informe de tiempo (activo vs. todos); C-5 menores de H-12.
+
 ---
 
 ## 9. Prueba manual pendiente del usuario
