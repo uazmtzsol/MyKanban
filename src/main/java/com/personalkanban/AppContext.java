@@ -1,6 +1,7 @@
 package com.personalkanban;
 
 import com.personalkanban.application.BoardService;
+import com.personalkanban.application.CorruptDatabaseException;
 import com.personalkanban.application.GlobalLabelsService;
 import com.personalkanban.application.port.ConflictCopyStore;
 import com.personalkanban.application.port.SettingsStore;
@@ -9,6 +10,7 @@ import com.personalkanban.application.sync.SyncService;
 import com.personalkanban.infrastructure.history.JsonUndoHistory;
 import com.personalkanban.infrastructure.sync.HttpSyncRepository;
 import com.personalkanban.infrastructure.sync.JsonConflictCopyStore;
+import com.personalkanban.infrastructure.sqlite.BackupService;
 import com.personalkanban.infrastructure.sqlite.Database;
 import com.personalkanban.infrastructure.sqlite.SchemaMigrator;
 import com.personalkanban.infrastructure.sqlite.SqliteBoardRepository;
@@ -84,6 +86,18 @@ public final class AppContext implements AutoCloseable {
         AppContext context = new AppContext(configFile);
         context.switchDatabase(dbFile.toAbsolutePath().normalize());
         return context;
+    }
+
+    /**
+     * Guided repair of a damaged database (T17 · H-3), the only way the layers
+     * above reach {@code BackupService}: copies {@code backup} as a <b>new</b>
+     * file next to {@code damagedDatabase} and returns it, ready to be opened.
+     *
+     * <p>Nothing is overwritten or deleted — neither the damaged file nor the
+     * copy — so the user can always go back and inspect what happened.</p>
+     */
+    public static Path restoreBackup(Path backup, Path damagedDatabase) {
+        return BackupService.restoreNextTo(backup, damagedDatabase);
     }
 
     /**
@@ -172,6 +186,20 @@ public final class AppContext implements AutoCloseable {
     }
 
     private void switchDatabase(Path dbFile) {
+        // T17 · H-2 + H-3, in this order on purpose:
+        //  ① with the file still closed, check it is really a database — a
+        //     broken file is NOT opened and NOT copied over the good backups;
+        //  ② then copy the (healthy) state we are about to migrate into
+        //     backups/, rotating the older copies. The copy happens before the
+        //     connection and before the migrations, so it is always the state
+        //     the user had at the previous launch.
+        BackupService backups = new BackupService(dbFile);
+        if (Files.isRegularFile(dbFile)) {
+            if (BackupService.integrity(dbFile) == BackupService.Integrity.CORRUPT) {
+                throw new CorruptDatabaseException(dbFile, backups.newestHealthyBackup());
+            }
+            backups.backup();
+        }
         Database newDatabase = new Database(dbFile);
         try {
             new SchemaMigrator(newDatabase).migrate();

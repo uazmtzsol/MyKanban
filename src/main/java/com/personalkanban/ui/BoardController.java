@@ -4,6 +4,7 @@ import com.personalkanban.AppContext;
 import com.personalkanban.application.BoardService;
 import com.personalkanban.application.BoardTemplate;
 import com.personalkanban.application.CardViewSettings;
+import com.personalkanban.application.CorruptDatabaseException;
 import com.personalkanban.application.DueDigest;
 import com.personalkanban.application.GlobalShortcuts;
 import com.personalkanban.application.QuickCapture;
@@ -1803,11 +1804,24 @@ public final class BoardController {
         return candidate.toAbsolutePath().normalize().equals(context.databasePath());
     }
 
-    /** Runs a database switch, rebinds on success, shows the error on failure. */
+    /**
+     * Runs a database switch, rebinds on success, shows the error on failure.
+     *
+     * <p>T17 · H-3: a file that fails its integrity check is never opened; the
+     * user is offered the newest healthy backup instead, and only then is that
+     * file restored next to the damaged one and opened. The damaged file is left
+     * untouched, and the recovery itself is asked of the composition root, so
+     * the UI never reaches into the SQLite package (see {@code ArchitectureTest}).</p>
+     */
     private void switchDatabase(Runnable openAction) {
         try {
             openAction.run();
             rebind();
+        } catch (CorruptDatabaseException corrupted) {
+            corrupted.backup()
+                    .filter(backup -> RecoveryPrompt.openBackupInstead(corrupted))
+                    .ifPresent(backup -> switchDatabase(() -> context.openDatabase(
+                            AppContext.restoreBackup(backup, corrupted.databaseFile()))));
         } catch (RuntimeException e) {
             dialogs.error(i18n.text("db.open.failed") + "\n" + Dialogs.describeFailure(e));
         }

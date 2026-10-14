@@ -1,7 +1,9 @@
 package com.personalkanban;
 
+import com.personalkanban.application.CorruptDatabaseException;
 import com.personalkanban.ui.AppIcons;
 import com.personalkanban.ui.BoardController;
+import com.personalkanban.ui.RecoveryPrompt;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -25,7 +27,7 @@ public class Main extends Application {
     @Override
     public void start(Stage stage) {
         try {
-            AppContext context = AppContext.create();
+            AppContext context = openContext();
             BoardController controller = new BoardController(context);
 
             Scene scene = new Scene(controller.root(), 1200, 720);
@@ -52,6 +54,27 @@ public class Main extends Application {
         } catch (Exception e) {
             showFatalError(e);
             throw e;
+        }
+    }
+
+    /**
+     * Opens the database, recovering from a damaged file (T17 · H-2/H-3): the
+     * app refuses to open a file that fails its integrity check, offers the
+     * newest healthy backup and, if the user accepts, restores it as a new file
+     * next to the damaged one. Nothing is deleted or overwritten — the damaged
+     * file stays for the user to keep.
+     */
+    private static AppContext openContext() {
+        Path dataDir = dataDirectory();
+        Path configFile = dataDir.resolve("config.properties");
+        try {
+            return AppContext.create();
+        } catch (CorruptDatabaseException corrupted) {
+            Path backup = corrupted.backup()
+                    .filter(ignored -> RecoveryPrompt.openBackupInstead(corrupted))
+                    .orElseThrow(() -> corrupted);
+            return AppContext.openAt(
+                    AppContext.restoreBackup(backup, corrupted.databaseFile()), configFile);
         }
     }
 
