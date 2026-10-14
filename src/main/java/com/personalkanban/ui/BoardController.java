@@ -2740,6 +2740,20 @@ public final class BoardController {
         });
     }
 
+    /**
+     * T9 · N-5 (user request): assigns <b>one</b> card to a process straight
+     * from its own menu, without entering selection mode. A null process means
+     * «Sin proceso» (the card leaves its process without losing its arrow
+     * relations — exactly like the bulk bar). One undoable step.
+     */
+    public void onAssignProcessToCard(com.personalkanban.domain.board.CardId cardId,
+                                      com.personalkanban.domain.board.ProcessId processId) {
+        guarded(() -> {
+            service.assignProcessToCards(List.of(cardId), processId);
+            refresh();
+        });
+    }
+
     /** Process filter intent: every card is visible again (no filter). */
     void onFilterProcessAll() {
         activeProcessFilter = null;
@@ -2923,17 +2937,47 @@ public final class BoardController {
     // Intents: process view (session 6)
     // ------------------------------------------------------------------
 
-    /** Arrow between two cards in a process row: links, or unlinks when linked. */
+    /**
+     * Arrow between two cards in a process row: links them, or — when they are
+     * already linked — <b>asks first</b>.
+     *
+     * <p>T12 · N-8 (user report: «se borran las relaciones al hacer clic en una
+     * flecha»): the connector of an existing link carried a 16 px invisible
+     * click target and a single plain click removed the relation, which broke
+     * the closed rule «destructive actions away from a stray click». Linking a
+     * suggested (dotted) connector is not destructive and still costs one
+     * click; removing one now needs the confirmation, like every other
+     * destructive action of the app. The keyboard path (Ctrl+Shift+←/→) is an
+     * explicit gesture and keeps its single step.</p>
+     */
     public void onArrangeArrow(com.personalkanban.domain.board.CardId from,
                                com.personalkanban.domain.board.CardId to) {
-        guarded(() -> {
-            if (service.board().hasLink(from, to)) {
-                service.unlinkCards(from, to);
-            } else {
-                service.linkCards(from, to);
+        if (service.board().hasLink(from, to)) {
+            if (!dialogs.confirm(i18n.text("process.unlink.confirm", arrowPairLabel(from, to)))) {
+                return;
             }
+            guarded(() -> {
+                service.unlinkCards(from, to);
+                refresh();
+            });
+            return;
+        }
+        guarded(() -> {
+            service.linkCards(from, to);
             refresh();
         });
+    }
+
+    /** ««A» → «B»» for the unlink confirmation (ids when a card is gone). */
+    private String arrowPairLabel(com.personalkanban.domain.board.CardId from,
+                                  com.personalkanban.domain.board.CardId to) {
+        return "\u00AB" + cardTitleOrId(from) + "\u00BB \u2192 \u00AB" + cardTitleOrId(to) + "\u00BB";
+    }
+
+    private String cardTitleOrId(com.personalkanban.domain.board.CardId cardId) {
+        return service.board().findCard(cardId)
+                .map(com.personalkanban.domain.board.Card::title)
+                .orElse(cardId.value());
     }
 
     /** Top arrows: adds a NEW card as predecessor/successor of the anchor. */

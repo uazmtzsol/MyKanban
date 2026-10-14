@@ -228,7 +228,12 @@ reiniciar; por defecto todas muestran la descripción.
 **Abrir el detalle:** doble clic sobre la tarjeta (§8).
 
 **Clic derecho en una tarjeta:** elegir el **modo de vista de esa tarjeta**
-(solo título / título + resumen / completa) o volver al **modo del tablero**.
+(solo título / título + resumen / completa) o volver al **modo del tablero**;
+**Reagendar** (hoy / mañana / semana próxima / lunes siguiente / quitar fecha);
+**🔔 Recordatorios…** (§8.1); **Proceso ▸**, que asigna **esta** tarjeta a
+cualquier proceso del tablero —o **Sin proceso** para sacarla— sin entrar en modo
+selección (sale marcado el proceso actual y no se pierde ninguna relación de
+precedencia).
 
 **Modo de vista de todas las tarjetas:** botón **☷** de la barra de
 herramientas (o **Ctrl+1 / Ctrl+2 / Ctrl+3**): ① solo título, ② título +
@@ -399,6 +404,11 @@ independiente de la columna.
 **Vista de procesos** (botón ⇄): muestra **una fila por proceso**, con sus
 tarjetas de izquierda a derecha unidas por flechas según el orden de
 precedencia. En cada tarjeta:
+
+- Las flechas **entre** tarjetas también se pueden pulsar: la **punteada**
+  (sugerida) enlaza las dos con **un clic**; la **gruesa** (ya enlazada) **pide
+  confirmación** antes de quitar la relación — así un clic accidental no borra
+  nada (el tooltip dice cuál es cuál).
 
 - 2 flechas **superiores**: crear una tarjeta **nueva** antes/después.
 - 2 flechas **inferiores**: enlazar una tarjeta **existente** antes/después.

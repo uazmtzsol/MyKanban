@@ -434,9 +434,12 @@ final class ProcessViewBuilder {
 
         // A fat, invisible copy of the curve is the click target: the
         // thin visible line alone would be fiddly to grab, drawing
-        // programs make their edges easy to pick.
+        // programs make their edges easy to pick. It spills into the
+        // gap between cards, so removing a link always asks first
+        // (T12 · N-8) and the tooltip says which of the two it is.
         Path hitArea = new Path();
         hitArea.getElements().setAll(curve.getElements());
+        hitArea.getStyleClass().add("process-edge-hit");
         hitArea.setStrokeWidth(16);
         hitArea.setStroke(Color.TRANSPARENT);
         hitArea.setFill(null);

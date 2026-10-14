@@ -68,8 +68,8 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 ### Fase 4 — Tarjetas (barra principal y lote)
 
-- [ ] **T9 · N-5** 🔄 **Asignar una tarjeta a un proceso sin modo selección**
-  (hoy solo en lote o dentro del editor). §6.2.
+- [x] **T9 · N-5** ✅ **Asignar una tarjeta a un proceso sin modo selección**
+  (menú contextual de la tarjeta → **Proceso ▸**; «Sin proceso» la saca). §6.2.
 - [ ] **T10 · N-4** ⬜ Botón **copiar / pegar tarjetas** (pega como tarjetas
   nuevas en la columna actual). §6.2.
 
@@ -77,8 +77,9 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 - [ ] **T11 · N-7 + N-9** ⬜ Vista de proceso: **nombre (y proceso) al crear
   tarjeta**; **limitar la selección** a las tarjetas del proceso. §6.4.
-- [ ] **T12 · N-8** 🐞 **Se borran las relaciones** al hacer clic en una flecha
-  de la vista de proyectos: investigar y corregir. §6.4.
+- [x] **T12 · N-8** ✅ 🐞 **Se borraban las relaciones** al hacer clic en una
+  flecha de la vista de procesos: ahora **pide confirmación** antes de quitarla.
+  §6.4.
 
 ### Fase 6 — Mejoras de producto (sesión 14 en curso)
 
@@ -212,6 +213,8 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 | 2026-10-13 | **T13 · B4** captura rápida con sintaxis | ✅ | `feat(capture): quick card capture with inline syntax` — `application/QuickCapture` (puro: `+etiqueta`, `!`/`*`, `@hoy/@mañana/@+3d/@ISO`, fecha inválida se queda en el título, signos dentro de palabras intactos) + `QuickCaptureDialog` (foco en el campo, **vista previa en vivo**, Enter crea y **Más opciones…** precarga el `CardForm` completo); el ➕ de la columna abre la captura rápida y **Ctrl+➕** / la entrada del menú de columna abren el diálogo completo. **Hallazgo:** la vista previa NO puede vivir en `QuickCapture` (necesita i18n y la capa `application` no puede depender de `ui`), así que el formateo está en el diálogo; el parseo sí es puro. `QuickCaptureTest` (13) + `QuickCaptureDialogTest` (4) → suite **488/488** |
 | 2026-10-13 | **T14 · B5** plantillas propias + purga de archivadas | ✅ | `feat(board): user templates and archived-card purge` — `application/BoardTemplate` (puro, JSON propio: columnas con color/WIP/hecho, procesos y modo de vista; **sin tarjetas**), persistido en `board.template.<nombre>`; `BoardService.templates/hasTemplate/saveAsTemplate/removeTemplate/createBoardFromTemplate`; menú **Tableros → Guardar como plantilla… / Plantillas → (aplicar · eliminar)** y las propias dentro del selector de «nuevo tablero». Purga **Tableros → Borrar tarjetas archivadas…** (`archivedCardCount`, `purgeArchivedCards`, adjuntos a la papelera). **Hallazgos:** ① el puerto `SettingsStore` no tenía `remove`, se añadió (SQLite + doble en memoria); ② `BoardColor` **no** es un enum sino un record con hex, así que la plantilla guarda el **hex** (soporta colores propios) y se relee con `fromStored`; ③ el undo es **por tablero**, así que la purga borra tablero a tablero (un paso de undo en cada uno) y restaura el tablero activo al terminar; ④ la vista previa de color de `WipLimit` va como entero (0 = ilimitado). `BoardTemplateTest` (4) + `ArchivedPurgeTest` (5) → suite **497/497** |
 | 2026-10-13 | **T15 · B7** color por etiqueta (cierra B9) | ✅ | `feat(labels): pick a color per label (closes B9)` — el gestor de etiquetas gana un selector de **color** (8 colores de la paleta + **Automático** = borra la regla) que escribe la regla de estilo para **claro y obscuro** (`setLabelStyle`/`clearLabelStyle`) con el color de texto calculado por contraste; `ui/LabelChipStyle` (puro) decide el chip: regla del usuario si existe, si no la clase por hash de siempre. **B9:** los nombres de color ya se traducen (`color.blue`…`color.gray` + `labels.color`/`labels.color.auto`) en el selector de color y en el gestor. **Hallazgo:** el catálogo y las reglas `ui.label.` ya existían (y se editan en Preferencias), así que el hueco era solo el chip + el gestor, no el almacenamiento. `LabelChipStyleTest` (5) → suite **502/502** |
+| 2026-10-14 | **T12 · N-8** bug de relaciones en la vista de procesos | ✅ | `fix(process-view)+feat(cards): ask before unlinking and assign a process from the card menu (T12 · N-8, T9 · N-5)` — el clic en un conector **enlazado** ya no borra la relación en silencio: pide confirmación (`process.unlink.confirm` con los dos títulos), mientras que el conector **sugerido** (punteado, no destructivo) sigue enlazando con un clic; el área de clic invisible de 16 px gana la clase `process-edge-hit` y su tooltip anuncia la confirmación. **Hipótesis descartada:** no había borrado múltiple (verificado en `Board.unlinkCards` y `computeLayout`); el problema era la acción destructiva a un clic de distancia, contra la regla §10. `ProcessViewLinkTest` (3) → suite **561/561** |
+| 2026-10-14 | **T9 · N-5** asignar proceso sin modo selección | ✅ | el mismo commit — submenú **Proceso ▸** en el menú contextual de la tarjeta: radios con los procesos del tablero y **Sin proceso** (marcado el actual), que asignan **solo esa tarjeta** en **1 undo** y **sin tocar los enlaces**; mismo origen de datos que la barra de lote (`CardViewBuilder.processMenu`) para que no diverjan. `CardProcessMenuTest` (4) → suite **565/565** |
 | 2026-10-14 | **T23 · B10** recordatorios programables por tarjeta (V11) | ✅ | `feat(reminders): per-card reminder calendar, notice window and card badge` (+ `docs:` del requisito/plan `c91125c` y `ff676aa` con dominio/servicio/repositorio) — `CardReminder` (un **momento**, no una regla) en `Card`/`Board`, `acknowledged` en el agregado, comandos `Add/Remove/Set/Acknowledge(+All)ReminderCommand` (1 undo el lote), `application/ReminderPlan` **puro** (`dueNow/dueOf/daily/weekly/schedule`), migración **V11** `card_reminder` con `on_time` NULL = todo el día, lectura/escritura + cascada en el repositorio, merge por id en `SyncMerge`; UI: `ui/ReminderCalendar` (puro) + `ReminderDialog` (calendario de días con ‹ ›, **Diario / Cada semana / Limpiar**, hora opcional validada), pestaña **Recordatorios** del detalle, entrada **🔔 Recordatorios…** del menú de tarjeta, **🔔 n** en el frente, banda `reminder-notice` y `ReminderNoticeWindow` (el mensaje con el título de la tarjeta: atendido / abrir / atender todo); el disparo se revisa **al arrancar y cada minuto** (`Timeline`). **Hallazgos:** ① adelantar/borrar el vencimiento dejaba recordatorios posteriores a la fecha límite → `Card.schedule` los descarta (undoable); ② re-guardar el calendario recreaba los momentos y perdía el «atendido» → `ReminderPlan.schedule` reutiliza día+hora y `Card` conserva el estado del id previo; ③ en i18n los textos con argumentos pasan por `MessageFormat` (`''` en francés **solo** en las claves con `{0}`). 43 tests nuevos (`ReminderDomainTest` 12, `ReminderCalendarTest` 9, `ReminderPlanTest` 8, `ReminderDialogTest` 8, `ReminderUiTest` 6, `SqliteReminderRoundTripTest` 3) → suite **558/558** |
 | 2026-10-13 | **T16 · B8** subtareas de un nivel (V10) | ✅ | `feat(checklist): one-level subtasks (V10)` — migración **V10** (`ALTER TABLE card_checklist_item ADD COLUMN parent_id TEXT` + índice, sin FK: la integridad la lleva el agregado); `ChecklistItem.parentId` (con constructor de 3 args para no tocar llamadas previas), `Card.addChecklistItem(text, parentId)` con **un solo nivel** validado, `checklistChildrenOf`/`subtaskCount`/`subtaskTotalCount`, **borrar un padre borra sus hijos** e indentar/desindentar (`setChecklistItemParent`) en 1 undo; `MoveChecklistItemCommand` + `BoardService.moveChecklistItem`; `SetChecklistFromLines` acepta **dos espacios = subtarea**; la UI del detalle pinta subtareas indentadas con su propio menú (**Añadir subtarea**, **Sangrar**, **Quitar sangría**) y el contador ☑ cubre ambos niveles; el merge de sync viaja con `parentId`. **Hallazgos:** ① `SyncMerge` construía `ChecklistItem` a 3 args, hizo falta migrar ese punto (el campo se mergea con LWW como los demás); ② añadir un componente al record habría roto 6 llamadas en tests: se añadió un constructor de 3 args equivalente a «sin padre»; ③ una fila sin `parent_id` (formato pre-V10) se lee como ítem de primer nivel. `ChecklistHierarchyTest` (7) + `SqliteChecklistSubtaskTest` (3) → suite **512/512** |
 
@@ -303,11 +306,24 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 - **T11 · N-9 — Limitar la selección a las del proceso.** *Hoy:* «elegir tarjeta
   existente» (`onProcessLinkExisting`) ofrece **todas**. *Pedido:* solo las del
   proceso actual.
-- **T12 · N-8 — Se borran relaciones al clic en una flecha.** 🐞 *Hipótesis a
-  comprobar:* `onArrangeArrow`/`onProcessLinkExisting` recrean los enlaces del
-  proceso y pierden los que no están en la nueva relación; o el refresco
-  recalcula el grafo y descarta enlaces fuera de la columna visible. Verificar
-  antes de tocar `ProcessViewBuilder`.
+- **T12 · N-8 — Se borran relaciones al clic en una flecha.** ✅ *Hecho
+  (2026-10-14).* **Hipótesis descartada:** verificado en el código que **no** hay
+  borrado múltiple — `Board.unlinkCards` quita solo ese par y `computeLayout` se
+  limita a contar los enlaces entre miembros, no los toca. **Causa real:** el
+  conector de un enlace existente lleva un **área de clic invisible de 16 px**
+  (`ProcessViewBuilder.connector`) y **un clic simple lo desenlazaba**, contra la
+  regla ya cerrada «acciones destructivas lejos del clic accidental» (§10);
+  además esa área invade el hueco de 72 px entre tarjetas, así que también
+  alcanzaba a un clic cerca del borde derecho de una tarjeta. **Corrección:** el
+  clic en un conector **enlazado** pide confirmación (`process.unlink.confirm`
+  con los dos títulos); el conector **sugerido** (punteado) sigue enlazando con
+  un clic porque no es destructivo; el tooltip lo anuncia y el área de clic lleva
+  la clase `process-edge-hit` (localizable en tests). **Tests:**
+  `ProcessViewLinkTest` (3) — el conector punteado enlaza de verdad con un clic
+  sobre la vista renderizada, el conector enlazado expone su área de clic y su
+  tooltip, y `onArrangeArrow` confirma **antes** de `unlinkCards`. Commit:
+  `fix(process-view)+feat(cards): ask before unlinking and assign a process
+  from the card menu (T12 · N-8, T9 · N-5)`.
 
 ### 6.5 T3 — N-10/N-11: ventana de detalle
 
@@ -745,7 +761,7 @@ Reglas de siempre (§2): hexagonal, i18n en los **5** bundles, sin dependencias
 nuevas, un **test que falle sin el cambio**, suite completa verde antes del
 commit y cierre documentado (docs + commit + push).
 
-#### T12 — N-8: las relaciones se borran al clic en una flecha 🐞
+#### T12 — N-8: las relaciones se borran al clic en una flecha ✅ hecho (2026-10-14)
 **Causa (verificada en el código, no es un borrado múltiple):** el conector de
 un enlace existente lleva un **área de clic invisible de 16 px**
 (`ProcessViewBuilder.connector`) y **un clic simple lo desenlaza**
@@ -768,9 +784,17 @@ su área de clic con clase y tooltip) + aserción de que `onArrangeArrow` confir
 **Criterio de hecho:** un clic accidental en una flecha no borra nada sin
 preguntar, y enlazar sigue costando un clic.
 
-#### T9 — N-5: asignar una tarjeta a un proceso sin modo selección
+#### T9 — N-5: asignar una tarjeta a un proceso sin modo selección ✅ hecho (2026-10-14)
 **Alcance:** hoy solo se puede en lote (modo selección) o dentro del formulario
-avanzado. Falta el gesto directo sobre la tarjeta actual.
+avanzado. Falta el gesto directo sobre la tarjeta actual. **Hecho:** submenú
+**Proceso ▸** en el menú contextual de la tarjeta (radios = procesos del tablero
++ «Sin proceso», marcado el actual), un solo paso de undo y **sin tocar las
+relaciones** de la tarjeta (la misma promesa que hace la barra de lote).
+`CardViewBuilder.processMenu` es la única fuente de esa lista, así que el menú de
+la tarjeta y la barra de lote no pueden divergir; `BoardController.onAssignProcessToCard`
+hace la asignación. **Tests:** `CardProcessMenuTest` (4: etiquetas y marcado del
+submenú, asignar + 1 Ctrl+Z, salir del proceso conserva los enlaces, el marcado
+sigue a la tarjeta). Commit: el mismo de T12 (una sola tanda de UX sobre la misma zona).
 **Diseño:** entrada **«Proceso ▸»** en el menú contextual de la tarjeta (y en el
 menú de teclado de la tarjeta actual, reutilizando el diálogo de proceso que ya
 usa el lote) con la lista de procesos del tablero + «Ninguno»; marcando actúa
