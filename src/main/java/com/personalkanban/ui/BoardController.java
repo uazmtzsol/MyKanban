@@ -29,6 +29,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
@@ -40,6 +41,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -135,6 +137,19 @@ public final class BoardController {
     private Menu viewMenu;
     private Menu labelsMenu;
     private Menu helpMenu;
+    // Session 16 (user request): the menu bar was reorganized — "Editar" and
+    // "Tarjetas" group the actions that used to live only in the toolbar /
+    // context menus, so the keyboard user (Alt) can reach them too.
+    private Menu editMenu;
+    private Menu cardsMenu;
+    // The card-view submenu of the "Ver" menu; kept to sync its radio dot.
+    private Menu cardViewMenu;
+    // Live views of the state shown by the "Ver" menu's check entries, so the
+    // menu can mark the current value each time it opens.
+    private CheckMenuItem archivedViewItem;
+    private CheckMenuItem darkModeItem;
+    // The filter bar's archived toggle; the "Ver" menu's entry mirrors it.
+    private ToggleButton archivedFilterToggle;
     private Label boardNameLabel;
     private HBox toolbarReference;
 
@@ -999,14 +1014,13 @@ public final class BoardController {
 
         // Archived cards are hidden by default (session 10); this toggle
         // brings them back without touching any data.
-        javafx.scene.control.ToggleButton archivedFilter = new javafx.scene.control.ToggleButton("\uD83D\uDDC4");
+        ToggleButton archivedFilter = new ToggleButton("\uD83D\uDDC4");
         archivedFilter.getStyleClass().addAll("tool-button", "filter-flag");
         archivedFilter.setSelected(showArchived);
         archivedFilter.setTooltip(new Tooltip(i18n.text("filter.archived.show")));
-        archivedFilter.setOnAction(e -> {
-            showArchived = archivedFilter.isSelected();
-            refresh();
-        });
+        archivedFilter.setOnAction(e -> setShowArchived(archivedFilter.isSelected()));
+        // The "Ver" menu's "show archived" entry mirrors this toggle (session 16).
+        archivedFilterToggle = archivedFilter;
 
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
                 importantFilter, urgentFilter, overdueFilter, dueTodayFilter, dueWeekFilter,
@@ -1518,6 +1532,12 @@ public final class BoardController {
         databaseMenu = new Menu(i18n.text("menu.database"));
         rebuildDatabaseMenu();
 
+        // Session 16 (user request): "Editar" groups the editing actions that
+        // only lived in the toolbar / shortcut map before (undo, redo, labels,
+        // archive, reset the per-card view overrides).
+        editMenu = new Menu(i18n.text("menu.edit"));
+        rebuildEditMenu();
+
         boardMenu = new Menu();
         boardMenu.textProperty().set(i18n.text("menu.boards"));
         rebuildBoardMenu();
@@ -1533,9 +1553,17 @@ public final class BoardController {
         // natural menus.
         // Session 13 (user request): a "Ver" menu, so both view modes are
         // reachable with the keyboard (Alt opens the menu bar) and each one
-        // carries its own accelerator.
+        // carries its own accelerator. It refreshes its check marks every time
+        // it opens, so it always shows the live value (session 16).
         viewMenu = new Menu(i18n.text("menu.view"));
+        viewMenu.setOnShowing(e -> syncViewMenu());
         rebuildViewMenu();
+        // Session 16 (user request): "Tarjetas" acts on the current card — the
+        // one a click or the arrow keys left selected — so its entries used to
+        // be reachable only from the card's context menu.
+        cardsMenu = new Menu(i18n.text("menu.cards"));
+        cardsMenu.setOnShowing(e -> rebuildCardsMenu());
+        rebuildCardsMenu();
         processMenu = new Menu(i18n.text("menu.processes"));
         rebuildProcessMenu();
         // Global labels: the vocabulary is shared by every board, so its
@@ -1544,8 +1572,130 @@ public final class BoardController {
         rebuildLabelsMenu();
         helpMenu = new Menu(i18n.text("menu.help"));
         rebuildHelpMenu();
-        return new MenuBar(databaseMenu, boardMenu, viewMenu, processMenu,
-                labelsMenu, languageMenu, helpMenu);
+        return new MenuBar(databaseMenu, editMenu, boardMenu, viewMenu, cardsMenu,
+                processMenu, labelsMenu, languageMenu, helpMenu);
+    }
+
+    /**
+     * "Editar" menu (session 16): undo/redo with their accelerators, the
+     * add/remove-labels dialog (Ctrl+L) and the archive toggle, both scoped to
+     * the selection or the current card, plus the reset of every per-card view
+     * override.
+     */
+    private void rebuildEditMenu() {
+        if (editMenu == null) {
+            return;
+        }
+        // Ctrl+Z / Ctrl+Shift+Z also live as scene accelerators (UndoRedoController);
+        // the MenuBar installs the identical action into the same scene map, so
+        // there is exactly one handler, and a disabled entry makes the key inert.
+        MenuItem undo = itemOf("menu.undo", undoRedo::undo);
+        undo.setAccelerator(javafx.scene.input.KeyCombination.valueOf("Shortcut+Z"));
+        undo.disableProperty().bind(undoRedo.canUndoProperty().not());
+        MenuItem redo = itemOf("menu.redo", undoRedo::redo);
+        redo.setAccelerator(javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+Z"));
+        redo.disableProperty().bind(undoRedo.canRedoProperty().not());
+        editMenu.getItems().setAll(
+                undo, redo,
+                new SeparatorMenuItem(),
+                itemOf("edit.labels", this::onLabelsForCurrentCards),
+                itemOf("card.archive.menu", this::onArchiveCurrentCards),
+                new SeparatorMenuItem(),
+                itemOf("edit.reset.cardview", this::onResetCardViewModes));
+    }
+
+    /**
+     * "Tarjetas" menu (session 16): the card context-menu actions, acting on
+     * the current card. Rebuilt each time it opens, so the enabled state and
+     * the checked process follow the card the user is on right now.
+     */
+    private void rebuildCardsMenu() {
+        if (cardsMenu == null) {
+            return;
+        }
+        com.personalkanban.domain.board.Card card = currentCard();
+        boolean hasCard = card != null;
+
+        MenuItem open = itemOf("card.open", this::onOpenFocusedCardDetail);
+        open.setDisable(!hasCard);
+        MenuItem edit = itemOf("card.edit", this::onEditFocusedCard);
+        edit.setDisable(!hasCard);
+
+        Menu schedule = CardViewBuilder.rescheduleMenu(i18n, this, card);
+        schedule.setDisable(!hasCard);
+
+        MenuItem reminders = itemOf("card.reminders.menu", this::onEditFocusedCardReminders);
+        reminders.setDisable(!hasCard || card.dueDate() == null);
+
+        Menu process;
+        if (hasCard) {
+            process = CardViewBuilder.processMenu(i18n, this, card);
+        } else {
+            process = new Menu(i18n.text("card.process.label"));
+            process.setDisable(true);
+        }
+
+        MenuItem archive = itemOf("card.archive.menu", this::onArchiveFocusedCard);
+        MenuItem export = itemOf("card.export.menu", this::onExportFocusedCard);
+        MenuItem transfer = itemOf("card.transfer.menu", this::onTransferFocusedCard);
+        MenuItem delete = itemOf("card.delete", this::onDeleteFocusedCard);
+        archive.setDisable(!hasCard);
+        export.setDisable(!hasCard);
+        transfer.setDisable(!hasCard);
+        delete.setDisable(!hasCard);
+
+        cardsMenu.getItems().setAll(
+                open, edit,
+                new SeparatorMenuItem(),
+                schedule, reminders, process,
+                new SeparatorMenuItem(),
+                archive, export, transfer,
+                new SeparatorMenuItem(),
+                delete);
+    }
+
+    /** The card the arrow keys / a click left current, or null. */
+    private com.personalkanban.domain.board.Card currentCard() {
+        return cardFocused == null
+                ? null
+                : service.board().findCard(cardFocused).orElse(null);
+    }
+
+    private void onOpenFocusedCardDetail() {
+        if (cardFocused != null) {
+            onOpenCardDetail(cardFocused);
+        }
+    }
+
+    private void onEditFocusedCardReminders() {
+        if (cardFocused != null) {
+            onEditReminders(cardFocused);
+        }
+    }
+
+    private void onArchiveFocusedCard() {
+        if (cardFocused != null) {
+            onToggleCardLabel(cardFocused,
+                    com.personalkanban.domain.board.Card.LABEL_ARCHIVED);
+        }
+    }
+
+    private void onExportFocusedCard() {
+        if (cardFocused != null) {
+            onExportCard(cardFocused);
+        }
+    }
+
+    private void onTransferFocusedCard() {
+        if (cardFocused != null) {
+            onTransferCardToBoard(cardFocused);
+        }
+    }
+
+    private void onDeleteFocusedCard() {
+        if (cardFocused != null) {
+            onRemoveCard(cardFocused);
+        }
     }
 
     private void rebuildDatabaseMenu() {
@@ -1573,6 +1723,14 @@ public final class BoardController {
                 new SeparatorMenuItem(),
                 itemOf("db.new", this::onNewDatabase),
                 itemOf("db.open", this::onOpenDatabase),
+                new SeparatorMenuItem(),
+                // Session 16 (user request): board import / export (JSON and
+                // PDF) and the conflict copies move here from the Boards menu —
+                // they act on files, which is what this menu is about.
+                itemOf("board.import", this::onImportBoard),
+                itemOf("board.export", this::onExportBoard),
+                itemOf("board.export.pdf", this::onExportBoardPdf),
+                itemOf("view.conflicts.menu", this::onShowConflicts),
                 new SeparatorMenuItem());
 
         MenuItem recentHeader = new MenuItem(i18n.text("db.recent"));
@@ -1614,13 +1772,7 @@ public final class BoardController {
                 itemOf("board.save.template", this::onSaveBoardTemplate),
                 templatesMenu(),
                 new SeparatorMenuItem(),
-                itemOf("cleanup.archived", this::onPurgeArchived),
-                new SeparatorMenuItem(),
-                itemOf("board.export", this::onExportBoard),
-                itemOf("board.export.pdf", this::onExportBoardPdf),
-                itemOf("board.import", this::onImportBoard),
-                new SeparatorMenuItem(),
-                itemOf("view.conflicts.menu", this::onShowConflicts));
+                itemOf("cleanup.archived", this::onPurgeArchived));
     }
 
     /** Rebuilds the (single-item) global label manager menu. */
@@ -1693,6 +1845,11 @@ public final class BoardController {
      * accelerator, so the mode can be chosen with the keyboard — either the
      * accelerator directly, or the menu itself (Alt, arrows, Enter). The active
      * mode carries the radio dot, like the active board / process filter.
+     *
+     * <p>Session 16 (user request): the card-view modes, the "show archived"
+     * toggle and dark mode joined it, so everything that changes what is on
+     * screen lives in one place. The check marks are refreshed on every open
+     * ({@code setOnShowing} in {@link #buildMenuBar()}).</p>
      */
     private void rebuildViewMenu() {
         if (viewMenu == null) {
@@ -1708,17 +1865,37 @@ public final class BoardController {
         processViewItem.setAccelerator(
                 javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+2"));
         processViewItem.setOnAction(e -> onSelectView(true));
+
+        cardViewMenu = new Menu(i18n.text("menu.cardview"));
+        for (CardViewSettings.Mode mode : CardViewSettings.Mode.values()) {
+            RadioMenuItem item = new RadioMenuItem(i18n.text(cardViewTextKey(mode)));
+            item.setUserData(mode);
+            item.setOnAction(e -> onSetBoardCardViewMode(mode));
+            cardViewMenu.getItems().add(item);
+        }
+
+        archivedViewItem = new CheckMenuItem(i18n.text("filter.archived.show"));
+        archivedViewItem.setOnAction(e -> setShowArchived(archivedViewItem.isSelected()));
+        darkModeItem = new CheckMenuItem(i18n.text("menu.dark.mode"));
+        darkModeItem.setOnAction(e -> onToggleDarkMode());
+
         // Session 14 (user request B1): the time report is a way of LOOKING at
         // the board, so it lives in the "Ver" menu next to the view modes —
         // no new top-level menu for a single entry.
         viewMenu.getItems().setAll(boardView, processViewItem,
                 new SeparatorMenuItem(),
+                cardViewMenu,
+                new SeparatorMenuItem(),
+                archivedViewItem,
+                new SeparatorMenuItem(),
                 itemOf("report.time", this::onShowTimeReport),
-                itemOf("search.menu", this::onGlobalSearch));
+                itemOf("search.menu", this::onGlobalSearch),
+                new SeparatorMenuItem(),
+                darkModeItem);
         syncViewMenu();
     }
 
-    /** Marks the radio item of the view mode currently on screen. */
+    /** Marks the radio/check items of the "Ver" menu with the live state. */
     private void syncViewMenu() {
         if (viewMenu == null) {
             return;
@@ -1729,6 +1906,32 @@ public final class BoardController {
                 radio.setSelected(wantsProcesses == processView);
             }
         }
+        if (cardViewMenu != null) {
+            for (MenuItem item : cardViewMenu.getItems()) {
+                if (item instanceof RadioMenuItem radio
+                        && radio.getUserData() instanceof CardViewSettings.Mode mode) {
+                    radio.setSelected(mode == cardViewSettings.boardDefault());
+                }
+            }
+        }
+        if (archivedViewItem != null) {
+            archivedViewItem.setSelected(showArchived);
+        }
+        if (darkModeItem != null) {
+            darkModeItem.setSelected(themeManager.isDark());
+        }
+    }
+
+    /** Shows/hides archived cards, keeping the menu entry and the toggle in sync. */
+    private void setShowArchived(boolean value) {
+        if (showArchived == value) {
+            return;
+        }
+        showArchived = value;
+        if (archivedFilterToggle != null) {
+            archivedFilterToggle.setSelected(value);
+        }
+        refresh();
     }
 
     /** Rebuilds the help menu contents (shortcuts reference lives here). */
@@ -3699,6 +3902,8 @@ public final class BoardController {
         rebuildProcessMenu();
         syncCardViewMenu();
         syncViewMenu();
+        // The "Tarjetas" menu follows the current card (session 16).
+        rebuildCardsMenu();
         undoRedo.sync();
         syncFilterBarVisibility();
         updateDueNotice();

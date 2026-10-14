@@ -49,7 +49,10 @@ class BoardCleanupTest {
                 .contains("Card.LABEL_ARCHIVED");
         assertThat(controller)
                 .as("the toggle must exist and repaint on change")
-                .contains("showArchived = archivedFilter.isSelected();");
+                .contains("ToggleButton archivedFilter = new ToggleButton(")
+                .contains("setShowArchived(archivedFilter.isSelected())")
+                .contains("private void setShowArchived(boolean value)")
+                .contains("showArchived = value;");
 
         assertThat(source("ColumnViewBuilder.java"))
                 .as("the renderer decides visibility through that filter")

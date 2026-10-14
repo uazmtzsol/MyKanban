@@ -59,6 +59,19 @@ This produces `target/personal-kanban.jar`: a fat jar bundling JavaFX and
 native libraries for **Windows, Linux and macOS**, plus SQLite natives. One
 jar runs on any OS with a plain Java 21+ — no JavaFX installation needed.
 
+## Native Windows installer
+
+```bat
+instalador.bat
+```
+
+Builds the jar above and wraps it with the JDK's **`jpackage`**, producing a
+double-click installer (`target\installer\...exe`) with an embedded runtime —
+no Java needed on the target machine. It needs a JDK 21+ (`jpackage`) and, for
+the `.exe` type, **WiX Toolset 3.x** on `PATH`; without WiX it falls back to a
+portable **app-image** (`target\installer\Personal Kanban\`). The portable
+launchers below are left untouched.
+
 ## Portable USB layout
 
 Copy these next to each other on the USB drive (or any folder):

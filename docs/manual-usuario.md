@@ -80,6 +80,19 @@ Los lanzadores:
 - guardan **todos** los datos en `data/` junto al jar (vía `-Dpk.data.dir`),
   así que no escriben nada en la máquina anfitriona.
 
+**Instalador nativo de Windows (`.exe`):**
+
+```bat
+instalador.bat
+```
+
+Construye el jar y lo empaqueta con **`jpackage`** (el propio JDK), dejando un
+instalador de doble clic en `target\installer\`. Requiere un **JDK 21+**
+(`jpackage`) y, para el tipo `.exe`, el **WiX Toolset 3.x** en el `PATH`; si WiX
+no está, el script genera una **app-image portátil** (sin instalación) con el
+runtime embebido. Los lanzadores portátiles `kanban.bat`/`kanban.sh` siguen
+intactos.
+
 También puedes lanzarlo a mano:
 
 ```bash
@@ -108,8 +121,22 @@ columnas y tarjetas pasan al tablero **«My Board»**.
 
 De arriba abajo:
 
-- **Barra de menús:** **Archivo**, **Tableros**, **Ver**,
-  **Procesos**, **Etiquetas**, **Idioma**, **Ayuda**.
+- **Barra de menús:** **Archivo**, **Editar**, **Tableros**, **Ver**,
+  **Tarjetas**, **Procesos**, **Etiquetas**, **Idioma**, **Ayuda**:
+  - **Archivo** — guardar ahora, preferencias, limpieza de adjuntos, sync
+    (estado, sincronizar ahora, configuración), crear/abrir base y bases
+    recientes, **importar/exportar tablero (JSON y PDF)**, copias de conflicto
+    y salir.
+  - **Editar** — **Deshacer** (Ctrl+Z), **Rehacer** (Ctrl+Shift+Z),
+    **añadir o quitar etiquetas** (Ctrl+L), **archivar/desarchivar** y
+    **restablecer las vistas de tarjeta**.
+  - **Ver** — modos de vista (**Tarjetas**/**Procesos**), **modo de vista de
+    tarjeta**, **mostrar archivadas**, informe de tiempo, búsqueda global y
+    **modo oscuro**.
+  - **Tarjetas** — actúa sobre la **tarjeta actual** (la seleccionada con el
+    ratón o las flechas): abrir detalle, editar, reprogramar fecha,
+    recordatorios, asignar proceso, archivar, exportar, mover a otro tablero y
+    eliminar.
 - **Barra de herramientas:**
   - 🔍 **Buscar en todos los tableros** (§10)
   - ⇄ **Cambiar entre kanban y procesos** (vista alternativa, §11)
@@ -155,8 +182,10 @@ Menú **Tableros**:
   interna de archivado en **todos** los tableros y, tras confirmar, las borra
   (sus archivos van a la papelera). El borrado se puede deshacer con
   **Ctrl+Z** en cada tablero afectado.
-- **Exportar tablero (JSON)...**, **Exportar tablero a PDF...**,
-  **Importar tablero (JSON)...** (§19).
+
+> **Importar/exportar** un tablero (**Exportar tablero (JSON)...**,
+> **Exportar tablero a PDF...**, **Importar tablero (JSON)...**) vive ahora en
+> el menú **Archivo** (§19).
 
 ## 6. Columnas
 
@@ -534,6 +563,8 @@ de la app:
   compartida como método de sincronización "en vivo" (ver §20).
 
 ## 19. Exportar e importar
+
+Las tres acciones viven en el menú **Archivo**:
 
 - **Exportar tablero (JSON)...** — guarda un tablero como `.json` portable
   (incluye columnas, tarjetas, notas, checklist, procesos, precedencias y

@@ -211,22 +211,7 @@ final class CardViewBuilder {
                     com.personalkanban.domain.board.Card.LABEL_ARCHIVED));
             viewMenu.getItems().add(archiveItem);
             // Session 15 (T5/B3): quick reschedule without opening the card.
-            // Each entry computes its date when it is used, so a window left
-            // open overnight still reschedules from the real "today".
-            Menu reschedule = new Menu(i18n.text("card.reschedule.menu"));
-            reschedule.getItems().add(rescheduleItem(i18n, board, card,
-                    "card.reschedule.today", day -> day));
-            reschedule.getItems().add(rescheduleItem(i18n, board, card,
-                    "card.reschedule.tomorrow", day -> day.plusDays(1)));
-            reschedule.getItems().add(rescheduleItem(i18n, board, card,
-                    "card.reschedule.next.week", day -> day.plusDays(7)));
-            reschedule.getItems().add(rescheduleItem(i18n, board, card,
-                    "card.reschedule.next.monday",
-                    day -> day.with(java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY))));
-            reschedule.getItems().add(new javafx.scene.control.SeparatorMenuItem());
-            reschedule.getItems().add(rescheduleItem(i18n, board, card,
-                    "card.reschedule.clear", day -> null));
-            viewMenu.getItems().add(reschedule);
+            viewMenu.getItems().add(rescheduleMenu(i18n, board, card));
             // T23 · B10: the reminder calendar of this card. Only cards with a
             // deadline can carry reminders, so the entry explains itself as
             // disabled instead of opening a calendar with nothing to pick.
@@ -293,6 +278,29 @@ final class CardViewBuilder {
         item.setSelected(selected);
         item.setOnAction(e -> action.run());
         return item;
+    }
+
+    /**
+     * The card's reschedule submenu (session 15 · T5/B3): quick dates that
+     * reschedule without opening the card. Each entry computes its date when
+     * it is used, so a window left open overnight still reschedules from the
+     * real "today". Shared by the card context menu and the Cards menu.
+     */
+    static Menu rescheduleMenu(I18n i18n, BoardController board, Card card) {
+        Menu menu = new Menu(i18n.text("card.reschedule.menu"));
+        menu.getItems().add(rescheduleItem(i18n, board, card,
+                "card.reschedule.today", day -> day));
+        menu.getItems().add(rescheduleItem(i18n, board, card,
+                "card.reschedule.tomorrow", day -> day.plusDays(1)));
+        menu.getItems().add(rescheduleItem(i18n, board, card,
+                "card.reschedule.next.week", day -> day.plusDays(7)));
+        menu.getItems().add(rescheduleItem(i18n, board, card,
+                "card.reschedule.next.monday",
+                day -> day.with(java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY))));
+        menu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
+        menu.getItems().add(rescheduleItem(i18n, board, card,
+                "card.reschedule.clear", day -> null));
+        return menu;
     }
 
     /**

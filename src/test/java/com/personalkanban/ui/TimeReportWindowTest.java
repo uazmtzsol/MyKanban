@@ -11,8 +11,6 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
-import javafx.scene.control.RadioMenuItem;
-import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableView;
 import javafx.stage.Stage;
@@ -125,13 +123,12 @@ class TimeReportWindowTest {
         return result.get();
     }
 
-    /** The report entry the "Ver" menu carries (its only non-radio item). */
+    /** The report entry the "Ver" menu carries (found by its i18n text). */
     private MenuItem reportMenuItem(MenuBar bar) {
         return bar.getMenus().stream()
                 .filter(menu -> i18n.text("menu.view").equals(menu.getText()))
                 .flatMap(menu -> menu.getItems().stream())
-                .filter(item -> !(item instanceof RadioMenuItem))
-                .filter(item -> !(item instanceof SeparatorMenuItem))
+                .filter(item -> i18n.text("report.time").equals(item.getText()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no report entry in the view menu"));
     }

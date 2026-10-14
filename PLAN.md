@@ -13,10 +13,12 @@
 > la fila en la **bitácora** (§3) y **commit + push**. Se documenta **antes** de
 > cerrar la sesión.
 >
-> **Estado (2026-10-13):** rama `ImprovementsV1`; suite **455/455 OK** (1 skip:
-> endpoint PHP sin servidor); migraciones hasta **V10**. Documentación
-> consolidada, **T1–T6 hechos** (fases 1–2 y el scroll de columna); siguiente:
-> **T7** (qué muestra cada tarjeta, §2/§6.7).
+> **Estado (2026-10-14):** rama `ImprovementsV1`; suite **589/589 OK** (1 skip:
+> endpoint PHP sin servidor); migraciones hasta **V11**. Documentación
+> consolidada; hechos **T1–T9, T12–T16, T23** y **T21a** (instalador
+> `jpackage`); reordenado el **menú principal** (N-15). Siguiente por prioridad:
+> **T17** (backup/integridad, §8.1), luego **T10/T11**, **T18/T19**, **T22**,
+> **T20** y **T21b**.
 
 ---
 
@@ -103,7 +105,9 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
   prueba automática del **foco inicial de los diálogos**. §8.2.
 - [ ] **T20 · H-4 + H-5** ⬜ Sync: `device_id` (3.2), *fractional index* (3.3),
   sync automático (3.4), outbox/deltas, lápidas, cifrado. §8.3.
-- [ ] **T21 · H-6** ⬜ **Empaquetado nativo** (`jpackage`) + auto-actualización.
+- [x] **T21a · H-6** ✅ **Empaquetado nativo** (`jpackage`): `instalador.bat`
+  reproducible (app-image si no hay WiX; `.exe` con WiX). §8.3.
+- [ ] **T21b · H-6** ⬜ **Auto-actualización** (solo si el usuario la quiere).
   §8.3.
 - [ ] **T22 · H-1** ⬜ Confirmar si la **búsqueda en el tablero activo** (fase B
   histórica) se da por cerrada con **B2** (búsqueda global). §8.4.
@@ -186,7 +190,8 @@ empaquetado).
 | T18 | H-7/H-8 logging + JaCoCo | 🟡 Media | no | bajo |
 | T19 | H-11/H-10 ayuda + foco | 🔵 Baja | no | bajo |
 | T20 | H-4/H-5 sync avanzado | 🔵 Baja | **sí** | alto |
-| T21 | H-6 jpackage | 🔵 Baja | no | medio |
+| T21a | H-6 jpackage (instalador) | 🔵 Baja | no | bajo |
+| T21b | H-6 auto-actualización | 🔵 Baja | no | medio |
 | T22 | H-1 confirmar fase B | — | no | — |
 
 El detalle de alcance/archivos/tests de **T1–T12** está en §6 y en las entradas
@@ -217,6 +222,7 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 | 2026-10-14 | **T9 · N-5** asignar proceso sin modo selección | ✅ | el mismo commit — submenú **Proceso ▸** en el menú contextual de la tarjeta: radios con los procesos del tablero y **Sin proceso** (marcado el actual), que asignan **solo esa tarjeta** en **1 undo** y **sin tocar los enlaces**; mismo origen de datos que la barra de lote (`CardViewBuilder.processMenu`) para que no diverjan. `CardProcessMenuTest` (4) → suite **565/565** |
 | 2026-10-14 | **T23 · B10** recordatorios programables por tarjeta (V11) | ✅ | `feat(reminders): per-card reminder calendar, notice window and card badge` (+ `docs:` del requisito/plan `c91125c` y `ff676aa` con dominio/servicio/repositorio) — `CardReminder` (un **momento**, no una regla) en `Card`/`Board`, `acknowledged` en el agregado, comandos `Add/Remove/Set/Acknowledge(+All)ReminderCommand` (1 undo el lote), `application/ReminderPlan` **puro** (`dueNow/dueOf/daily/weekly/schedule`), migración **V11** `card_reminder` con `on_time` NULL = todo el día, lectura/escritura + cascada en el repositorio, merge por id en `SyncMerge`; UI: `ui/ReminderCalendar` (puro) + `ReminderDialog` (calendario de días con ‹ ›, **Diario / Cada semana / Limpiar**, hora opcional validada), pestaña **Recordatorios** del detalle, entrada **🔔 Recordatorios…** del menú de tarjeta, **🔔 n** en el frente, banda `reminder-notice` y `ReminderNoticeWindow` (el mensaje con el título de la tarjeta: atendido / abrir / atender todo); el disparo se revisa **al arrancar y cada minuto** (`Timeline`). **Hallazgos:** ① adelantar/borrar el vencimiento dejaba recordatorios posteriores a la fecha límite → `Card.schedule` los descarta (undoable); ② re-guardar el calendario recreaba los momentos y perdía el «atendido» → `ReminderPlan.schedule` reutiliza día+hora y `Card` conserva el estado del id previo; ③ en i18n los textos con argumentos pasan por `MessageFormat` (`''` en francés **solo** en las claves con `{0}`). 43 tests nuevos (`ReminderDomainTest` 12, `ReminderCalendarTest` 9, `ReminderPlanTest` 8, `ReminderDialogTest` 8, `ReminderUiTest` 6, `SqliteReminderRoundTripTest` 3) → suite **558/558** |
 | 2026-10-13 | **T16 · B8** subtareas de un nivel (V10) | ✅ | `feat(checklist): one-level subtasks (V10)` — migración **V10** (`ALTER TABLE card_checklist_item ADD COLUMN parent_id TEXT` + índice, sin FK: la integridad la lleva el agregado); `ChecklistItem.parentId` (con constructor de 3 args para no tocar llamadas previas), `Card.addChecklistItem(text, parentId)` con **un solo nivel** validado, `checklistChildrenOf`/`subtaskCount`/`subtaskTotalCount`, **borrar un padre borra sus hijos** e indentar/desindentar (`setChecklistItemParent`) en 1 undo; `MoveChecklistItemCommand` + `BoardService.moveChecklistItem`; `SetChecklistFromLines` acepta **dos espacios = subtarea**; la UI del detalle pinta subtareas indentadas con su propio menú (**Añadir subtarea**, **Sangrar**, **Quitar sangría**) y el contador ☑ cubre ambos niveles; el merge de sync viaja con `parentId`. **Hallazgos:** ① `SyncMerge` construía `ChecklistItem` a 3 args, hizo falta migrar ese punto (el campo se mergea con LWW como los demás); ② añadir un componente al record habría roto 6 llamadas en tests: se añadió un constructor de 3 args equivalente a «sin padre»; ③ una fila sin `parent_id` (formato pre-V10) se lee como ítem de primer nivel. `ChecklistHierarchyTest` (7) + `SqliteChecklistSubtaskTest` (3) → suite **512/512** |
+| 2026-10-14 | **N-15** menú principal reordenado (acción por tarea) + **T21a · H-6** `instalador.bat` | ✅ | `feat(ui): reorganize the main menu and add a jpackage installer` — la barra pasa a **Archivo · Editar · Tableros · Ver · Tarjetas · Procesos · Etiquetas · Idioma · Ayuda**; **Editar** agrupa deshacer/rehacer (`Ctrl+Z`/`Ctrl+Shift+Z`), etiquetas, archivar en lote y «restablecer vistas de tarjeta»; **Ver** añade el submenú **Vista de tarjeta** (3 modos, `Ctrl+1/2/3`), el toggle **mostrar archivadas** y **modo oscuro**; **Tarjetas** sube a la barra todas las acciones del menú contextual de la tarjeta (abrir, editar, reagendar, recordatorios, proceso, archivar, exportar, transferir, borrar), reconstruidas con `setOnShowing` según la tarjeta actual (deshabilitadas sin tarjeta); **importar/exportar/PDF** y el **visor de conflictos** se mueven a **Archivo** (antes en Tableros). Los lanzadores portátiles no cambian. `instalador.bat` (jpackage: app-image sin WiX, `.exe` con WiX). `MainMenuStructureTest` (5) + `TimeReportWindowTest`/`BoardCleanupTest` actualizados → suite **589/589** (1 skip) |
 
 ---
 
@@ -237,7 +243,7 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 | Ayuda | F1 con la tabla de atajos configurables; menú Ver (tablero/proceso) |
 | Persistencia | Diario de rollback (sin `-wal`/`-shm`); cierre limpio; undo/redo persistente |
 | Sync | Merge 3-vías, copias de conflicto, «Sincronizar ahora», visor de copias, tests de propiedades |
-| Distribución | Icono propio; launchers portables; CI en GitHub Actions |
+| Distribución | Icono propio; launchers portables; **`instalador.bat`** (jpackage: app-image sin WiX, `.exe` con WiX); CI en GitHub Actions |
 | Eliminado | Imagen de fondo de la app (S11-1) |
 
 ---
@@ -735,8 +741,10 @@ alterna** el estado (y el handler lo ve ya alternado), pero **no hace nada en un
   en segundo plano con backoff (3.4).
 - **H-5**: outbox/deltas en vez de snapshot, lápidas con retención, cifrado del
   payload remoto.
-- **H-6**: empaquetado nativo (`jpackage`) + auto-actualización; hoy es fat jar +
-  `.bat`/`.sh`.
+- **H-6**: empaquetado nativo (`jpackage`) **hecho (T21a):** `instalador.bat`
+  construye el jar y lo empaqueta (app-image sin WiX; `.exe` con WiX), con los
+  launchers portátiles intactos; queda pendiente solo la **auto-actualización**
+  (T21b).
 
 ### 8.4 T22 y reversiones a anotar
 
@@ -805,6 +813,34 @@ sobre la tarjeta actual, sin entrar en modo selección. Reutiliza
 **Tests:** servicio (asignar sin selección = 1 undo), UI (el menú de la tarjeta
 ofrece la entrada y la tarjeta queda asignada).
 **Criterio:** una tarjeta de la columna se asigna a un proceso sin marcar nada.
+
+#### N-15 — Reorganizar el menú principal ✅ hecho (2026-10-14)
+**Pedido:** acciones que solo vivían en la barra de herramientas o en el menú
+contextual de la tarjeta no tenían entrada en el menú de la app, y el menú
+**Tableros** mezclaba asuntos de archivo con asuntos de tablero.
+**Hecho:** barra = **Archivo · Editar · Tableros · Ver · Tarjetas · Procesos ·
+Etiquetas · Idioma · Ayuda**.
+- **Editar** (menú nuevo): deshacer (`Ctrl+Z`), rehacer (`Ctrl+Shift+Z`),
+  etiquetas, archivar en lote y «restablecer vistas de tarjeta».
+- **Ver**: + submenú **Vista de tarjeta** (3 modos, `Ctrl+1/2/3`), toggle
+  **mostrar archivadas** y **modo oscuro** (sincronizado con el botón de la
+  barra de filtros vía `setShowArchived`, que ya no puede desincronizarse).
+- **Tarjetas** (menú nuevo): abrir detalle, editar, reagendar, recordatorios,
+  proceso, archivar, exportar, transferir y borrar —todas las del menú
+  contextual—, reconstruidas con `Menu.setOnShowing` y **deshabilitadas** si no
+  hay tarjeta actual.
+- **Archivo**: recibe **importar/exportar (JSON/PDF)** y el **visor de
+  conflictos** (antes en Tableros).
+- i18n ×5 (`menu.edit`, `menu.cards`, `menu.undo`, `menu.redo`, `menu.cardview`,
+  `menu.dark.mode`, `edit.labels`, `edit.reset.cardview`, `card.open`).
+**Archivos:** `ui/BoardController` (`buildMenuBar`, `rebuildEditMenu`,
+`rebuildCardsMenu`, `rebuildViewMenu`, `syncViewMenu`, `setShowArchived`,
+`rebuildDatabaseMenu`, `buildFilterBar`, `refresh`), `ui/CardViewBuilder`
+(`rescheduleMenu` extraído), i18n ×5.
+**Tests:** `MainMenuStructureTest` (5: orden de menús, agrupación de Editar,
+opciones de Ver + 3 radios de vista, Tarjetas deshabilitado/habilitado por
+tarjeta actual, acciones del submenú) + `TimeReportWindowTest`/`BoardCleanupTest`
+actualizados → suite **589/589** (1 skip).
 
 #### T17 — H-2 + H-3: backup automático rotativo + integridad (🟠 prioridad real)
 **Alcance:** ① copia de seguridad de la BD **al arrancar** (y antes de
@@ -905,6 +941,14 @@ actualización. Requiere la toolchain (`jpackage` está en el JDK 25 local) y un
 decisión de distribución (¿firma? ¿GitHub Releases?).
 **Criterio mínimo:** un instalador reproducible por plataforma con los launchers
 actuales intactos; la auto-actualización, solo si el usuario la quiere.
+**Estado (T21a ✅ hecho):** `instalador.bat` (raíz) hace `mvn -Pportable
+-DskipTests package` → stage `target\jpackage-input` → `jpackage`. Con WiX 3.x
+genera un `.exe` de doble clic; **sin WiX** cae a **app-image** (`--type
+app-image`), con el runtime embebido y sin Java en la máquina destino. Sale en
+`target\installer\`. Usa `--main-class com.personalkanban.Launcher` y
+`--java-options "--enable-native-access=ALL-UNNAMED"`; icono opcional en
+`src\main\resources\icons\app.ico`. Validado de extremo a extremo (app-image).
+**T21b (auto-actualización):** pendiente.
 
 #### C-1…C-5 (conversación, no implementar sin respuesta)
 C-1 import con *merge*; C-2 impresión de tableros; C-3 bandeja del sistema para
