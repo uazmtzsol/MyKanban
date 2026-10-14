@@ -7,6 +7,7 @@ import com.personalkanban.domain.board.BoardId;
 import com.personalkanban.domain.board.BoardMemento;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.CardLink;
+import com.personalkanban.domain.board.CardReminder;
 import com.personalkanban.domain.board.CardSnapshot;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
@@ -24,6 +25,7 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -263,6 +265,10 @@ public final class SqliteBoardRepository implements BoardRepository {
                 INSERT INTO card_checklist_item (id, card_id, position, text, done, parent_id)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """;
+        String reminderSql = """
+                INSERT INTO card_reminder (id, card_id, on_date, on_time, acknowledged)
+                VALUES (?, ?, ?, ?, ?)
+                """;
         String timelineSql = """
                 INSERT INTO timeline (id, card_id, started_at, ended_at, comment)
                 VALUES (?, ?, ?, ?, ?)
@@ -277,6 +283,7 @@ public final class SqliteBoardRepository implements BoardRepository {
         try (PreparedStatement columnStatement = database.connection().prepareStatement(columnSql);
              PreparedStatement cardStatement = database.connection().prepareStatement(cardSql);
              PreparedStatement checklistStatement = database.connection().prepareStatement(checklistSql);
+             PreparedStatement reminderStatement = database.connection().prepareStatement(reminderSql);
              PreparedStatement timelineStatement = database.connection().prepareStatement(timelineSql);
              PreparedStatement processStatement = database.connection().prepareStatement(processSql);
              PreparedStatement linkStatement = database.connection().prepareStatement(linkSql)) {
@@ -289,6 +296,7 @@ public final class SqliteBoardRepository implements BoardRepository {
                     bindCard(cardStatement, card, column.id(), cardIndex++);
                     cardStatement.addBatch();
                     bindChecklistItems(checklistStatement, card);
+                    bindReminders(reminderStatement, card);
                 }
             }
             for (TimelineEntry entry : board.timeline()) {
@@ -313,12 +321,13 @@ public final class SqliteBoardRepository implements BoardRepository {
                 linkStatement.addBatch();
             }
             // FK order matters: processes first (cards reference them), then
-            // columns, cards, their checklists/timeline, and finally the links
-            // (which reference cards).
+            // columns, cards, their checklists/reminders/timeline, and finally
+            // the links (which reference cards).
             processStatement.executeBatch();
             columnStatement.executeBatch();
             cardStatement.executeBatch();
             checklistStatement.executeBatch();
+            reminderStatement.executeBatch();
             timelineStatement.executeBatch();
             linkStatement.executeBatch();
         }
@@ -341,6 +350,22 @@ public final class SqliteBoardRepository implements BoardRepository {
             statement.setString(4, item.text());
             statement.setInt(5, item.done() ? 1 : 0);
             statement.setString(6, item.parentId());
+            statement.addBatch();
+        }
+    }
+
+    /** Reminder moments of one card (T23 · B10). */
+    private void bindReminders(PreparedStatement statement, CardSnapshot card) throws SQLException {
+        for (CardReminder reminder : card.reminders()) {
+            statement.setString(1, reminder.id());
+            statement.setString(2, card.id().value());
+            statement.setString(3, reminder.date().toString()); // ISO-8601
+            if (reminder.time() == null) {
+                statement.setNull(4, Types.VARCHAR);
+            } else {
+                statement.setString(4, reminder.time().toString());
+            }
+            statement.setInt(5, reminder.acknowledged() ? 1 : 0);
             statement.addBatch();
         }
     }
@@ -470,7 +495,8 @@ public final class SqliteBoardRepository implements BoardRepository {
                             Instant.ofEpochMilli(resultSet.getLong("created_at")),
                             readNotes(resultSet),
                             readChecklist(cardId),
-                            processId == null ? null : new ProcessId(processId)));
+                            processId == null ? null : new ProcessId(processId),
+                            readReminders(cardId)));
                 }
             }
         } catch (SQLException e) {
@@ -506,6 +532,31 @@ public final class SqliteBoardRepository implements BoardRepository {
             throw new DataAccessException("Could not load checklist of card " + cardId, e);
         }
         return items;
+    }
+
+    /** Reminder moments of one card, in stored (chronological) order. */
+    private List<CardReminder> readReminders(CardId cardId) {
+        List<CardReminder> reminders = new ArrayList<>();
+        String sql = """
+                SELECT id, on_date, on_time, acknowledged FROM card_reminder
+                WHERE card_id = ? ORDER BY on_date, on_time
+                """;
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
+            statement.setString(1, cardId.value());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    String time = resultSet.getString("on_time");
+                    reminders.add(new CardReminder(
+                            resultSet.getString("id"),
+                            LocalDate.parse(resultSet.getString("on_date")),
+                            time == null || time.isBlank() ? null : LocalTime.parse(time),
+                            resultSet.getInt("acknowledged") != 0));
+                }
+            }
+        } catch (SQLException e) {
+            throw new DataAccessException("Could not load reminders of card " + cardId, e);
+        }
+        return reminders;
     }
 
     private LocalDate readDueDate(ResultSet resultSet) throws SQLException {

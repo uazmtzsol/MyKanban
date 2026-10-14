@@ -2,7 +2,9 @@ package com.personalkanban.domain.board;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -23,6 +25,8 @@ public final class Card {
     /** Upper bound of a label name; public because the global catalog validates against it. */
     public static final int MAX_LABEL_LENGTH = 40;
     private static final int MAX_CHECKLIST_ITEMS = 50;
+    /** Upper bound of reminder moments per card (keeps export/sync payloads sane). */
+    public static final int MAX_REMINDERS = 200;
 
     /**
      * System labels with one-click affordances (star = important, bang =
@@ -55,6 +59,8 @@ public final class Card {
     private LocalDate dueDate;
     private List<String> labels = List.of();
     private final List<ChecklistItem> checklist = new ArrayList<>();
+    /** Reminder moments of this card (T23 · B10), kept in chronological order. */
+    private final List<CardReminder> reminders = new ArrayList<>();
     private ProcessId processId;
     private final Timeline timeline;
     private final Instant createdAt;
@@ -157,6 +163,126 @@ public final class Card {
     void adoptChecklistItem(ChecklistItem item) {
         Objects.requireNonNull(item, "item");
         checklist.add(item);
+    }
+
+    // ------------------------------------------------------------------
+    // Reminders (T23 · B10: programmable moments on cards with a due date)
+    // ------------------------------------------------------------------
+
+    /** Reminder moments in chronological order (immutable snapshot). */
+    public List<CardReminder> reminders() {
+        return List.copyOf(reminders);
+    }
+
+    /**
+     * Adds a reminder moment. Only cards with a due date accept reminders, and
+     * a moment after that due date is rejected — the calendar the user asked
+     * for runs from today to the due date.
+     */
+    CardReminder addReminder(LocalDate date, LocalTime time) {
+        if (dueDate == null) {
+            throw new IllegalArgumentException(
+                    "A card needs a due date before it can carry reminders");
+        }
+        Objects.requireNonNull(date, "Reminder date must not be null");
+        if (date.isAfter(dueDate)) {
+            throw new IllegalArgumentException(
+                    "A reminder cannot be after the due date (" + dueDate + "): " + date);
+        }
+        if (reminders.size() >= MAX_REMINDERS) {
+            throw new IllegalArgumentException(
+                    "A card may have at most " + MAX_REMINDERS + " reminders");
+        }
+        boolean duplicate = reminders.stream()
+                .anyMatch(existing -> existing.date().equals(date)
+                        && Objects.equals(existing.time(), time));
+        if (duplicate) {
+            throw new IllegalArgumentException("Duplicate reminder: " + date);
+        }
+        CardReminder reminder = CardReminder.of(date, time);
+        reminders.add(reminder);
+        reminders.sort(CardReminder.ORDER);
+        return reminder;
+    }
+
+    void removeReminder(String reminderId) {
+        if (!reminders.removeIf(reminder -> reminder.id().equals(reminderId))) {
+            throw new IllegalArgumentException("Unknown reminder: " + reminderId);
+        }
+    }
+
+    /** Marks one reminder as attended (or back to pending). */
+    void acknowledgeReminder(String reminderId, boolean acknowledged) {
+        for (int i = 0; i < reminders.size(); i++) {
+            if (reminders.get(i).id().equals(reminderId)) {
+                reminders.set(i, reminders.get(i).withAcknowledged(acknowledged));
+                return;
+            }
+        }
+        throw new IllegalArgumentException("Unknown reminder: " + reminderId);
+    }
+
+    /** Marks every reminder of the card as attended. */
+    void acknowledgeAllReminders() {
+        reminders.replaceAll(reminder -> reminder.withAcknowledged(true));
+    }
+
+    /**
+     * Replaces the whole reminder list, which is how the calendar dialog saves
+     * in a single undoable step. Every moment is validated again (due date
+     * required, nothing after it, no duplicates, cap) and the kept ids keep
+     * whatever {@code acknowledged} state they already had.
+     */
+    void replaceReminders(List<CardReminder> newReminders) {
+        if (newReminders == null || newReminders.isEmpty()) {
+            reminders.clear();
+            return;
+        }
+        if (dueDate == null) {
+            throw new IllegalArgumentException(
+                    "A card needs a due date before it can carry reminders");
+        }
+        if (newReminders.size() > MAX_REMINDERS) {
+            throw new IllegalArgumentException(
+                    "A card may have at most " + MAX_REMINDERS + " reminders");
+        }
+        List<CardReminder> rebuilt = new ArrayList<>();
+        for (CardReminder reminder : newReminders) {
+            Objects.requireNonNull(reminder, "reminder");
+            if (reminder.date().isAfter(dueDate)) {
+                throw new IllegalArgumentException(
+                        "A reminder cannot be after the due date (" + dueDate + "): "
+                                + reminder.date());
+            }
+            boolean duplicate = rebuilt.stream()
+                    .anyMatch(existing -> existing.date().equals(reminder.date())
+                            && Objects.equals(existing.time(), reminder.time()));
+            if (duplicate) {
+                throw new IllegalArgumentException("Duplicate reminder: " + reminder.date());
+            }
+            Optional<CardReminder> stored = reminders.stream()
+                    .filter(existing -> existing.id().equals(reminder.id()))
+                    .findFirst();
+            rebuilt.add(stored.map(previous -> reminder.withAcknowledged(previous.acknowledged()))
+                    .orElse(reminder));
+        }
+        rebuilt.sort(CardReminder.ORDER);
+        reminders.clear();
+        reminders.addAll(rebuilt);
+    }
+
+    /** How many reminders are still pending (not attended yet). */
+    public long pendingReminderCount() {
+        return reminders.stream().filter(reminder -> !reminder.acknowledged()).count();
+    }
+
+    /**
+     * Re-adopts a stored reminder (persistence/undo restore): no validation, so
+     * any snapshot stays loadable, and the list keeps its order.
+     */
+    void adoptReminder(CardReminder reminder) {
+        reminders.add(Objects.requireNonNull(reminder, "reminder"));
+        reminders.sort(CardReminder.ORDER);
     }
 
     void renameChecklistItem(String itemId, String newText) {

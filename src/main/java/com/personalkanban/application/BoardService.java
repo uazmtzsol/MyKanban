@@ -13,7 +13,10 @@ import com.personalkanban.application.command.CommentTimeEntryCommand;
 import com.personalkanban.application.command.ConvertChecklistItemCommand;
 import com.personalkanban.application.command.EditCardCommand;
 import com.personalkanban.application.command.EditColumnCommand;
+import com.personalkanban.application.command.AcknowledgeAllRemindersCommand;
+import com.personalkanban.application.command.AcknowledgeReminderCommand;
 import com.personalkanban.application.command.AddChecklistItemCommand;
+import com.personalkanban.application.command.AddReminderCommand;
 import com.personalkanban.application.command.AddLabelsCommand;
 import com.personalkanban.application.command.LinkCardsCommand;
 import com.personalkanban.application.command.MoveCardCommand;
@@ -27,7 +30,9 @@ import com.personalkanban.application.command.RemoveChecklistItemCommand;
 import com.personalkanban.application.command.ToggleChecklistItemCommand;
 import com.personalkanban.application.command.RenameChecklistItemCommand;
 import com.personalkanban.application.command.RemoveProcessCommand;
+import com.personalkanban.application.command.RemoveReminderCommand;
 import com.personalkanban.application.command.RescheduleCardCommand;
+import com.personalkanban.application.command.SetRemindersCommand;
 import com.personalkanban.application.command.ToggleLabelCommand;
 import com.personalkanban.application.command.RemoveCardsCommand;
 import com.personalkanban.application.command.RemoveLabelsCommand;
@@ -57,6 +62,7 @@ import com.personalkanban.domain.board.BoardMemento;
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardAdded;
 import com.personalkanban.domain.board.CardId;
+import com.personalkanban.domain.board.CardReminder;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.DependencyGuard;
@@ -73,6 +79,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -579,6 +587,61 @@ public final class BoardService {
     public CardId convertChecklistItemToCard(CardId cardId, String itemId) {
         ConvertChecklistItemCommand command = new ConvertChecklistItemCommand(cardId, itemId);
         return execute(command, command::createdCardId);
+    }
+
+    // ------------------------------------------------------------------
+    // Card reminders (T23 · B10)
+    // ------------------------------------------------------------------
+
+    /** Adds one reminder moment to a card; returns the created reminder's id. */
+    public String addReminder(CardId cardId, LocalDate date, LocalTime time) {
+        AddReminderCommand command = new AddReminderCommand(cardId, date, time);
+        return execute(command, command::createdReminderId);
+    }
+
+    /** Removes one reminder moment of a card, undoable. */
+    public void removeReminder(CardId cardId, String reminderId) {
+        execute(new RemoveReminderCommand(cardId, reminderId));
+    }
+
+    /** Marks one reminder as attended (or pending again), undoable. */
+    public void acknowledgeReminder(CardId cardId, String reminderId, boolean acknowledged) {
+        execute(new AcknowledgeReminderCommand(cardId, reminderId, acknowledged));
+    }
+
+    /**
+     * Marks every reminder of the given cards as attended in one undoable step
+     * (the startup notice's "marcar todo").
+     */
+    public void acknowledgeAllReminders(List<CardId> cardIds) {
+        if (cardIds == null || cardIds.isEmpty()) {
+            return;
+        }
+        execute(new AcknowledgeAllRemindersCommand(cardIds));
+    }
+
+    /**
+     * Replaces a card's whole reminder schedule in a single undoable step (what
+     * the calendar dialog's Save does).
+     */
+    public void setReminders(CardId cardId, List<CardReminder> reminders) {
+        execute(new SetRemindersCommand(cardId, reminders));
+    }
+
+    /** Reminder moments of one card, chronological (read-only view). */
+    public List<CardReminder> remindersOf(CardId cardId) {
+        return activeBoard.findCard(cardId)
+                .map(Card::reminders)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown card: " + cardId));
+    }
+
+    /**
+     * Reminders that have come due and are still pending, oldest first. The
+     * caller passes "now", so the notice is testable and the app can also ask
+     * the question again after running for hours.
+     */
+    public List<ReminderPlan.Due> dueReminders(LocalDateTime now) {
+        return ReminderPlan.dueNow(activeBoard.allCards(), now);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardMemento;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.CardLink;
+import com.personalkanban.domain.board.CardReminder;
 import com.personalkanban.domain.board.CardSnapshot;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
@@ -43,9 +44,10 @@ import java.util.function.Function;
  *       per-field timestamps), so it breaks the tie deterministically by the
  *       greater canonical rendering — identical on every device — and records
  *       a {@link SyncConflict} so the losing value can be preserved (§4.1).</li>
- *   <li><b>Collections</b> (labels, checklist items): union by identity; an
- *       item present in the base but missing on one side was deleted there
- *       and the deletion propagates, unless the other side edited it.</li>
+ *   <li><b>Collections</b> (labels, checklist items, reminder moments): union
+ *       by identity; an item present in the base but missing on one side was
+ *       deleted there and the deletion propagates, unless the other side
+ *       edited it.</li>
  *   <li><b>Timeline and links</b>: append-only union, with base-aware
  *       deletion detection (no tombstones needed while the base is stored).</li>
  *   <li><b>Deletions vs edits</b>: an edit beats a delete — the object
@@ -274,6 +276,11 @@ public final class SyncMerge {
                 l.checklist(),
                 r.checklist(),
                 key, conflicts);
+        List<CardReminder> reminders = mergeReminders(
+                b == null ? List.of() : b.reminders(),
+                l.reminders(),
+                r.reminders(),
+                key, conflicts);
         return new CardSnapshot(
                 id,
                 lww("title", str(b, CardSnapshot::title), str(l, CardSnapshot::title),
@@ -291,7 +298,8 @@ public final class SyncMerge {
                         str(r, CardSnapshot::notes), "card", key, conflicts),
                 checklist,
                 lww("processId", proc(b, CardSnapshot::processId), proc(l, CardSnapshot::processId),
-                        proc(r, CardSnapshot::processId), "card", key, conflicts));
+                        proc(r, CardSnapshot::processId), "card", key, conflicts),
+                reminders);
     }
 
     private static List<String> mergeLabels(List<String> base, List<String> local, List<String> remote) {
@@ -357,6 +365,61 @@ public final class SyncMerge {
                 b == null ? null : b.parentId(), l.parentId(), r.parentId(),
                 "card", cardId, conflicts);
         return new ChecklistItem(r.id(), text, Boolean.TRUE.equals(done), parent);
+    }
+
+    /**
+     * Reminder moments of one card (T23 · B10): union by id with base-aware
+     * deletion detection, like the checklist. Only {@code acknowledged} is a
+     * mergeable field — date and time are the reminder's identity, so a
+     * reminder moved on one device and answered on the other never becomes a
+     * different moment. The merged list is kept chronological.
+     */
+    private static List<CardReminder> mergeReminders(List<CardReminder> base, List<CardReminder> local,
+                                                     List<CardReminder> remote, String cardId,
+                                                     List<SyncConflict> conflicts) {
+        Map<String, CardReminder> b = indexReminders(base);
+        Map<String, CardReminder> l = indexReminders(local);
+        Map<String, CardReminder> r = indexReminders(remote);
+        LinkedHashSet<String> order = new LinkedHashSet<>(l.keySet());
+        order.addAll(r.keySet());
+        List<CardReminder> out = new ArrayList<>();
+        for (String id : order) {
+            CardReminder bi = b.get(id);
+            CardReminder li = l.get(id);
+            CardReminder ri = r.get(id);
+            CardReminder chosen = null;
+            if (bi != null) {
+                if (li != null && ri != null) {
+                    Boolean acknowledged = lww("reminder[" + id + "].acknowledged",
+                            bi.acknowledged(), li.acknowledged(), ri.acknowledged(),
+                            "card", cardId, conflicts);
+                    chosen = new CardReminder(id, li.date(), li.time(),
+                            Boolean.TRUE.equals(acknowledged));
+                }
+                // one side deleted the reminder → deletion propagates
+            } else if (li != null && ri != null) {
+                Boolean acknowledged = lww("reminder[" + id + "].acknowledged",
+                        null, li.acknowledged(), ri.acknowledged(),
+                        "card", cardId, conflicts);
+                chosen = new CardReminder(id, li.date(), li.time(),
+                        Boolean.TRUE.equals(acknowledged));
+            } else {
+                chosen = li != null ? li : ri;
+            }
+            if (chosen != null) {
+                out.add(chosen);
+            }
+        }
+        out.sort(CardReminder.ORDER);
+        return out;
+    }
+
+    private static Map<String, CardReminder> indexReminders(List<CardReminder> reminders) {
+        Map<String, CardReminder> map = new LinkedHashMap<>();
+        for (CardReminder reminder : reminders) {
+            map.put(reminder.id(), reminder);
+        }
+        return map;
     }
 
     private static List<CardLink> mergeLinks(List<CardLink> base, List<CardLink> local,

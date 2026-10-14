@@ -6,6 +6,7 @@ import com.personalkanban.domain.exception.WipLimitExceededException;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -215,6 +216,40 @@ public final class Board {
     public void setChecklistItemParent(CardId cardId, String itemId, String parentId) {
         findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
                 .setChecklistItemParent(itemId, parentId);
+    }
+
+    // ------------------------------------------------------------------
+    // Reminders (T23 · B10)
+    // ------------------------------------------------------------------
+
+    /** Adds a reminder moment to one card; returns the created reminder. */
+    public CardReminder addReminder(CardId cardId, LocalDate date, LocalTime time) {
+        return findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .addReminder(date, time);
+    }
+
+    /** Removes one reminder moment of one card. */
+    public void removeReminder(CardId cardId, String reminderId) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .removeReminder(reminderId);
+    }
+
+    /** Marks one reminder as attended (or pending again). */
+    public void acknowledgeReminder(CardId cardId, String reminderId, boolean acknowledged) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .acknowledgeReminder(reminderId, acknowledged);
+    }
+
+    /** Marks every reminder of one card as attended. */
+    public void acknowledgeAllReminders(CardId cardId) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .acknowledgeAllReminders();
+    }
+
+    /** Replaces one card's whole reminder schedule (the calendar dialog's Save). */
+    public void setReminders(CardId cardId, List<CardReminder> reminders) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId))
+                .replaceReminders(reminders);
     }
 
     /** Renames one checklist item of one card. */

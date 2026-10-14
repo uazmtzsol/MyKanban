@@ -7,13 +7,15 @@ import java.util.List;
 /**
  * Public immutable DTO describing one card. Canonical shape shared by
  * persistence adapters and undo/redo mementos. It carries the plain-text
- * notes, the flat checklist and the process assignment (null = none). The
- * card's time-tracking timeline is carried by {@link BoardMemento}, not here,
- * so this DTO stays focused on the card's own state.
+ * notes, the one-level checklist, the process assignment (null = none) and the
+ * reminder moments (T23 · B10). The card's time-tracking timeline is carried by
+ * {@link BoardMemento}, not here, so this DTO stays focused on the card's own
+ * state.
  */
 public record CardSnapshot(CardId id, String title, String description, BoardColor color,
                            LocalDate dueDate, List<String> labels, Instant createdAt,
-                           String notes, List<ChecklistItem> checklist, ProcessId processId) {
+                           String notes, List<ChecklistItem> checklist, ProcessId processId,
+                           List<CardReminder> reminders) {
 
     public CardSnapshot {
         if (id == null || title == null || color == null || createdAt == null) {
@@ -22,6 +24,17 @@ public record CardSnapshot(CardId id, String title, String description, BoardCol
         labels = labels == null ? List.of() : List.copyOf(labels);
         notes = notes == null ? "" : notes;
         checklist = checklist == null ? List.of() : List.copyOf(checklist);
+        // Absent in snapshots written before V11: those cards simply have no
+        // reminders, and the field normalizes to an empty list.
+        reminders = reminders == null ? List.of() : List.copyOf(reminders);
+    }
+
+    /** Backward-compatible shape without reminders (pre-V11 snapshots). */
+    public CardSnapshot(CardId id, String title, String description, BoardColor color,
+                        LocalDate dueDate, List<String> labels, Instant createdAt,
+                        String notes, List<ChecklistItem> checklist, ProcessId processId) {
+        this(id, title, description, color, dueDate, labels, createdAt,
+                notes, checklist, processId, List.of());
     }
 
     /** Backward-compatible constructor: legacy shape without session-4 fields. */
@@ -38,7 +51,7 @@ public record CardSnapshot(CardId id, String title, String description, BoardCol
     static CardSnapshot from(Card card) {
         return new CardSnapshot(card.id(), card.title(), card.description(), card.color(),
                 card.dueDate(), card.labels(), card.createdAt(),
-                card.notes(), card.checklist(), card.processId());
+                card.notes(), card.checklist(), card.processId(), card.reminders());
     }
 
     Card toCard(ColumnId ownerId) {
@@ -49,6 +62,9 @@ public record CardSnapshot(CardId id, String title, String description, BoardCol
             card.adoptChecklistItem(item);
         }
         card.assignTo(processId());
+        for (CardReminder reminder : reminders()) {
+            card.adoptReminder(reminder);
+        }
         return card;
     }
 }
