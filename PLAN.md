@@ -128,6 +128,10 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [ ] 🧪 **PR-2** Sesiones 11–13: esquema de colores + vista previa, notas con
   markdown, clic = tarjeta «actual», menú Ver, selección visible.
 - [ ] 🧪 **PR-3** Sesión 14: informe de tiempo y búsqueda global.
+- [ ] 🧪 **PR-4** Sesión 15 (T23 · B10): poner recordatorios en una tarjeta con
+  vencimiento, ver la ventana de pendientes al arrancar y **que el aviso salte
+  a la hora exacta con la app abierta** (lo único que los tests no pueden
+  comprobar: el disparo con el reloj real).
 
 ---
 
@@ -743,6 +747,12 @@ El código está; falta que el usuario lo pruebe:
    tooltips; tema obscuro.
 3. **Sesión 14:** informe de tiempo (CSV/PDF) y búsqueda global
    (`Ctrl+Shift+F`).
+4. **Sesión 15 (T23 · B10, recordatorios):** añadir un par de días en el
+   calendario de una tarjeta con fecha límite (y **Diario** en otra), dejar la
+   app abierta con un recordatorio **a un minuto vista** y comprobar que salta
+   la ventana con el título; marcar «atendido», reiniciar y ver que **no
+   vuelve**; adelantar el vencimiento de esa tarjeta y ver que los
+   recordatorios posteriores desaparecen (undoable).
 
 ---
 
