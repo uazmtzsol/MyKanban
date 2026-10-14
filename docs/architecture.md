@@ -45,6 +45,7 @@ testeables; la UI solo pinta.
 | `LabelFilter` | Filtro por etiquetas, **case-insensitive** (normaliza con `toLowerCase`), modos ALL/ANY, vacío = sin filtro | usado por `ColumnViewBuilder` |
 | `LabelSuggester` | Lógica pura del autocompletado: `currentToken(text,caret)`, `suggestions(token,exclude)` por prefijo case-insensitive, `apply(...)` reemplaza token + espacio. Vocabulario = LinkedHashSet | test unitario puro; lo usa `LabelAutoComplete` (ui) |
 | `BoardMemento` | Snapshot inmutable del tablero: `(columns, processes, links)` — procesos y precedencias incluidos desde la sesión 4, así undo/redo y export los cubren | Triple uso: undo/redo, persistencia, export JSON |
+| `CardReminder` | **Record inmutable** `(id, LocalDate date, LocalTime time, boolean acknowledged)` — un *momento* de recordatorio de una tarjeta (T23 · B10). Sin hora = dispara desde las 00:00 de su día (`dueFrom()`); `ORDER` los mantiene cronológicos; `acknowledged` vive en el agregado (sobrevive al reinicio, viaja en undo/export/sync) | lista ordenada dentro de `Card`; `MAX_REMINDERS=200` |
 | `CardSnapshot` / `ColumnSnapshot` | DTOs inmutables del memento | con `toCard()`/`toColumn()` |
 | `WipLimit` | Value object: unlimited o 0..999 | |
 | IDs (`BoardId`, `ColumnId`, `CardId`) | Wrappers tipados de UUID | `Ids.newCardId()` etc. |
@@ -60,6 +61,7 @@ testeables; la UI solo pinta.
 | `TimeReport` | Informe de tiempo de solo lectura (sesión 14, B1): agrega las entradas de `Timeline` del tablero por **proceso** y por **semana ISO**. Rango configurable (4/8/12 semanas o `ALL`) y fila final con las tarjetas que no son de ningún proceso | `of(board, now, zone, weeks)`; una entrada cuenta en la semana en la que **empezó** y una abierta cuenta hasta `now` |
 | `port/SettingsStore` | `get/put` clave→valor (tabla `app_setting`) — usar para preferencias nuevas (modos de vista P2, etc.) sin migraciones |
 | `port/UndoHistory` | `push/pop/clear/depth` por tablero |
+| `ReminderPlan` | **Puro y sin reloj** (T23 · B10): `dueNow(cards, now)`/`dueCount`/`dueOf` dicen qué momentos ya vencieron y siguen pendientes (un aviso perdido con la app cerrada sigue viniendo), `daily(from,to)`/`weekly(from,to,weekday)` son los generadores «diario» y «cada semana» de la UI, y `schedule(existing, días, hora)` reconstruye la selección del calendario **conservando id y estado atendido** de los momentos que ya existían | la UI le pasa «ahora»; verificado sin JavaFX |
 
 ⚠️ **Orden de la transacción (post-P0):** `finishTransaction` = `persist()`
 primero y, solo si tiene éxito, `history.push(before)`; si persist falla,
@@ -86,8 +88,12 @@ RemoveColumnCommand, AddCardCommand (expone createdCardId),
 EditCardCommand, MoveCardCommand, MoveCardToSlotCommand, RemoveCardCommand,
 ClearColumnCommand` + **bulk (P1.5):**
 `AddLabelsCommand, RemoveLabelsCommand, RecolorCardsCommand,
-RemoveCardsCommand, MoveCardsCommand`. El servicio captura memento
-before/after: cada comando bulk = 1 entrada de undo.
+RemoveCardsCommand, MoveCardsCommand` + **recordatorios (T23 · B10):**
+`AddReminderCommand (expone createdReminderId), RemoveReminderCommand,
+SetRemindersCommand (el calendario guarda la lista completa),
+AcknowledgeReminderCommand, AcknowledgeAllRemindersCommand`. El servicio captura
+memento before/after: cada comando bulk = 1 entrada de undo, y atender todo el
+backlog de una tarjeta/lista = 1 entrada también.
 
 ### ui/
 | Clase | Rol | Notas |
@@ -95,7 +101,10 @@ before/after: cada comando bulk = 1 entrada de undo.
 | `BoardController` | **Controlador raíz**. Construye toolbar/menús/filtro/columnas. Todos los intents `onXxx` (`onAddCard`, `onEditCard`, `onMoveCard`…). `guarded(Runnable)` convierte excepciones en diálogo de error. `rebuildAll()` reconstruye todo el grafo al cambiar idioma/BD/tablero; `refresh()` reconstruye solo columnas. Estado de **selección múltiple**: `selectionMode/selectionColumn/selectedCards` + intents `onToggleSelectionMode`, `onToggleCardSelection`, `isCardSelected` y `onBulk*` | los builders le llaman de vuelta (callbacks) |
 | `ColumnViewBuilder` | Stateless: header `[＋ añadir] [☐ selección] [« colapsar] [⋯ menú]` (el ⋯ incluye editar, colapsar, eliminar columna y "Eliminar todas las tarjetas" — se quitó el botón directo por peligroso), WIP, tarjetas filtradas, slots de drop, drag sources. `buildCollapsed`: tira vertical 52px, título rotado -90°, contador, menú mínimo. `buildAll` recibe `collapsedIds` y `dark` | colapso persistido por tablero vía `BoardService` |
 | `CardViewBuilder` | Vista de tarjeta: título + flags ★/! (gris/vivo), descripción SEGÚN modo efectivo (`addDescriptionByMode`: nada/3 líneas/completo), badge de vencida, chips FlowPane con color determinista, botones editar/eliminar, doble clic → detalle, clic derecho → menú contextual de modo de vista (override individual + "usar el del tablero"). En modo selección: sin botones/flags, borde punteado, clic alterna selección | |
-| `CardDetailWindow` | Ventana no-modal con **3 pestañas** (sesión 4): Descripción (editor markdown + preview WebView JS off + botón ?), Notas (TextArea plano + Guardar notas) y Lista de tareas (añadir, marcar, y menú contextual del ítem: renombrar / **convertir en tarjeta** / eliminar). Botonera: ? | ⧉ | OK | Cancel. `open()` estático |
+| `CardDetailWindow` | Ventana no-modal con **5 pestañas**: Descripción (editor markdown + preview WebView JS off + botón ?), Notas (lista de notas con título + editor), Lista de tareas (añadir, marcar, subtareas de un nivel), **Recordatorios** (T23 · B10: calendario, añadir un día, lista con «atendido» y borrado) y Tiempo. Botonera: ? | ⧉ | OK | Cancel. `open()` estático |
+| `ReminderCalendar` | **Puro, sin JavaFX** (T23 · B10): rejilla del mes en semanas completas que empiezan en lunes, `selectable(day, min, max)` (el rango es `[hoy, fecha límite]`), y lectura/escritura de la hora (`parseTime` → `TimeInput`, vacío = todo el día) | testeable sin toolkit |
+| `ReminderDialog` | El **calendario** de recordatorios (T23 · B10): cuadrícula de días conmutables del mes (‹ › entre los meses del rango), **Diario** / **Cada semana** / **Limpiar**, hora opcional (validada antes de aceptar) y contador; devuelve el `Schedule(días, hora)` completo, que es **un** paso de undo | el dibujo lo pone `ReminderCalendar`; entra desde el menú de la tarjeta y desde el detalle |
+| `ReminderNoticeWindow` | El **mensaje** de los recordatorios vencidos (T23 · B10): filas «fecha · hora + **título de la tarjeta**» con casilla de atendido, **Abrir tarjeta** y **Marcar todo como atendido** (1 undo). Cerrarla es «más tarde»: quedan pendientes en su tarjeta pero la ventana no vuelve sola en esa sesión | la abre `BoardController` al arrancar y cada minuto |
 | `Dialogs` | Todos los diálogos modales: card/column form, confirm, info, error, prompts (2 aridades), bulk (etiquetas ±, color, mover), elección de plantilla (`newBoardColumnsDialog` → enum `NewBoardColumns{STANDARD,CUSTOM,EMPTY}`) y **parseo puro**: `parseLabels` (espacios O comas), `parseNewBoardColumns` (número ⇒ "Columna N" localizado, o nombres por comas; null = inválido, MAX=12), `describeFailure` | `CardForm`, `ColumnForm`, `BulkLabelsForm` records |
 | `I18n` | Wrapper de ResourceBundle UTF-8. `text(key)` **devuelve la clave si no existe** — así se manifiestan las claves faltantes | bundles en `resources/i18n/` |
 | `GlobalSearchDialog` | Diálogo modal de la búsqueda global (B2): resultados en vivo, fila "Tablero › Título + campo y fragmento", Intro/doble clic abre el resultado | el controlador es quien abre el tablero (`focusCardInBoard`), la UI no muta el servicio |
@@ -112,7 +121,7 @@ before/after: cada comando bulk = 1 entrada de undo.
 | `PreferencesDialog` | Preferencias (menú Archivo): imagen de fondo + atenuado 0–0.8 + activar/desactivar; resultado `BackgroundChoice(path, dim)` | sesión 4 |
 | `AppContext` (raíz) | Composition root: crea/intercambia Database+servicios al abrir BD; recents en `config.properties` | |
 
-## 3. Esquema SQLite (V1..V7, al día)
+## 3. Esquema SQLite (V1..V11, al día)
 
 ```
 board            (id TEXT PK, name TEXT NOT NULL, created_at INTEGER)
@@ -140,12 +149,17 @@ card_link        (from_card_id FK→card ON DELETE CASCADE,
 process          (id TEXT PK, board_id FK→board ON DELETE CASCADE,
                   name TEXT NOT NULL, position INTEGER NOT NULL,
                   created_at INTEGER NOT NULL)                         -- V7
+card_reminder    (id TEXT PK, card_id FK→card ON DELETE CASCADE,
+                  on_date TEXT NOT NULL,             -- ISO-8601
+                  on_time TEXT NULL,                 -- ISO-8601 o NULL = todo el día
+                  acknowledged INTEGER NOT NULL DEFAULT 0)  -- V11 (T23 · B10)
 app_setting      (key TEXT PK, value TEXT)   -- V2: idioma, tema, board.last, ui.*
 schema_version   (version INTEGER PK, description, applied_at)
 ```
 
 Índices: `idx_column_board_position`, `idx_checklist_card_position`,
-`idx_card_link_to`, `idx_process_board_position`.
+`idx_card_link_to`, `idx_process_board_position`, `idx_reminder_card`
+(`card_reminder (card_id, on_date)`).
 
 Convenciones: colores guardados como **nombre de paleta** (legacy) o **hex**;
 `BoardColor.fromStored` acepta ambos. IDs UUID string. Positions enteros

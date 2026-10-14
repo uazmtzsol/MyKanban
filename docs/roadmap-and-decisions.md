@@ -87,6 +87,40 @@ técnicos verificados, (3) decisiones de diseño vigentes con su porqué,
     `PLAN.md` §7.6 (**T23 · B10**). Nota: la decisión abierta **C-3** (banda
     interna vs. bandeja del sistema) sigue vigente; v1 = aviso **dentro de la
     app**, como el de vencimientos.
+    **Implementado el 2026-10-14** (commits `c91125c` requisito+plan, `ff676aa`
+    dominio/servicio/repositorio, `b890172` UI+tests). Decisiones que se
+    confirmaron al construirlo, con su porqué:
+    - **Un recordatorio = un momento** (`fecha` + `hora` opcional), no una regla
+      de repetición: «diario» y «cada semana» son **generadores del diálogo**
+      que rellenan esa misma lista. Así el calendario muestra exactamente lo que
+      va a disparar y el usuario puede borrar días sueltos después, sin motor de
+      recurrencias (ni su merge ni su undo).
+    - **Sin hora = todo el día**: dispara desde las 00:00 de su fecha. Es el caso
+      más común («recuérdame ese día») y evita tener que elegir una hora por
+      cada día marcado; la hora se aplica a todos los días elegidos en el
+      calendario.
+    - **El aviso espera, no se pierde**: si la app estaba cerrada a la hora
+      elegida, el recordatorio sigue vencido y aparece en el próximo arranque.
+      En cambio **nunca insiste**: al marcarlo como atendido desaparece (el
+      estado vive en el agregado, no en la UI, así que sobrevive al reinicio y
+      viaja en undo/export/sync).
+    - **`acknowledged` en el agregado** (no en la UI): sin eso un aviso atendido
+      volvería a molestar en cada arranque, y el merge de sync no podría
+      resolver «atendido en un dispositivo».
+    - **El disparo es puro** (`application/ReminderPlan`, sin relojes): la UI le
+      pasa «ahora» al arrancar y cada minuto (`javafx.animation.Timeline`, hilo
+      de JavaFX). Es lo que hace el aviso verificable con tests en vez de a mano.
+    - **Cerrar la ventana es «más tarde»**, no «hecho»: los recordatorios siguen
+      pendientes en su tarjeta y la banda sigue contando, pero la ventana no
+      vuelve a abrirse sola en esa sesión (se guardan los ids silenciados).
+    - **Adelantar el vencimiento descarta los recordatorios que quedan más
+      allá** (`Card.schedule`) y **quitarle la fecha límite los descarta todos**:
+      sin vencimiento no hay recordatorios y uno posterior a la fecha límite no
+      podría volver a programarse nunca. Es deshacible (Ctrl+Z) igual que el
+      resto.
+    - **Una línea de tabla por momento** (`card_reminder`, V11) con `on_time`
+      NULL para los de todo el día: una fila escrita fuera de la app (o por una
+      versión anterior) se lee como «todo el día» en vez de romper la carga.
 
 ## 2. Hallazgos técnicos (✔️ = verificado empíricamente)
 

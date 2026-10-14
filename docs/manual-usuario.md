@@ -21,6 +21,7 @@ la sincronización online.
 6. [Columnas](#6-columnas)
 7. [Tarjetas](#7-tarjetas)
 8. [Detalle de tarjeta (pestañas)](#8-detalle-de-tarjeta-pestañas)
+   - [8.1 Recordatorios (🔔)](#81-recordatorios-)
 9. [Selección múltiple y acciones en lote](#9-selección-múltiple-y-acciones-en-lote)
 10. [Filtros](#10-filtros)
 11. [Procesos y vista de procesos](#11-procesos-y-vista-de-procesos)
@@ -243,7 +244,7 @@ bloquea si no cabe.
 
 ## 8. Detalle de tarjeta (pestañas)
 
-Doble clic en una tarjeta abre la ventana **Detalle de tarjeta**, con cuatro
+Doble clic en una tarjeta abre la ventana **Detalle de tarjeta**, con cinco
 pestañas:
 
 - **Descripción** — editor **markdown** con botón para alternar
@@ -265,9 +266,73 @@ pestañas:
     avanzado, **dos espacios** al principio de una línea la convierten en
     subtarea de la anterior. No hay más de un nivel (una subtarea no tiene
     subtareas).
+- **Recordatorios** — fechas (con hora opcional) en las que la app te avisa de
+  la tarjeta (§8.1).
 - **Tiempo** — cronómetro por tarjeta (§13).
 
 Cada pestaña guarda como una **transacción deshacible** (Ctrl+Z lo revierte).
+
+### 8.1 Recordatorios (🔔)
+
+Un **recordatorio** es un aviso que tú programas en **una tarjeta con fecha
+límite**: en el momento elegido la app te muestra un mensaje con **el título de
+la tarjeta** («recuérdame esta actividad»). Se pueden poner **tantos como
+quieras** (hasta 200 por tarjeta), y cada uno es un *momento* suelto, no una
+regla: eliges los días que quieras y después puedes borrar uno solo.
+
+**Cómo se ponen**
+
+1. Abre la tarjeta (doble clic) → pestaña **Recordatorios**, o bien clic derecho
+   sobre la tarjeta → **🔔 Recordatorios…** (la entrada está desactivada si la
+   tarjeta todavía no tiene fecha límite: primero ponle vencimiento).
+2. Pulsa **Calendario…**: se abre la **cuadrícula del mes** con los días
+   seleccionables **desde hoy hasta la fecha límite**. Marca o desmarca los días
+   que quieras (los que ya tienen recordatorio vienen marcados).
+3. Atajos de arriba: **Diario** marca **todos** los días del rango y **Cada
+   semana** marca un día por semana (el mismo día de la semana que la fecha
+   límite) — cómodo cuando el vencimiento cae varias semanas después.
+   **Limpiar** desmarca todo (guardar sin días = borrar los recordatorios).
+4. **Horario** es **opcional**: vacío significa «ese día» (el aviso aparece en
+   cuanto arranques ese día), o escribe una hora (`09:00`, `18:30`) para que el
+   aviso llegue a esa hora. La misma hora se aplica a los días elegidos.
+5. **Guardar recordatorios** confirma la lista completa como **un paso de
+   deshacer**.
+
+En la pestaña tienes además **Añadir día** (un día concreto con su hora, útil
+para un recordatorio suelto), la **lista** de los programados y, en cada fila, la
+casilla **atendido** (un recordatorio ya atendido no vuelve a avisarte nunca) y
+el botón **✖** para quitarlo.
+
+**Cómo se te avisa**
+
+- Al **arrancar** la app, y luego **cada minuto** mientras esté abierta, se
+  revisan los recordatorios vencidos. Si los hay, aparece la ventana
+  **Recordatorios pendientes** con una fila por momento: la **fecha** (o «Hoy»)
+  y la **hora**, y debajo el **título de la tarjeta**.
+- En cada fila: la casilla **atendido** (✓ lo marca como atendido y sale de la
+  lista), **Abrir tarjeta** (abre el detalle) y **Marcar todo como atendido**
+  (todas de una vez, un solo Ctrl+Z). **Más tarde** cierra la ventana: los
+  recordatorios **siguen pendientes** (en su tarjeta y en la banda), pero la
+  ventana no vuelve a aparecer sola en esa sesión.
+- Mientras haya algo pendiente, arriba verás una **banda discreta**
+  «🔔 N recordatorio(s) pendiente(s)»; al pulsarla se abre la ventana.
+- El **frente de la tarjeta** muestra «🔔 n» con cuántos recordatorios tiene:
+  resaltado mientras alguno está pendiente, en gris cuando ya los atendiste
+  todos. Pasar el ratón por encima dice cuántos hay y cuántos quedan pendientes.
+
+**Detalles que conviene saber**
+
+- Un recordatorio vencido **te espera**: si la app estaba cerrada a esa hora, lo
+  verás al próximo arranque (nunca se pierde), pero **nunca insiste** dos veces:
+  al marcarlo como atendido desaparece para siempre.
+- Un recordatorio **no puede quedar después de la fecha límite**. Si **adelantas
+  el vencimiento** de una tarjeta, los recordatorios que quedaban más allá se
+  descartan (y Ctrl+Z lo revierte); si le **quitas la fecha límite**, se
+  descartan todos, porque sin vencimiento no hay recordatorios.
+- Todo viaja con la tarjeta: se guarda en la base de datos, entra en el
+  **deshacer/rehacer**, se **exporta/importa** con el tablero y se **fusiona** en
+  la sincronización (atender un recordatorio en un dispositivo lo atiende en los
+  demás).
 
 ## 9. Selección múltiple y acciones en lote
 

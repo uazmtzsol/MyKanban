@@ -18,6 +18,11 @@ leaves your machine.
 - **JSON export/import** — back up or share any board as a portable `.json` file
 - Columns & cards: add, edit, delete, delete-all-in-column, clear board
 - **Card due dates** with an overdue badge, and **labels** (chips)
+- **Reminder moments on dated cards** — pick the days (and an optional time)
+  between today and the due date in a calendar, or fill them with *daily* /
+  *weekly*; when a moment arrives the app shows a message with the card's
+  title (on startup and while it runs), and a reminder you attend never
+  comes back. See `docs/manual-usuario.md` §8.1
 - **Markdown notes** — double-click a card to open a detail window with a
   live-split markdown editor and preview (GFM tables & strikethrough);
   the card front shows a lightweight styled summary. Storage stays plain

@@ -88,7 +88,7 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
   nombres de color traducidos). §7.4.
 - [x] **T16 · B8** ✅ **Subtareas jerárquicas** de un nivel (migración **V10**).
   §7.5.
-- [ ] **T23 · B10** ⬜ **Recordatorios programables por tarjeta**: varias fechas
+- [x] **T23 · B10** ✅ **Recordatorios programables por tarjeta**: varias fechas
   (con hora opcional) elegidas en un **calendario** de hoy a la fecha límite, o
   rellenadas por **diario / cada semana** (migración **V11**). §7.6.
 
@@ -112,8 +112,9 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [ ] 💬 **C-1** Import con *merge* en vez de duplicar tablero.
   [`docs/import-merge-tableros.md`](docs/import-merge-tableros.md).
 - [ ] 💬 **C-2** Impresión de tableros (export HTML vs `PrinterJob`).
-- [ ] 💬 **C-3** Vencimientos **y recordatorios** (T23): ¿banda interna (actual)
-  o bandeja del sistema?
+- [ ] 💬 **C-3** Avisos de vencimiento **y recordatorios** (T23 ✅ hecho con
+  banda + ventana internas): ¿añadir **bandeja del sistema** (`SystemTray`)
+  además, para que el aviso se vea con la ventana minimizada?
 - [ ] 💬 **C-4** Informe de tiempo: ¿solo tablero activo o todos?
 - [ ] 💬 **C-5** H-12 (menor): archivadas visibles en la vista de procesos; el
   toggle «mostrar archivadas» no persiste; resumen del frente configurable;
@@ -207,6 +208,7 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 | 2026-10-13 | **T13 · B4** captura rápida con sintaxis | ✅ | `feat(capture): quick card capture with inline syntax` — `application/QuickCapture` (puro: `+etiqueta`, `!`/`*`, `@hoy/@mañana/@+3d/@ISO`, fecha inválida se queda en el título, signos dentro de palabras intactos) + `QuickCaptureDialog` (foco en el campo, **vista previa en vivo**, Enter crea y **Más opciones…** precarga el `CardForm` completo); el ➕ de la columna abre la captura rápida y **Ctrl+➕** / la entrada del menú de columna abren el diálogo completo. **Hallazgo:** la vista previa NO puede vivir en `QuickCapture` (necesita i18n y la capa `application` no puede depender de `ui`), así que el formateo está en el diálogo; el parseo sí es puro. `QuickCaptureTest` (13) + `QuickCaptureDialogTest` (4) → suite **488/488** |
 | 2026-10-13 | **T14 · B5** plantillas propias + purga de archivadas | ✅ | `feat(board): user templates and archived-card purge` — `application/BoardTemplate` (puro, JSON propio: columnas con color/WIP/hecho, procesos y modo de vista; **sin tarjetas**), persistido en `board.template.<nombre>`; `BoardService.templates/hasTemplate/saveAsTemplate/removeTemplate/createBoardFromTemplate`; menú **Tableros → Guardar como plantilla… / Plantillas → (aplicar · eliminar)** y las propias dentro del selector de «nuevo tablero». Purga **Tableros → Borrar tarjetas archivadas…** (`archivedCardCount`, `purgeArchivedCards`, adjuntos a la papelera). **Hallazgos:** ① el puerto `SettingsStore` no tenía `remove`, se añadió (SQLite + doble en memoria); ② `BoardColor` **no** es un enum sino un record con hex, así que la plantilla guarda el **hex** (soporta colores propios) y se relee con `fromStored`; ③ el undo es **por tablero**, así que la purga borra tablero a tablero (un paso de undo en cada uno) y restaura el tablero activo al terminar; ④ la vista previa de color de `WipLimit` va como entero (0 = ilimitado). `BoardTemplateTest` (4) + `ArchivedPurgeTest` (5) → suite **497/497** |
 | 2026-10-13 | **T15 · B7** color por etiqueta (cierra B9) | ✅ | `feat(labels): pick a color per label (closes B9)` — el gestor de etiquetas gana un selector de **color** (8 colores de la paleta + **Automático** = borra la regla) que escribe la regla de estilo para **claro y obscuro** (`setLabelStyle`/`clearLabelStyle`) con el color de texto calculado por contraste; `ui/LabelChipStyle` (puro) decide el chip: regla del usuario si existe, si no la clase por hash de siempre. **B9:** los nombres de color ya se traducen (`color.blue`…`color.gray` + `labels.color`/`labels.color.auto`) en el selector de color y en el gestor. **Hallazgo:** el catálogo y las reglas `ui.label.` ya existían (y se editan en Preferencias), así que el hueco era solo el chip + el gestor, no el almacenamiento. `LabelChipStyleTest` (5) → suite **502/502** |
+| 2026-10-14 | **T23 · B10** recordatorios programables por tarjeta (V11) | ✅ | `feat(reminders): per-card reminder calendar, notice window and card badge` (+ `docs:` del requisito/plan `c91125c` y `ff676aa` con dominio/servicio/repositorio) — `CardReminder` (un **momento**, no una regla) en `Card`/`Board`, `acknowledged` en el agregado, comandos `Add/Remove/Set/Acknowledge(+All)ReminderCommand` (1 undo el lote), `application/ReminderPlan` **puro** (`dueNow/dueOf/daily/weekly/schedule`), migración **V11** `card_reminder` con `on_time` NULL = todo el día, lectura/escritura + cascada en el repositorio, merge por id en `SyncMerge`; UI: `ui/ReminderCalendar` (puro) + `ReminderDialog` (calendario de días con ‹ ›, **Diario / Cada semana / Limpiar**, hora opcional validada), pestaña **Recordatorios** del detalle, entrada **🔔 Recordatorios…** del menú de tarjeta, **🔔 n** en el frente, banda `reminder-notice` y `ReminderNoticeWindow` (el mensaje con el título de la tarjeta: atendido / abrir / atender todo); el disparo se revisa **al arrancar y cada minuto** (`Timeline`). **Hallazgos:** ① adelantar/borrar el vencimiento dejaba recordatorios posteriores a la fecha límite → `Card.schedule` los descarta (undoable); ② re-guardar el calendario recreaba los momentos y perdía el «atendido» → `ReminderPlan.schedule` reutiliza día+hora y `Card` conserva el estado del id previo; ③ en i18n los textos con argumentos pasan por `MessageFormat` (`''` en francés **solo** en las claves con `{0}`). 43 tests nuevos (`ReminderDomainTest` 12, `ReminderCalendarTest` 9, `ReminderPlanTest` 8, `ReminderDialogTest` 8, `ReminderUiTest` 6, `SqliteReminderRoundTripTest` 3) → suite **558/558** |
 | 2026-10-13 | **T16 · B8** subtareas de un nivel (V10) | ✅ | `feat(checklist): one-level subtasks (V10)` — migración **V10** (`ALTER TABLE card_checklist_item ADD COLUMN parent_id TEXT` + índice, sin FK: la integridad la lleva el agregado); `ChecklistItem.parentId` (con constructor de 3 args para no tocar llamadas previas), `Card.addChecklistItem(text, parentId)` con **un solo nivel** validado, `checklistChildrenOf`/`subtaskCount`/`subtaskTotalCount`, **borrar un padre borra sus hijos** e indentar/desindentar (`setChecklistItemParent`) en 1 undo; `MoveChecklistItemCommand` + `BoardService.moveChecklistItem`; `SetChecklistFromLines` acepta **dos espacios = subtarea**; la UI del detalle pinta subtareas indentadas con su propio menú (**Añadir subtarea**, **Sangrar**, **Quitar sangría**) y el contador ☑ cubre ambos niveles; el merge de sync viaja con `parentId`. **Hallazgos:** ① `SyncMerge` construía `ChecklistItem` a 3 args, hizo falta migrar ese punto (el campo se mergea con LWW como los demás); ② añadir un componente al record habría roto 6 llamadas en tests: se añadió un constructor de 3 args equivalente a «sin padre»; ③ una fila sin `parent_id` (formato pre-V10) se lee como ítem de primer nivel. `ChecklistHierarchyTest` (7) + `SqliteChecklistSubtaskTest` (3) → suite **512/512** |
 
 ---
@@ -549,7 +551,7 @@ pérdida) y UI (hijos indentados).
 
 ---
 
-### 7.6 T23 — B10: recordatorios programables por tarjeta (pendiente, sesión 15)
+### 7.6 T23 — B10: recordatorios programables por tarjeta — ✅ hecho (2026-10-14)
 
 **Requisito (palabras del usuario, 2026-10-13):** «En tarjetas con fechas
 límite, poner recordatorios. Por ejemplo, configurar fechas (y opcionalmente
@@ -629,6 +631,63 @@ que el 🔔 aparece en la tarjeta; al llegar ese momento la app muestra el aviso
 con el título de la tarjeta, se marca como atendido al pulsarlo y no vuelve a
 insistir; reiniciar no pierde ni repite los avisos. Commit:
 `feat(reminders): per-card reminder schedule with a calendar`.
+
+**Hecho (2026-10-14) — lo que salió distinto del plan y por qué:**
+
+- **Commits:** `c91125c` (`docs: record and plan…` requisito + plan), `ff676aa`
+  (dominio `CardReminder` + `Board`/`Card` + `CardSnapshot`/`BoardMemento` +
+  comandos + `ReminderPlan` + migración V11 + repositorio + `SyncMerge`),
+  `b890172` (UI + i18n + tests).
+- **UI real:** `ui/ReminderCalendar` (puro: rejilla de mes, rango seleccionable,
+  lectura de la hora) + `ui/ReminderDialog` (el **calendario** con ‹ ›, Diario /
+  Cada semana / Limpiar, hora validada y contador; guarda **la lista completa** =
+  1 undo) + pestaña **Recordatorios** en el detalle (calendario, **Añadir día**,
+  lista con «atendido» y ✖) + entrada **🔔 Recordatorios…** en el menú de la
+  tarjeta (desactivada sin fecha límite) + **🔔 n** en el frente (resaltado si
+  queda alguno pendiente, gris si ya se atendieron todos) + `ui/ReminderNoticeWindow`
+  (el mensaje: fila por momento con «Hoy»/fecha + hora y el **título de la
+  tarjeta**, casilla de atendido, **Abrir tarjeta** y **Marcar todo como
+  atendido**) + banda `reminder-notice`.
+- **Disparo:** `BoardController.onStartup()` (llamado desde `Main` tras
+  `stage.show()`) arranca un `Timeline` de 1 minuto y hace la primera revisión al
+  instante, así que un aviso perdido con la app cerrada aparece al arrancar.
+  Si hay un diálogo modal delante, la revisión espera al minuto siguiente.
+- **Hallazgo ① (invariante rota):** `rescheduleCard` movía el vencimiento sin
+  tocar los recordatorios, dejando momentos **posteriores** a la fecha límite
+  (que el calendario ya no puede mostrar y `replaceReminders` rechazaría). Se
+  corrigió en `Card.schedule`: al mover el vencimiento se descartan los momentos
+  que quedan más allá, y al quitarlo se descartan todos. Undoable (es el mismo
+  comando).
+- **Hallazgo ② (identidad al re-guardar):** el calendario pre-marca los días que
+  ya tienen recordatorio, así que guardar sin tocar nada **no** debía recrear los
+  momentos (perderían su id y su estado atendido). `ReminderPlan.schedule(...)`
+  reutiliza el momento existente cuando coinciden día **y** hora, y `Card`
+  conserva además el estado atendido del id previo.
+- **Hallazgo ③ (idiomas):** los textos con argumentos pasan por `MessageFormat`,
+  donde `'` escapa: en francés hubo que escribir `''` solo en las claves con
+  `{0}` (y **no** en las que se leen literalmente). `I18nCoverageTest` cubre que
+  las claves existan en los 5 bundles.
+- **Criterio cerrado, pero probado por partes:** el punto final (ver el aviso
+  «en el momento») no es automatizable con el reloj real; se prueba lo que lo
+  sostiene: `ReminderPlanTest` (8: sin hora → 00:00, con hora → su hora, un
+  momento perdido sigue vencido, los atendidos no vuelven, orden, diario/semanal
+  y el re-guardado), `ReminderDomainTest` (12), `ReminderCalendarTest` (9, sin
+  JavaFX), `SqliteReminderRoundTripTest` (3, con fila legada sin hora y cascada),
+  `ReminderDialogTest` (8, el diálogo construido **sin** mostrarlo: rejilla,
+  generadores, celda fuera de rango que no entra en la selección y hora
+  inválida que no guarda) y `ReminderUiTest` (6, con la UI real: el aviso al
+  arrancar trae el título de la tarjeta, atender cierra la ventana, la banda y
+  el 🔔 cuentan, el detalle lista los momentos y una tarjeta sin vencimiento
+  explica qué falta).
+- **Hallazgo ④ (para futuros tests de JavaFX):** `ToggleButton.fire()` **sí
+alterna** el estado (y el handler lo ve ya alternado), pero **no hace nada en un
+  botón deshabilitado**; `CheckBox.fire()` alterna y luego dispara. Los tests
+  del calendario se apoyan en eso en vez de simular clics con `MouseEvent`.
+- **Tests:** 43 nuevos. Suite completa: **558/558** (1 *skipped* preexistente en
+  `PhpSyncApiEndpointTest`, que no corre sin servidor PHP).
+  *Nota:* la suite se corre con `-Djacoco.skip=true` porque el agente de JaCoCo
+  0.8.12 no instrumenta clases de JDK 25 (`Unsupported class file major version
+  69`) — sigue pendiente como **T18**/**H-8**.
 
 ---
 

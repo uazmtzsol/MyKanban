@@ -131,6 +131,12 @@ movible/sincronizable).
   título de ventana)
 - Errores con causa raíz visible; rollback en memoria si un guardado falla
   (la UI nunca diverge de la BD)
+- **Recordatorios por tarjeta (T23 · B10, esquema V11)**: varios *momentos*
+  (`fecha` + `hora` opcional) por tarjeta con fecha límite, elegidos en un
+  **calendario** de hoy al vencimiento o rellenados con **Diario / Cada
+  semana**; aviso con el **título de la tarjeta** al arrancar y cada minuto
+  (banda + ventana de pendientes), estado «atendido» en el agregado y **🔔 n**
+  en el frente. Detalles en `manual-usuario.md` §8.1
 
 ## Lo que NO existe aún (pedido por el usuario, ver roadmap)
 

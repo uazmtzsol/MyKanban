@@ -63,8 +63,10 @@ final class ReminderDialog {
 
     private LocalDate shownMonth;
 
-    private ReminderDialog(I18n i18n, String cardTitle, LocalDate today, LocalDate dueDate,
-                           List<CardReminder> existing) {
+    // Package-visible so a test can build the dialog without showing it (the
+    // modal showAndWait is the only part that needs a user).
+    ReminderDialog(I18n i18n, String cardTitle, LocalDate today, LocalDate dueDate,
+                   List<CardReminder> existing) {
         this.i18n = i18n;
         this.cardTitle = cardTitle;
         this.today = today;
@@ -83,7 +85,12 @@ final class ReminderDialog {
         return new ReminderDialog(i18n, cardTitle, today, dueDate, existing).show(themeManager);
     }
 
-    private Optional<Schedule> show(ThemeManager themeManager) {
+    /**
+     * Builds the dialog: the day grid of the current month, the two generators,
+     * the hour field and the OK/Cancel buttons. Split from {@link #show} so the
+     * whole wiring can be asserted without a user in front of it.
+     */
+    Dialog<List<LocalDate>> buildDialog(ThemeManager themeManager) {
         for (CardReminder reminder : existing) {
             selected.add(reminder.date());
         }
@@ -150,7 +157,11 @@ final class ReminderDialog {
 
         showMonth(shownMonth);
         dialog.setResultConverter(button -> button == ButtonType.OK ? chosenDays() : null);
+        return dialog;
+    }
 
+    private Optional<Schedule> show(ThemeManager themeManager) {
+        Dialog<List<LocalDate>> dialog = buildDialog(themeManager);
         Optional<List<LocalDate>> result = dialog.showAndWait();
         if (result.isEmpty()) {
             return Optional.empty();
@@ -205,6 +216,9 @@ final class ReminderDialog {
                 LocalDate day = week.get(column);
                 ToggleButton cell = new ToggleButton(String.valueOf(day.getDayOfMonth()));
                 cell.getStyleClass().add("reminder-day");
+                // The real day behind the painted number: the day-of-month alone
+                // is ambiguous in a grid that shows the neighbouring weeks.
+                cell.setUserData(day);
                 cell.setPrefWidth(38);
                 boolean inShownMonth = day.getMonth() == shownMonth.getMonth()
                         && day.getYear() == shownMonth.getYear();
@@ -212,6 +226,13 @@ final class ReminderDialog {
                         || !ReminderCalendar.selectable(day, today, dueDate));
                 cell.setSelected(selected.contains(day));
                 cell.setOnAction(e -> {
+                    if (!ReminderCalendar.selectable(day, today, dueDate)) {
+                        // Belt and braces: the range is the contract, not the
+                        // disabled skin — an out-of-range day can never end up
+                        // in a saved schedule.
+                        cell.setSelected(selected.contains(day));
+                        return;
+                    }
                     if (cell.isSelected()) {
                         selected.add(day);
                     } else {
@@ -241,8 +262,18 @@ final class ReminderDialog {
     }
 
     /** The days the user toggled, chronologically. */
-    private List<LocalDate> chosenDays() {
+    List<LocalDate> chosenDays() {
         return selected.stream().sorted().toList();
+    }
+
+    /** The hour field, so a test can type in it (empty = all-day reminder). */
+    TextField timeField() {
+        return timeField;
+    }
+
+    /** The error line the dialog uses to explain an unusable hour. */
+    Label errorLabel() {
+        return errorLabel;
     }
 
     /**
