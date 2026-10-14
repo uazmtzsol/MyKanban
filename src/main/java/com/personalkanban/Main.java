@@ -46,6 +46,9 @@ public class Main extends Application {
                 Platform.exit();
             });
             stage.show();
+            // T23 · B10: reminders that came due while the app was closed are
+            // shown right away, and checked once a minute from here on.
+            controller.onStartup();
         } catch (Exception e) {
             showFatalError(e);
             throw e;

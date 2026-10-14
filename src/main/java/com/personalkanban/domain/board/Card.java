@@ -111,8 +111,20 @@ public final class Card {
         this.color = Objects.requireNonNull(newColor, "color");
     }
 
+    /**
+     * Sets (or clears) the due date. Reminders live between today and the
+     * deadline, so a deadline that moves earlier drops the moments it left
+     * behind, and clearing the deadline drops them all: a reminder past the due
+     * date could never be scheduled again (T23 · B10). Undoable like every other
+     * mutation, because rescheduling is one command.
+     */
     void schedule(LocalDate newDueDate) {
         this.dueDate = newDueDate;
+        if (newDueDate == null) {
+            reminders.clear();
+        } else {
+            reminders.removeIf(reminder -> reminder.date().isAfter(newDueDate));
+        }
     }
 
     void tag(List<String> newLabels) {

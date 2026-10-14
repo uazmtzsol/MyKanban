@@ -7,6 +7,7 @@ import com.personalkanban.domain.board.CardReminder;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -72,6 +73,32 @@ public final class ReminderPlan {
             days.add(day);
         }
         return days;
+    }
+
+    /**
+     * Rebuilds a card's schedule from the days the calendar got, keeping the
+     * identity of the moments that already existed: a reminder on a day that
+     * was chosen again (same day and hour) keeps its id and its attended state,
+     * so re-saving through the calendar never resurrects an answered reminder
+     * nor loses the identity that undo and sync rely on.
+     *
+     * <p>Days are de-duplicated and sorted; {@code time == null} means an
+     * all-day reminder (fires from the start of its day).</p>
+     */
+    public static List<CardReminder> schedule(List<CardReminder> existing, List<LocalDate> days,
+                                             LocalTime time) {
+        Objects.requireNonNull(existing, "existing");
+        Objects.requireNonNull(days, "days");
+        List<CardReminder> rebuilt = new ArrayList<>();
+        for (LocalDate day : days.stream().distinct().sorted().toList()) {
+            CardReminder previous = existing.stream()
+                    .filter(reminder -> reminder.date().equals(day))
+                    .filter(reminder -> Objects.equals(reminder.time(), time))
+                    .findFirst()
+                    .orElse(null);
+            rebuilt.add(previous == null ? CardReminder.of(day, time) : previous);
+        }
+        return List.copyOf(rebuilt);
     }
 
     /**

@@ -7,6 +7,7 @@ import com.personalkanban.application.CardViewSettings;
 import com.personalkanban.application.DueDigest;
 import com.personalkanban.application.GlobalShortcuts;
 import com.personalkanban.application.QuickCapture;
+import com.personalkanban.application.ReminderPlan;
 import com.personalkanban.application.ThemeColors;
 import com.personalkanban.domain.board.BoardColor;
 import com.personalkanban.domain.board.BoardColumn;
@@ -48,6 +49,8 @@ import javafx.stage.FileChooser;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -196,6 +199,16 @@ public final class BoardController {
     private boolean dueNoticeDismissed;
     // Where the notice takes the user when it is clicked.
     private DueDigest.Scope dueNoticeJump;
+
+    // Per-card reminders (T23 · B10): a second, thinner band for the reminder
+    // moments that have come due, the window that lists them, and the
+    // once-a-minute ticker that notices them while the app stays open.
+    private Label reminderNotice;
+    private ReminderNoticeWindow reminderWindow;
+    private javafx.animation.Timeline reminderTicker;
+    // Reminders the user saw and closed without attending: they stay due (the
+    // card keeps the pending count) but do not pop the window again this run.
+    private final java.util.Set<String> reminderNoticeMuted = new java.util.HashSet<>();
 
     // Collapsed columns of the active board (UI preference, per board).
     private java.util.Set<String> collapsedColumns = java.util.Set.of();
@@ -788,8 +801,18 @@ public final class BoardController {
         dueNotice.setWrapText(true);
         dueNotice.setPadding(new Insets(4, 12, 4, 12));
         dueNotice.setOnMouseClicked(e -> onDueNoticeClicked());
-        root.getChildren().setAll(menuBar, syncNotice, dueNotice, toolbar, selectionBar, filterBar,
-                boardScroller);
+        // Reminder moments (T23 · B10): the same discreet band shape, with the
+        // number of pending reminders; clicking it opens the pending list.
+        reminderNoticeMuted.clear();
+        reminderNotice = new Label();
+        reminderNotice.getStyleClass().addAll("sync-notice", "reminder-notice");
+        reminderNotice.setVisible(false);
+        reminderNotice.setManaged(false);
+        reminderNotice.setWrapText(true);
+        reminderNotice.setPadding(new Insets(4, 12, 4, 12));
+        reminderNotice.setOnMouseClicked(e -> openReminderWindow());
+        root.getChildren().setAll(menuBar, syncNotice, dueNotice, reminderNotice, toolbar,
+                selectionBar, filterBar, boardScroller);
         updateBoardIdentity();
         refresh();
     }
@@ -2227,6 +2250,7 @@ public final class BoardController {
      * (X) via {@code Main}.
      */
     public void shutdown() {
+        stopReminderTicker();
         context.close();
     }
 
@@ -2533,6 +2557,179 @@ public final class BoardController {
         if (dueNoticeJump != null) {
             onDueScope(dueNoticeJump);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Per-card reminders (T23 · B10)
+    // ------------------------------------------------------------------
+
+    /**
+     * Starts looking for due reminders: once right away (the app may have been
+     * closed at the chosen moment) and then once a minute while it stays open.
+     * Idempotent, so a language/theme rebuild cannot start a second ticker.
+     */
+    public void onStartup() {
+        if (reminderTicker != null) {
+            return;
+        }
+        reminderTicker = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.minutes(1),
+                        e -> checkDueReminders()));
+        reminderTicker.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        reminderTicker.play();
+        checkDueReminders();
+    }
+
+    /** Stops the ticker on shutdown, so no timer outlives the window. */
+    void stopReminderTicker() {
+        if (reminderTicker != null) {
+            reminderTicker.stop();
+            reminderTicker = null;
+        }
+    }
+
+    /**
+     * The reminder moments that are due right now: paints the band and, when
+     * something has not been seen yet, opens the pending list. A modal dialog
+     * in front of the user wins — the check simply waits for the next minute.
+     */
+    private void checkDueReminders() {
+        List<ReminderPlan.Due> due = service.dueReminders(LocalDateTime.now());
+        updateReminderNotice(due);
+        if (dialogs.modalActive()) {
+            return;
+        }
+        boolean unseen = due.stream()
+                .anyMatch(entry -> !reminderNoticeMuted.contains(entry.reminder().id()));
+        if (unseen) {
+            openReminderWindow();
+        }
+    }
+
+    /** The band: how many reminder moments are pending, clickable. */
+    private void updateReminderNotice(List<ReminderPlan.Due> due) {
+        if (reminderNotice == null) {
+            return;
+        }
+        boolean show = !due.isEmpty();
+        reminderNotice.setVisible(show);
+        reminderNotice.setManaged(show);
+        if (!show) {
+            return;
+        }
+        reminderNotice.setText(i18n.text("reminders.notice.pending", due.size()));
+        reminderNotice.setTooltip(new Tooltip(i18n.text("reminders.notice.hint")));
+    }
+
+    /** Shows (or brings forward) the window with the pending reminders. */
+    void openReminderWindow() {
+        List<ReminderPlan.Due> due = service.dueReminders(LocalDateTime.now());
+        if (due.isEmpty()) {
+            return;
+        }
+        if (reminderWindow == null) {
+            reminderWindow = new ReminderNoticeWindow(i18n, themeManager, this);
+        }
+        reminderWindow.show(due);
+    }
+
+    /**
+     * The user closed the pending list without attending everything: the
+     * reminders stay due on their cards, but the window does not come back on
+     * its own during this run.
+     */
+    void muteReminderNotice(List<ReminderPlan.Due> due) {
+        for (ReminderPlan.Due entry : due) {
+            reminderNoticeMuted.add(entry.reminder().id());
+        }
+    }
+
+    /** Reminders of one card, chronological (the detail window's list). */
+    public List<com.personalkanban.domain.board.CardReminder> remindersOf(CardId cardId) {
+        return service.remindersOf(cardId);
+    }
+
+    /** The reminder moments due right now (the pending list's source). */
+    List<ReminderPlan.Due> dueRemindersNow() {
+        return service.dueReminders(LocalDateTime.now());
+    }
+
+    /**
+     * The reminder calendar of one card, shared by the card menu and the detail
+     * window: pick days between today and the deadline (optionally with an
+     * hour) and save the whole schedule as one undoable step.
+     *
+     * @return true when a schedule was saved
+     */
+    boolean onEditReminders(CardId cardId) {
+        var card = service.board().findCard(cardId).orElse(null);
+        if (card == null) {
+            return false;
+        }
+        if (card.dueDate() == null) {
+            dialogs.info(i18n.text("reminders.no.due"));
+            return false;
+        }
+        LocalDate today = LocalDate.now();
+        if (card.dueDate().isBefore(today)) {
+            // The calendar runs from today to the deadline; with a deadline in
+            // the past there is no day left to choose, so the user needs the
+            // reschedule path first instead of an empty grid.
+            dialogs.info(i18n.text("reminders.due.past", card.dueDate().toString()));
+            return false;
+        }
+        Optional<ReminderDialog.Schedule> chosen = ReminderDialog.choose(i18n, themeManager,
+                card.title(), today, card.dueDate(), card.reminders());
+        if (chosen.isEmpty()) {
+            return false;
+        }
+        ReminderDialog.Schedule schedule = chosen.get();
+        guarded(() -> {
+            service.setReminders(cardId,
+                    ReminderPlan.schedule(card.reminders(), schedule.days(), schedule.time()));
+            refresh();
+        });
+        return true;
+    }
+
+    /** Replaces a card's whole schedule (the calendar dialog's Save). */
+    public void onSetReminders(CardId cardId,
+                              List<com.personalkanban.domain.board.CardReminder> reminders) {
+        guarded(() -> {
+            service.setReminders(cardId, reminders);
+            refresh();
+        });
+    }
+
+    /** Adds one reminder moment; skips a moment the card already carries. */
+    public void onAddReminder(CardId cardId, LocalDate date, LocalTime time) {
+        guarded(() -> {
+            service.addReminder(cardId, date, time);
+            refresh();
+        });
+    }
+
+    public void onRemoveReminder(CardId cardId, String reminderId) {
+        guarded(() -> {
+            service.removeReminder(cardId, reminderId);
+            refresh();
+        });
+    }
+
+    /** Marks one reminder as attended (the notice window's checkbox). */
+    public void onAcknowledgeReminder(CardId cardId, String reminderId, boolean acknowledged) {
+        guarded(() -> {
+            service.acknowledgeReminder(cardId, reminderId, acknowledged);
+            refresh();
+        });
+    }
+
+    /** Marks every reminder of these cards as attended, one undo step. */
+    public void onAcknowledgeAllReminders(List<CardId> cardIds) {
+        guarded(() -> {
+            service.acknowledgeAllReminders(cardIds);
+            refresh();
+        });
     }
 
     /** Quick reschedule of one card from its menu (null clears the date). */
@@ -3447,6 +3644,7 @@ public final class BoardController {
         undoRedo.sync();
         syncFilterBarVisibility();
         updateDueNotice();
+        updateReminderNotice(service.dueReminders(LocalDateTime.now()));
         updateSelectionBarState();
         // Keep the processes-view keyboard focus across the rebuild.
         if (processView && processFocusId != null) {

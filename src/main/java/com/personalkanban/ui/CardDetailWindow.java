@@ -3,6 +3,7 @@ package com.personalkanban.ui;
 import com.personalkanban.domain.board.Card;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.CardNotes;
+import com.personalkanban.domain.board.CardReminder;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.ui.theme.ThemeManager;
@@ -14,6 +15,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -36,6 +38,7 @@ import javafx.stage.Stage;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -68,6 +71,10 @@ final class CardDetailWindow {
     private CardNotes notesModel = CardNotes.empty();
     private boolean notesLoading;
     private final VBox checklistBox = new VBox(6);
+    // Reminder moments (T23 · B10): the tab's list, re-rendered from the board
+    // after every change so the window matches the aggregate.
+    private final VBox reminderBox = new VBox(6);
+    private final Label reminderError = new Label();
 
     private final ToggleButton stopwatch = new ToggleButton("\u23F1");
     private final Label timeStatus = new Label();
@@ -91,8 +98,9 @@ final class CardDetailWindow {
         Tab descriptionTab = new Tab(i18n.text("card.tab.description"), buildDescriptionPane());
         Tab notesTab = new Tab(i18n.text("card.tab.notes"), buildNotesPane());
         Tab checklistTab = new Tab(i18n.text("card.tab.checklist"), buildChecklistPane());
+        Tab remindersTab = new Tab(i18n.text("card.tab.reminders"), buildRemindersPane());
         Tab timeTab = new Tab(i18n.text("card.tab.time"), buildTimePane());
-        TabPane tabs = new TabPane(descriptionTab, notesTab, checklistTab, timeTab);
+        TabPane tabs = new TabPane(descriptionTab, notesTab, checklistTab, remindersTab, timeTab);
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         VBox.setVgrow(tabs, Priority.ALWAYS);
 
@@ -136,6 +144,7 @@ final class CardDetailWindow {
 
         refreshChecklist();
         refreshTime();
+        refreshReminders();
     }
 
     /** Opens (or focuses) a detail window for the given card. */
@@ -326,6 +335,144 @@ final class CardDetailWindow {
         VBox pane = new VBox(6, addRow, checklistBox);
         VBox.setVgrow(checklistBox, Priority.ALWAYS);
         return pane;
+    }
+
+    // ------------------------------------------------------------------
+    // Reminders (T23 · B10)
+    // ------------------------------------------------------------------
+
+    /**
+     * The card's reminder moments: the calendar of days between today and the
+     * deadline (what the user asked for), plus a one-day-at-a-time row for a
+     * precise moment, and the list of what is already scheduled. Reminders only
+     * exist on cards with a due date, so a card without one explains what to do
+     * instead of offering buttons that cannot work.
+     */
+    private VBox buildRemindersPane() {
+        Label caption = new Label(i18n.text("card.reminders.caption"));
+        caption.getStyleClass().add("detail-caption");
+        caption.setWrapText(true);
+
+        Button calendar = new Button(i18n.text("reminders.calendar"));
+        calendar.getStyleClass().add("tool-button");
+        calendar.setOnAction(e -> {
+            board.onEditReminders(cardId);
+            refreshReminders();
+        });
+
+        DatePicker day = new DatePicker(LocalDate.now());
+        day.setPrefWidth(150);
+        TextField hour = new TextField();
+        hour.setPrefColumnCount(5);
+        hour.setPromptText(ReminderCalendar.formatTime(ReminderCalendar.DEFAULT_TIME));
+        Label hourHint = new Label(i18n.text("reminders.time.hint"));
+        hourHint.getStyleClass().add("detail-caption");
+        Button add = new Button(i18n.text("reminders.add"));
+        add.getStyleClass().add("tool-button");
+        add.setOnAction(e -> addReminder(day, hour));
+
+        HBox addRow = new HBox(8, day, hour, add, hourHint);
+        addRow.setAlignment(Pos.CENTER_LEFT);
+
+        reminderError.getStyleClass().add("detail-caption");
+        reminderError.setWrapText(true);
+
+        ScrollPane scroll = new ScrollPane(reminderBox);
+        scroll.setFitToWidth(true);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        VBox pane = new VBox(8, caption, calendar, addRow, reminderError, scroll);
+        if (!hasDueDate()) {
+            calendar.setDisable(true);
+            day.setDisable(true);
+            hour.setDisable(true);
+            add.setDisable(true);
+            reminderError.setText(i18n.text("reminders.no.due"));
+        }
+        return pane;
+    }
+
+    private boolean hasDueDate() {
+        return board.cardById(cardId).map(card -> card.dueDate() != null).orElse(false);
+    }
+
+    /** Adds the day the picker shows, with the (optional) hour of the field. */
+    private void addReminder(DatePicker day, TextField hour) {
+        LocalDate date = day.getValue();
+        if (date == null) {
+            reminderError.setText(i18n.text("reminders.pick.day"));
+            return;
+        }
+        ReminderCalendar.TimeInput time = ReminderCalendar.parseTime(hour.getText());
+        if (!time.valid()) {
+            reminderError.setText(i18n.text("reminders.time.invalid"));
+            return;
+        }
+        LocalDate due = board.cardById(cardId).map(card -> card.dueDate()).orElse(null);
+        if (due == null) {
+            reminderError.setText(i18n.text("reminders.no.due"));
+            return;
+        }
+        if (date.isAfter(due)) {
+            reminderError.setText(i18n.text("reminders.after.due", due.toString()));
+            return;
+        }
+        reminderError.setText("");
+        board.onAddReminder(cardId, date, time.time());
+        refreshReminders();
+    }
+
+    /** Re-renders the list of scheduled moments from the card's current state. */
+    private void refreshReminders() {
+        if (!hasDueDate()) {
+            reminderBox.getChildren().setAll(captionLabel(i18n.text("reminders.none")));
+            return;
+        }
+        List<CardReminder> reminders = board.remindersOf(cardId);
+        if (reminders.isEmpty()) {
+            reminderBox.getChildren().setAll(captionLabel(i18n.text("reminders.none")));
+            return;
+        }
+        List<javafx.scene.Node> rows = new java.util.ArrayList<>();
+        for (CardReminder reminder : reminders) {
+            rows.add(reminderRow(reminder));
+        }
+        reminderBox.getChildren().setAll(rows);
+    }
+
+    private Label captionLabel(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("detail-caption");
+        return label;
+    }
+
+    /** One scheduled moment: attended checkbox, moment, and a remove button. */
+    private HBox reminderRow(CardReminder reminder) {
+        CheckBox attended = new CheckBox();
+        attended.setSelected(reminder.acknowledged());
+        attended.setTooltip(new Tooltip(i18n.text("reminders.ack.one")));
+        attended.setOnAction(e -> {
+            board.onAcknowledgeReminder(cardId, reminder.id(), attended.isSelected());
+            refreshReminders();
+        });
+
+        Label moment = new Label(reminder.describe());
+        moment.getStyleClass().add(reminder.acknowledged()
+                ? "reminder-moment-done" : "reminder-moment");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button remove = new Button("\u2716");
+        remove.getStyleClass().add("time-entry-delete");
+        remove.setTooltip(new Tooltip(i18n.text("reminders.remove")));
+        remove.setOnAction(e -> {
+            board.onRemoveReminder(cardId, reminder.id());
+            refreshReminders();
+        });
+
+        HBox row = new HBox(8, attended, moment, spacer, remove);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
     }
 
     private VBox buildTimePane() {

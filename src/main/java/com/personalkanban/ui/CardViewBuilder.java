@@ -134,6 +134,7 @@ final class CardViewBuilder {
         addContentArea(board, i18n, card, mode, content, view);
 
         addDueBadgeIfPresent(i18n, card, view);
+        addReminderBadgeIfPresent(i18n, card, view);
         addChecklistProgressIfPresent(i18n, card, view);
         addNotesIndicatorIfPresent(i18n, card, view);
         addAttachmentsIndicatorIfPresent(i18n, attachmentCount, view);
@@ -225,6 +226,14 @@ final class CardViewBuilder {
             reschedule.getItems().add(rescheduleItem(i18n, board, card,
                     "card.reschedule.clear", day -> null));
             viewMenu.getItems().add(reschedule);
+            // T23 · B10: the reminder calendar of this card. Only cards with a
+            // deadline can carry reminders, so the entry explains itself as
+            // disabled instead of opening a calendar with nothing to pick.
+            javafx.scene.control.MenuItem reminders = new javafx.scene.control.MenuItem(
+                    i18n.text("card.reminders.menu"));
+            reminders.setDisable(card.dueDate() == null);
+            reminders.setOnAction(e -> board.onEditReminders(card.id()));
+            viewMenu.getItems().add(reminders);
             view.setOnContextMenuRequested(event -> {
                 CardViewSettings.Mode effective = settings.effectiveMode(card.id().value());
                 // Only the "reset override" entry depends on the card having
@@ -363,6 +372,23 @@ final class CardViewBuilder {
         Label badge = new Label("\u2190" + predecessors + " \u2192" + successors);
         badge.getStyleClass().add("card-relations");
         badge.setTooltip(new Tooltip(i18n.text("card.relations.tip")));
+        view.getChildren().add(badge);
+    }
+
+    /**
+     * "\uD83D\uDD14 n" badge when the card carries reminders: the number of
+     * moments, muted while they are all attended and in the alert style while
+     * any of them is still pending (T23 · B10).
+     */
+    private static void addReminderBadgeIfPresent(I18n i18n, Card card, VBox view) {
+        int total = card.reminders().size();
+        if (total == 0) {
+            return;
+        }
+        long pending = card.pendingReminderCount();
+        Label badge = new Label("\uD83D\uDD14 " + total);
+        badge.getStyleClass().add(pending > 0 ? "card-reminders-pending" : "card-reminders");
+        badge.setTooltip(new Tooltip(i18n.text("card.reminders.badge.tip", total, pending)));
         view.getChildren().add(badge);
     }
 
