@@ -129,6 +129,9 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [ ] 💬 **C-5** H-12 (menor): archivadas visibles en la vista de procesos; el
   toggle «mostrar archivadas» no persiste; resumen del frente configurable;
   filtro guardado por tablero; nombres de color en el tooltip de color.
+- [ ] 💬 **C-6** Vista de procesos: clic que abre el detalle de golpe + panel
+  inferior confuso. Diagnóstico y opciones A/B/C propuestas en **§7.8** (sin
+  implementar hasta decidir).
 
 ### Prueba manual del usuario (el código ya está)
 
@@ -814,6 +817,84 @@ Vista Agenda (`Board.cardsDueBy()` ya devuelve el mapa por fecha), ordenar
 columna por vencimiento, reagendar en lote, «hace N días» en el badge e
 informe de ciclo/entregadas-tarde. **No** se reabre la decisión cerrada de §10
 sobre recordatorios sin fecha.
+
+### 7.8 Propuesta — arreglo y rediseño de la vista de procesos (💬 pendiente de discusión)
+
+> Origen: queja del usuario (2026-10-20): «apenas selecciono una tarjeta, de
+> inmediato me muestra la ventana para editar sus detalles; esto no era así
+> antes» y «al seleccionar una tarjeta, en la parte de abajo del contenedor
+> del proceso muestran datos de la tarjeta, pero es algo confuso». **Solo
+> diagnóstico + propuestas: no implementar hasta acordar.**
+
+#### Diagnóstico (verificado en el código)
+
+1. **Un clic abre el detalle.** `ProcessViewBuilder.cardNode` cuelga del
+   **título** un `setOnMouseClicked → onOpenCardDetail` (línea 550) y el
+   título ocupa casi toda la celda (160×34 de 180×96): cualquier clic en la
+   banda central de la tarjeta abre la ventana de detalle **en el mismo
+   clic** que además selecciónala (el evento burbujea al handler del nodo,
+   línea 569). En el tablero kanban en cambio **clic = seleccionar** y
+   **doble clic = abrir** (`CardViewBuilder`, líneas 165-184): la vista de
+   procesos es la única que rompe esa convención. El handler del título
+   existe desde `51b1615` (sesión «registro de tiempos»), pero con la vista
+   más usada la asimetría se ha vuelto molesta.
+2. **El panel inferior confuso.** Es el *inspector de relaciones*
+   (`renderInspector`, líneas 703-743): al enfocar una tarjeta aparece
+   **bajo su fila de proceso** una caja con: título clicable (que **también**
+   abre el detalle con un clic), las listas **Predecesores / Sucresores** con
+   una ✕ por enlace, **los mismos 4 botones de flecha** de la tarjeta
+   repetidos como botones, y una **línea de ayuda de teclado permanente**.
+   Problemas: ① duplica información que el diagrama ya dibuja con conectores;
+   ② la fila **crece de golpe** al seleccionar (el panel aparece/desaparece
+   y desplaza el contenido); ③ el título clicable repite el gesto incómodo
+   del punto 1; ④ mezcla tres tareas (navegar, editar enlaces, enseñar
+   atajos) en un bloque siempre visible; ⑤ la ayuda de teclado vive aquí en
+   vez de en F1/Ayuda, que es donde vive el resto.
+3. **Detalle menor relacionado:** la clase `card-current` sí se añade a la
+   tarjeta enfocada del proceso, pero el CSS es `.card.card-current` y estas
+   tarjetas son `.process-card`: **la tarjeta actual no se ve marcada** en
+   esta vista (solo el borde azul `:focused` si tiene foco de teclado).
+
+#### Propuestas (a decidir)
+
+**A. Modelo de interacción del clic (arreglo del punto 1)**
+- **A1 (recomendada): alinear con el tablero** — clic = seleccionar y enfocar
+  la tarjeta (además de hacerla «actual»), **doble clic = abrir el detalle**;
+  se elimina el `setOnMouseClicked` del título (o se le da el mismo
+  comportamiento que al nodo). `Enter` ya abre el editor de la tarjeta
+  enfocada, así que el teclado no cambia.
+- **A2 (alternativa mínima):** conservar clic único = abrir, pero solo sobre
+  un **icono/ affordance explícito** (p. ej. ✎), no sobre todo el título.
+
+**B. Inspector inferior (arreglo del punto 2)**
+- **B1 (recomendada): un solo inspector al pie de la vista completa** en vez
+  de uno por fila: aparece **plegado** y se despliega al enfocar una tarjeta;
+  se cierra con `Esc` o al hacer clic fuera. Contenido acotado: título de la
+  tarjeta (**clic = enfocar, doble clic = abrir**), las dos listas de
+  enlaces con ✕ y nada más. Se **quitan** los 4 botones duplicados (ya están
+  en la tarjeta) y la línea de ayuda permanente (esa va a F1/Ayuda).
+- **B2: eliminar el inspector** — los enlaces se editan solo con las flechas
+  de la tarjeta y el teclado; los tooltips de los conectores ya dicen qué
+  hacen. Menos UI, pero se pierde la lista «a la vista» de los enlaces de
+  una tarjeta sin recorrer el diagrama.
+- **B3: mantenerlo por fila pero minimalista** — solo las dos listas de
+  enlaces (sin título clicable, sin botones repetidos, sin ayuda), colapsado
+  de forma animada. Es el término medio, pero sigue ocupando una banda por
+  fila.
+
+**C. Coherencia y extras (opciones, prioridad baja)**
+- **C1:** marcar visualmente la **tarjeta actual** en la vista de procesos
+  (regla CSS `.process-card.card-current`).
+- **C2:** **clic derecho** en una tarjeta del proceso = menú contextual con
+  las acciones del tablero (abrir, editar, reagendar, recordatorios,
+  archivar…), reutilizando las entradas del menú de la tarjeta.
+- **C3:** cabecera del proceso con el **contador de tarjetas** visibles
+  (`#proceso (n)`), ya que los filtros pueden ocultar parte.
+- **C4:** fila de proceso vacía con acción directa («asignar tarjetas a este
+  proceso») en vez del texto plano actual.
+
+**Sin decidir todavía:** nada de esto se implementa hasta que el usuario
+elija combinación (A?, B?, C?).
 
 
 ---
