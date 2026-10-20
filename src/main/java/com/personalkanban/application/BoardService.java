@@ -18,6 +18,7 @@ import com.personalkanban.application.command.AcknowledgeReminderCommand;
 import com.personalkanban.application.command.AddChecklistItemCommand;
 import com.personalkanban.application.command.AddReminderCommand;
 import com.personalkanban.application.command.AddLabelsCommand;
+import com.personalkanban.application.command.DuplicateCardCommand;
 import com.personalkanban.application.command.LinkCardsCommand;
 import com.personalkanban.application.command.MoveCardCommand;
 import com.personalkanban.application.command.MoveCardToSlotCommand;
@@ -32,6 +33,7 @@ import com.personalkanban.application.command.RenameChecklistItemCommand;
 import com.personalkanban.application.command.RemoveProcessCommand;
 import com.personalkanban.application.command.RemoveReminderCommand;
 import com.personalkanban.application.command.RescheduleCardCommand;
+import com.personalkanban.application.command.CompleteCardCommand;
 import com.personalkanban.application.command.SetRemindersCommand;
 import com.personalkanban.application.command.ToggleLabelCommand;
 import com.personalkanban.application.command.RemoveCardsCommand;
@@ -523,11 +525,34 @@ public final class BoardService {
     }
 
     /**
+     * Duplicates a card of the active board into a column; returns the new
+     * card's id. Title, description, color, due date, labels, notes, checklist
+     * and process are copied (user request T10: copy/paste a card).
+     */
+    public CardId duplicateCard(CardId cardId, ColumnId targetColumnId) {
+        DuplicateCardCommand command = new DuplicateCardCommand(cardId, targetColumnId);
+        return execute(command, command::createdCardId);
+    }
+
+    /**
      * Quick reschedule of one card (session 15, T5): changes the due date only,
      * in one undoable step; {@code null} removes the date.
      */
     public void rescheduleCard(CardId cardId, LocalDate dueDate) {
         execute(new RescheduleCardCommand(cardId, dueDate));
+    }
+
+    /**
+     * Marks one card as finished today (T24 · B11), one undoable step. Moving
+     * the card into the board's finalized column does the same automatically.
+     */
+    public void completeCard(CardId cardId) {
+        execute(new CompleteCardCommand(cardId, LocalDate.now()));
+    }
+
+    /** Puts a finished card back in progress (T24 · B11), one undoable step. */
+    public void reopenCard(CardId cardId) {
+        execute(new CompleteCardCommand(cardId, null));
     }
 
     // ------------------------------------------------------------------
@@ -796,7 +821,7 @@ public final class BoardService {
     }
 
     public void moveCardsToColumn(List<CardId> cardIds, ColumnId targetColumnId) {
-        execute(new MoveCardsCommand(cardIds, targetColumnId));
+        execute(new MoveCardsCommand(cardIds, targetColumnId, LocalDate.now()));
     }
 
     /** Toggles a quick flag (e.g. Urgente/Importante) on one card, undoable. */
@@ -907,12 +932,12 @@ public final class BoardService {
     }
 
     public void moveCard(CardId cardId, ColumnId targetColumnId, int targetIndex) {
-        execute(new MoveCardCommand(cardId, targetColumnId, targetIndex));
+        execute(new MoveCardCommand(cardId, targetColumnId, targetIndex, LocalDate.now()));
     }
 
     /** Moves a card into the visual slot between two neighbors (drop indicator). */
     public void moveCardToSlot(CardId cardId, ColumnId targetColumnId, int slotIndex) {
-        execute(new MoveCardToSlotCommand(cardId, targetColumnId, slotIndex));
+        execute(new MoveCardToSlotCommand(cardId, targetColumnId, slotIndex, LocalDate.now()));
     }
 
     // ------------------------------------------------------------------

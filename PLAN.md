@@ -72,12 +72,12 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 
 - [x] **T9 · N-5** ✅ **Asignar una tarjeta a un proceso sin modo selección**
   (menú contextual de la tarjeta → **Proceso ▸**; «Sin proceso» la saca). §6.2.
-- [ ] **T10 · N-4** ⬜ Botón **copiar / pegar tarjetas** (pega como tarjetas
+- [x] **T10 · N-4** ✅ Botón **copiar / pegar tarjetas** (pega como tarjetas
   nuevas en la columna actual). §6.2.
 
 ### Fase 5 — Vista de proceso
 
-- [ ] **T11 · N-7 + N-9** ⬜ Vista de proceso: **nombre (y proceso) al crear
+- [x] **T11 · N-7 + N-9** ✅ Vista de proceso: **nombre (y proceso) al crear
   tarjeta**; **limitar la selección** a las tarjetas del proceso. §6.4.
 - [x] **T12 · N-8** ✅ 🐞 **Se borraban las relaciones** al hacer clic en una
   flecha de la vista de procesos: ahora **pide confirmación** antes de quitarla.
@@ -94,6 +94,11 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [x] **T23 · B10** ✅ **Recordatorios programables por tarjeta**: varias fechas
   (con hora opcional) elegidas en un **calendario** de hoy a la fecha límite, o
   rellenadas por **diario / cada semana** (migración **V11**). §7.6.
+- [x] **T24 · B11** ✅ **Estado «terminada»** de la tarjeta (`completedAt`,
+  migración **V12**, auto al soltar en la columna finalizada) + **seis
+  correcciones** de vencimientos (CSS del badge, filtros en la vista de
+  procesos, recuento del aviso, fecha en el detalle, aviso de fecha pasada,
+  sync de recordatorios). §7.7.
 
 ### Fase 7 — Robustez y distribución
 
@@ -186,6 +191,7 @@ empaquetado).
 | T15 | B7 color por etiqueta | 🔵 Baja | no | medio |
 | T16 | B8 subtareas | 🔵 Baja | **sí (V10)** | alto |
 | T23 | B10 recordatorios por tarjeta | 🟡 Media | **sí (V11)** | medio |
+| T24 | B11 tarjeta «terminada» + arreglos de vencimientos | 🟠 Media | **sí (V12)** | medio |
 | T17 | H-2/H-3 backup + integridad | 🟠 Media | no | medio |
 | T18 | H-7/H-8 logging + JaCoCo | 🟡 Media | no | bajo |
 | T19 | H-11/H-10 ayuda + foco | 🔵 Baja | no | bajo |
@@ -206,6 +212,9 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 
 | Fecha | Tarea | Estado | Commit / notas |
 |---|---|---|---|
+| 2026-10-19 | **T24 · B11** tarjeta «terminada» (V12) + seis correcciones de vencimientos | ✅ | `feat(cards): finished-card state with auto-complete in the done column (V12) + six due-date fixes` — **A:** `Card.completedAt` (`LocalDate`, null = pendiente) con `isDone()/complete/reopen`; `Board.moveCard/moveCardsToColumn` **completan al entrar** en la columna finalizada y **reabren al salir** («hoy» como **parámetro**, dominio sin reloj); `CompleteCardCommand` (1 undo); migración **V12** (`card.completed_at`) + binding/lectura + componente en `CardSnapshot` con ctor retrocompatible; LWW en `SyncMerge`; **✓** en el frente (patrón ★/!), menús de tarjeta y «Tarjetas», clase `card-done` (apagada + tachada) y toggle **«Mostrar terminadas»** (barra + menú Ver) enganchado en `matchesProcessFilter` (un solo gate: columnas, navegador, aviso y búsqueda); `ReminderPlan.dueNow` ignora hechas. **Correcciones:** **B1** `.card-due`/`.card-due-overdue` y las bandas `sync/due/reminder-notice` **no existían en ningún CSS** → añadidas a ambos temas; **B2** la vista de procesos **no aplicaba ningún filtro** → `BoardController.matchesVisibleFilters` (un solo gate para ambas vistas); **B3** el aviso de vencimientos contaba solo con filtro de proceso → ahora corre la misma cadena que las columnas; **B4** la fecha (y «terminada el») se ve en la cabecera del detalle; **B5** el DatePicker del formulario **avisa en rojo** con fecha pasada (sin bloquear); **B6** `SyncMerge.cardKey` incluye recordatorios + `completedAt` (una edición solo-recordatorio ya no pierde contra un borrado) y **poda** los recordatorios posteriores a la fecha ganadora tras el merge. **Hallazgos:** ① la prueba de UI más útil fue la de filtros: el toggle «mostrar» debe **recuperar** las hechas de los filtros de vencimiento también (decisión ②); ② PowerShell `Add-Content` escribe ANSI → el CSS añadido corrompió UTF-8 (`CardKeyboardFocusTest` lo pilló); ③ `refresh()` era `private` → package-private para tests. `CompleteCardTest` (13), `ReminderPlanTest` (+1), `SyncMergeTest` (+4), `SqliteBoardRepositoryTest` (+1), `CompletedCardUiTest` (4), `CardThemeCssTest` (+4) → suite **619/619** (1 skip) |
+| 2026-10-19 | **T10 · N-4** copiar/pegar tarjetas + **T11 · N-7/N-9** vista de proceso | ✅ | `feat(cards)+feat(process-view)+fix(ui): copy/paste cards, richer process creation, markdown format toolbar and clearable column background` — **T10:** portapapeles interno (`cardClipboard`) + **Ctrl+C/Ctrl+V**, entrada **Copiar tarjeta** en el menú de la tarjeta y botón **Pegar** en la cabecera de cada columna; pega **una tarjeta nueva** en la columna actual en **1 undo** (`DuplicateCardCommand` + `BoardService.duplicateCard`), copiando título/descripción/color/vencimiento/etiquetas/notas/checklist/proceso y **sin** enlaces. **T11:** la flecha verde abre el diálogo de tarjeta con el **proceso del ancla preseleccionado** (ya no crea «Nueva tarjeta» vacía) y «elegir existente» filtra por proceso (`linkCandidatesFor`). **UI:** `MarkdownEditor` gana botones **B/I/H/lista/enlace/código/limpiar** y pierde el tooltip invasivo; el «ninguno» del color de fondo de columna ahora **limpia** el fondo. `ProcessRelationDialogTest` (3) → suite **592/592** (1 skip) |
+
 | 2026-10-13 | Documentación consolidada en un solo documento + borrado de docs redundantes | ✅ | `docs: consolidate all planning into one document (PLAN.md)` |
 | 2026-10-13 | **T1 · BUG-1** atajos de teclado | ✅ | `fix(shortcuts): resolve actions by enum or storage name` — `fromNameOrThrow` acepta ambos nombres, la fila del diálogo lleva el enum (ya no re-parsea una clave i18n); +6 tests → suite **429/429** |
 | 2026-10-13 | **T2 · N-1/N-2** barras alternas + Esc | ✅ | `feat(selection): alternate filter and selection bars, Esc drops the selection` — la barra de filtros se oculta en modo selección y vuelve al salir (también en `refresh()`); la tecla configurada de salida actúa en etapas (desmarca → sale del modo → suelta el foco). `SelectionModeBarsTest` (3) → suite **432/432** |
@@ -304,14 +313,19 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 
 ### 6.4 T11/T12 — vista de modo proceso
 
-- **T11 · N-7 — Nombre (y proceso actual) al crear tarjeta.** *Hoy:*
-  `BoardController.onProcessAddNewRelation` crea la tarjeta con **título fijo**
-  (`process.new.card.title`) sin descripción y abre el detalle. *Pedido:* poder
-  poner **primero el nombre**, luego la descripción, y **asignar el proceso
-  actual**.
-- **T11 · N-9 — Limitar la selección a las del proceso.** *Hoy:* «elegir tarjeta
-  existente» (`onProcessLinkExisting`) ofrece **todas**. *Pedido:* solo las del
-  proceso actual.
+- **T11 · N-7 — Nombre (y proceso actual) al crear tarjeta.** ✅ *Hecho
+  (2026-10-19).* `BoardController.onProcessAddNewRelation` ya **no** inserta una
+  tarjeta vacía con título fijo (`process.new.card.title`): abre el **diálogo de
+  tarjeta completo** (`Dialogs.cardDialog`) con el **proceso del ancla
+  preseleccionado** (`anchorCard.processId()`) y el ancla preenlazada en el lado
+  correcto (predecesora/sucesora). Al aceptar se crea con **el título y la fecha
+  que el usuario ponga** (más descripción, etiquetas, notas y checklist) y se abre
+  el detalle. `process.new.card.title` queda sin uso.
+- **T11 · N-9 — Limitar la selección a las del proceso.** ✅ *Hecho (2026-10-19).*
+  `onProcessLinkExisting` usa el nuevo `BoardController.linkCandidatesFor(anchor)`:
+  la lista de «elegir tarjeta existente» contiene **solo los miembros del proceso
+  del ancla** (sin el ancla). Si el ancla no tiene proceso, cae a todas las
+  tarjetas; un ancla desconocida no ofrece ninguna.
 - **T12 · N-8 — Se borran relaciones al clic en una flecha.** ✅ *Hecho
   (2026-10-14).* **Hipótesis descartada:** verificado en el código que **no** hay
   borrado múltiple — `Board.unlinkCards` quita solo ese par y `computeLayout` se
@@ -715,6 +729,93 @@ alterna** el estado (y el handler lo ve ya alternado), pero **no hace nada en un
   0.8.12 no instrumenta clases de JDK 25 (`Unsupported class file major version
   69`) — sigue pendiente como **T18**/**H-8**.
 
+### 7.7 T24 — B11: tarjeta «terminada» + correcciones de vencimientos ✅
+
+**Petición del usuario (2026-10-19):** al trabajar con vencimientos quiere un
+botón «hecho» o, como mínimo, que soltar una tarjeta en la **columna
+finalizada** la considere terminada. Pidió además «qué más se podría añadir,
+corregir o modificar».
+
+**Diagnóstico hecho (todo verificado en el código):** hoy **no existe** estado
+de «tarjeta terminada». Lo más cercano: la etiqueta del sistema `Archivada`
+(precedente documentado en `Card.java:41-47`), el flag de columna `done` —que
+**solo es decorativo**, badge ✓ en `ColumnViewBuilder` y nada más— y el
+checklist ☑. Además aparecieron **seis fallos reales** en la mecánica de
+vencimientos (abajo, A2-A6 y B1).
+
+**Decisiones tomadas con el usuario:** ① estado real **`completedAt`** (fecha,
+migración **V12**) en vez de una etiqueta, para poder analizar retrasos;
+② las hechas **se excluyen por defecto** de los filtros de vencimiento, del
+aviso y de los recordatorios, con un toggle «Mostrar terminadas» que las
+recupera; ③ la ronda incluye el estado **y** las correcciones, pero **no** la
+vista Agenda ni el informe de ciclo (quedan para después).
+
+#### A — Estado `completedAt` (migración V12)
+- **Dominio:** `Card.completedAt` (`LocalDate`, null = pendiente) con
+  `isDone()`, `complete(date)`, `reopen()`. `LocalDate` a propósito: `dueDate`
+  ya es `LocalDate`, así que «entregada tarde» es
+  `completedAt.isAfter(dueDate)` y el informe semanal no necesita zonas.
+- **Auto-marcado:** `Board.moveCard` / `moveCardToSlot` / `moveCardsToColumn`
+  completan la tarjeta si la columna destino está marcada como finalizada y la
+  **reabren** al sacarla de una. El «hoy» entra como **parámetro** en los
+  comandos de mover (mismo criterio que `Board.rescheduleCard`: el dominio sigue
+  sin reloj y los tests son deterministas).
+- **Servicio:** `BoardService.completeCard / reopenCard` →
+  `CompleteCardCommand` (1 undo cada uno).
+- **Persistencia:** `V12__card_completed.sql` (`ALTER TABLE card ADD COLUMN
+  completed_at TEXT`), binding/lectura en `SqliteBoardRepository`, componente
+  nuevo en `CardSnapshot` con **constructor retrocompatible** (el patrón de los
+  recordatorios V11) y LWW en `SyncMerge`.
+- **Exclusión:** un solo punto de enganche, `BoardController.matchesProcessFilter`
+  (donde ya se ocultan las archivadas) ⇒ gratis para columnas, navegador,
+  recuento del aviso y búsqueda; `ReminderPlan.dueNow` ignora las hechas.
+- **UI:** botón ✓ en el frente de la tarjeta (patrón de ★/!), entradas en el
+  menú de la tarjeta y en «Tarjetas», clase `card-done` (apagada/tachada) y
+  toggle **«Mostrar terminadas»** en la barra de filtros + menú «Ver», igual
+  que el de archivadas.
+
+#### B — Seis correcciones
+- **B1 · CSS del badge de vencimiento.** `.card-due` y `.card-due-overdue` se
+  añaden en `CardViewBuilder` pero **no existen en ningún CSS** (`light.css` /
+  `dark.css`: 0 coincidencias), así que el «rojo cuando vencida» prometido en el
+  comentario **nunca se pinta**; solo cambia el tooltip. Ídem las bandas
+  `due-notice`, `reminder-notice` y `sync-notice`, pintadas sin estilo.
+- **B2 · Filtros ignorados en la vista de procesos.** `ProcessViewBuilder` dibuja
+  `cardsOfProcess(...)` sin ningún filtro, mientras `ColumnViewBuilder` sí aplica
+  etiquetas/★/!/vencimientos/archivadas: mismo tablero, dos conjuntos distintos
+  (y las archivadas reaparecen).
+- **B3 · El aviso de vencimientos miente.** `updateDueNotice` cuenta solo con el
+  filtro de proceso/archivadas, pero su propio comentario promete «coincide
+  exactamente con lo que muestran los filtros».
+- **B4 · La fecha no se ve ni se edita en el detalle.** `CardDetailWindow` se
+  gatea con la fecha en la pestaña de recordatorios pero no la enseña: hay que
+  abrir Editar.
+- **B5 · Validación inconsistente.** El DatePicker del formulario acepta fechas
+  pasadas sin avisar mientras los recordatorios **rechazan** una fecha pasada.
+  Se mantienen ambos comportamientos (crear una tarjeta ya vencida es legítimo)
+  pero el formulario avisa en rojo.
+- **B6 · Sync frágil.** ① `SyncMerge.cardKey` no incluye recordatorios ni
+  timeline, así que una edición que **solo** añade un recordatorio **pierde**
+  contra un borrado; ② la fecha (LWW) y los recordatorios (unión) se mezclan por
+  separado y puede quedar un recordatorio **posterior** a la fecha ganadora, que
+  hoy se cuela porque `Card.adoptReminder` carga sin validar.
+
+#### C — Tests
+`CompleteCardTest` (dominio: marcar/desmarcar, auto al entrar y salir de la
+columna finalizada, no tocar otras columnas, undo), servicio (digesto y
+recordatorios ignoran hechas, toggle «mostrar»), sync (LWW de `completedAt`,
+edición solo-recordatorio ya no pierde, poda tras el merge), SQLite (ida y
+vuelta de `completed_at` con y sin valor), UI (✓ cableado, clase CSS del badge,
+filtros de vencimiento excluyen hechas) y `CardThemeCssTest` (los selectores
+existan en ambos temas).
+
+#### D — No cubre (queda para después)
+Vista Agenda (`Board.cardsDueBy()` ya devuelve el mapa por fecha), ordenar
+columna por vencimiento, reagendar en lote, «hace N días» en el badge e
+informe de ciclo/entregadas-tarde. **No** se reabre la decisión cerrada de §10
+sobre recordatorios sin fecha.
+
+
 ---
 
 ## 8. Pendientes heredados
@@ -861,32 +962,41 @@ copia con datos reales (leer el fichero copiado y contar tableros).
 **Criterio:** tras arrancar hay copia en `backups/`, la política de rotación
 está probada y una base corrupta no se abre en silencio.
 
-#### T10 — N-4: copiar / pegar tarjetas
-**Alcance:** botón en la toolbar (y Ctrl+C/Ctrl+V sobre la tarjeta actual o la
-selección) que **copia** las tarjetas marcadas y las **pega como nuevas** en la
-columna de destino (la actual de la vista o la de la tarjeta actual), con
-`(copia)` en el título, etiquetas/checklist/descripción y **sin** enlaces ni
-recordatorios (no se duplican dependencias ni avisos), y **un** paso de undo.
-**Diseño:** `application/Clipboard` (puro: `copy(cards)`, `paste(board, column) →
-cantidad`) + `command/PasteCardsCommand`; el portapapeles es interno de la app
-(el del sistema traería texto suelto y otra semántica).
-**Tests:** `ClipboardTest` (contenido, ids nuevos, sin enlaces/recordatorios,
-WIP del destino, undo en 1 paso) + UI (pegar en la columna actual crea N).
-**Criterio:** copiar 2 tarjetas y pegarlas crea 2 nuevas en el destino, con 1
-undo y sin arrastrar dependencias.
+#### T10 — N-4: copiar / pegar tarjetas ✅ *Hecho (2026-10-19)*
+**Alcance entregado:** un portapapeles **interno de la app** (`CardId` en
+`BoardController.cardClipboard`, no el del sistema) con **Ctrl+C/Ctrl+V**, una
+entrada **Copiar tarjeta** en el menú de la tarjeta, y un botón **Pegar** en la
+**cabecera de cada columna** (deshabilitado sin tarjeta copiada). Pegar crea una
+**tarjeta nueva** en la columna elegida en **un** paso de undo.
+**Implementación:** `application/command/DuplicateCardCommand` (copia título,
+descripción, color, vencimiento, etiquetas, notas, checklist y **proceso**; **no**
+copia enlaces ni recordatorios) + `BoardService.duplicateCard(CardId, ColumnId)`.
+**Desvío del diseño:** el plan proponía un port `Clipboard` + `PasteCardsCommand`
+con prefijo «(copia)»; se hizo **una tarjeta** por pegado, **sin** renombrar (el
+usuario decide el título) y sin la capa port (no hacía falta serializar). El
+undo sigue siendo **un** paso por pegado. i18n: `card.copy.menu`,
+`card.paste.empty`, `column.paste.card` (×5).
+**Criterio:** copiar y pegar crea una tarjeta nueva en el destino en 1 undo y sin
+arrastrar dependencias.
 
-#### T11 — N-7 + N-9: vista de proceso
-**Alcance:** ① al crear una tarjeta desde la flecha verde (nueva
-predecesora/sucesora) el diálogo pide **título** (y ofrece **proceso** y
-vencimiento) en vez de crear una tarjeta vacía llamada «Nueva tarjeta»; ②
-«elegir tarjeta existente» ofrece **solo las tarjetas del proceso** (hoy todas).
+
+#### T11 — N-7 + N-9: vista de proceso ✅ *Hecho (2026-10-19)*
+**Alcance entregado:** ① la **flecha verde** (nueva predecesora/sucesora) abre el
+**diálogo de tarjeta** (`Dialogs.cardDialog`) con el **proceso del ancla puesto**
+y el ancla preenlazada, en vez de crear una tarjeta vacía «Nueva tarjeta»;
+② «elegir tarjeta existente» ofrece **solo las tarjetas del proceso**.
 **Archivos:** `BoardController.onProcessAddNewRelation` (diálogo reutilizando
-`CardForm` con `processId` preseleccionado) y `onProcessLinkExisting` (filtro por
-proceso), i18n ×5.
-**Tests:** UI (la flecha verde abre un formulario con el proceso del ancla
-puesto) y unidad del filtro (la lista del selector contiene solo los miembros).
-**Criterio:** crear desde el diagrama produce una tarjeta con nombre y proceso,
-y el selector de enlace no ofrece tarjetas de otro proceso.
+`CardForm` con `processId` preseleccionado), `BoardController.onProcessLinkExisting`
++ nuevo `BoardController.linkCandidatesFor(CardId)` (filtro por proceso). No hizo
+falta i18n nuevo (`process.new.card.title` queda huérfano).
+**Tests:** `ProcessRelationDialogTest` (3) — el filtro devuelve solo los miembros
+del proceso (y el ancla fuera), un ancla sin proceso cae a todas, y
+`onProcessAddNewRelation` abre el diálogo, preselecciona el proceso del ancla y ya
+no usa el título fijo. La creación/apertura desde el diagrama son modales, así
+que su wiring se comprueba sobre el código, como en `ProcessViewLinkTest`.
+**Criterio:** crear desde el diagrama produce una tarjeta con nombre y proceso, y
+el selector de enlace no ofrece tarjetas de otro proceso.
+
 
 #### T18 — H-7 + H-8: logging persistente y JaCoCo
 **Alcance:** ① log rotativo en `logs/kanban.log` (nivel, marca de tiempo,

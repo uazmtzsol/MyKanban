@@ -258,8 +258,8 @@ public final class SqliteBoardRepository implements BoardRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         String cardSql = """
-                INSERT INTO card (id, column_id, title, description, color, position, due_date, labels, created_at, notes, process_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO card (id, column_id, title, description, color, position, due_date, labels, created_at, notes, process_id, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         String checklistSql = """
                 INSERT INTO card_checklist_item (id, card_id, position, text, done, parent_id)
@@ -451,6 +451,12 @@ public final class SqliteBoardRepository implements BoardRepository {
         } else {
             statement.setNull(11, Types.VARCHAR);
         }
+        // T24 · B11: the day the card was finished, or NULL while pending.
+        if (card.completedAt() != null) {
+            statement.setString(12, card.completedAt().toString());
+        } else {
+            statement.setNull(12, Types.VARCHAR);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -474,7 +480,7 @@ public final class SqliteBoardRepository implements BoardRepository {
     private List<CardSnapshot> readCards(ColumnId columnId) {
         List<CardSnapshot> cards = new ArrayList<>();
         String sql = """
-                SELECT id, title, description, color, due_date, labels, created_at, notes, process_id
+                SELECT id, title, description, color, due_date, labels, created_at, notes, process_id, completed_at
                 FROM card
                 WHERE column_id = ?
                 ORDER BY position
@@ -496,7 +502,8 @@ public final class SqliteBoardRepository implements BoardRepository {
                             readNotes(resultSet),
                             readChecklist(cardId),
                             processId == null ? null : new ProcessId(processId),
-                            readReminders(cardId)));
+                            readReminders(cardId),
+                            readCompletedAt(resultSet)));
                 }
             }
         } catch (SQLException e) {
@@ -561,6 +568,12 @@ public final class SqliteBoardRepository implements BoardRepository {
 
     private LocalDate readDueDate(ResultSet resultSet) throws SQLException {
         String iso = resultSet.getString("due_date");
+        return iso == null ? null : LocalDate.parse(iso);
+    }
+
+    /** T24 · B11: day the card was finished, or null while it is pending. */
+    private LocalDate readCompletedAt(ResultSet resultSet) throws SQLException {
+        String iso = resultSet.getString("completed_at");
         return iso == null ? null : LocalDate.parse(iso);
     }
 

@@ -74,8 +74,13 @@ final class ProcessViewBuilder {
         rows.setMaxWidth(Double.MAX_VALUE);
 
         List<Process> processes = service.processes();
+        // B2 (T24): the same gate chain the columns apply, so a filtered
+        // board cannot show a different card set here (archived and finished
+        // cards used to reappear in this view).
         long unassigned = service.board().allCards().stream()
-                .filter(card -> card.processId() == null).count();
+                .filter(card -> card.processId() == null)
+                .filter(controller::matchesVisibleFilters)
+                .count();
         if (processes.isEmpty() && unassigned == 0) {
             Label empty = new Label(i18n.text("process.view.empty"));
             empty.getStyleClass().add("detail-caption");
@@ -98,7 +103,10 @@ final class ProcessViewBuilder {
         Label header = new Label(name.startsWith("#") ? name : "#" + name);
         header.getStyleClass().add("process-header");
 
-        List<Card> members = service.board().cardsOfProcess(process.id());
+        // B2 (T24): filtered exactly like the board columns do.
+        List<Card> members = service.board().cardsOfProcess(process.id()).stream()
+                .filter(controller::matchesVisibleFilters)
+                .toList();
         List<CardId> ids = members.stream().map(Card::id).toList();
         var order = service.suggestedOrder(ids);
         List<CardId> ordered = new ArrayList<>(order.ordered());

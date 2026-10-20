@@ -180,6 +180,21 @@ final class Dialogs {
         ColorPicker colorPicker = colorPicker(initial == null ? BoardColor.DEFAULT : initial.color());
         DatePicker dueDatePicker = new DatePicker(initial == null ? null : initial.dueDate());
         dueDatePicker.setPromptText(i18n.text("card.due.none"));
+        // B5 (T24): a past due date is legal (importing real work usually
+        // means past deadlines), but it used to be accepted silently while
+        // the reminder picker rejected the same day — so the form now warns
+        // in red instead of either blocking or saying nothing.
+        javafx.scene.control.Label dueWarning = new javafx.scene.control.Label();
+        dueWarning.setWrapText(true);
+        dueWarning.getStyleClass().add("dialog-field-warning");
+        Runnable refreshDueWarning = () -> {
+            LocalDate picked = dueDatePicker.getValue();
+            dueWarning.setText(picked != null && picked.isBefore(LocalDate.now())
+                    ? i18n.text("card.due.past.warning") : "");
+        };
+        dueDatePicker.valueProperty().addListener((obs, oldValue, newValue) ->
+                refreshDueWarning.run());
+        refreshDueWarning.run();
         TextField labelsField = new TextField(initial == null || initial.labels().isEmpty()
                 ? "" : String.join(", ", initial.labels()));
         labelsField.setPromptText(i18n.text("card.labels.prompt"));
@@ -296,7 +311,7 @@ final class Dialogs {
         grid.add(new Label(i18n.text("dialog.color")), 0, 2);
         grid.add(colorPicker, 1, 2);
         grid.add(new Label(i18n.text("card.due")), 0, 3);
-        grid.add(dueDatePicker, 1, 3);
+        grid.add(new javafx.scene.layout.VBox(dueDatePicker, dueWarning), 1, 3);
         grid.add(new Label(i18n.text("card.labels")), 0, 4);
         grid.add(labelsField, 1, 4);
         grid.add(advancedToggle, 0, 5, 2, 1);
@@ -487,7 +502,8 @@ final class Dialogs {
 
     /**
      * Background color of one column (separate from the card-tab
-     * color). A checked "no color" box yields null (default surface).
+     * color). A checked "no color" box yields an empty string that
+     * clears the background (default surface).
      */
     Optional<String> columnBackgroundDialog(String currentHex) {
         ColorPicker picker = new ColorPicker(currentHex == null
@@ -509,7 +525,7 @@ final class Dialogs {
 
         track(dialog);
         dialog.setResultConverter(button -> button == ButtonType.OK
-                ? (none.isSelected() ? null : ColorCss.toHex(picker.getValue()))
+                ? (none.isSelected() ? "" : ColorCss.toHex(picker.getValue()))
                 : null);
         return dialog.showAndWait();
     }

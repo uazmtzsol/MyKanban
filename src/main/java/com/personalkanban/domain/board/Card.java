@@ -57,6 +57,8 @@ public final class Card {
     private String notes = "";
     private BoardColor color;
     private LocalDate dueDate;
+    /** Day this card was finished (T24 · B11); null = still pending. */
+    private LocalDate completedAt;
     private List<String> labels = List.of();
     private final List<ChecklistItem> checklist = new ArrayList<>();
     /** Reminder moments of this card (T23 · B10), kept in chronological order. */
@@ -129,6 +131,21 @@ public final class Card {
 
     void tag(List<String> newLabels) {
         setLabels(newLabels);
+    }
+
+    /**
+     * Marks the card as finished on the given day, or reopens it with {@code
+     * null} (T24 · B11). Kept as a plain date — the deadline is a date too, so
+     * "delivered late" is a comparison of two dates and reporting needs no
+     * timezone. Called by the aggregate, never by the UI directly.
+     */
+    void complete(LocalDate finishedOn) {
+        this.completedAt = finishedOn;
+    }
+
+    /** Clears the finished state (the card is pending again). */
+    void reopen() {
+        this.completedAt = null;
     }
 
     /** Assigns this card to a process (or clears it with null); aggregate-checked. */
@@ -455,6 +472,16 @@ public final class Card {
 
     public LocalDate dueDate() {
         return dueDate;
+    }
+
+    /** Day the card was finished (T24 · B11), or null while it is pending. */
+    public LocalDate completedAt() {
+        return completedAt;
+    }
+
+    /** True once the card has been marked as finished (manually or by column). */
+    public boolean isDone() {
+        return completedAt != null;
     }
 
     public List<String> labels() {

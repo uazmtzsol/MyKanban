@@ -110,6 +110,11 @@ final class CardViewBuilder {
         if (selected) {
             view.getStyleClass().add("card-selected");
         }
+        // T24 · B11: a finished card reads as done at a glance — the CSS
+        // dims it and strikes the title through.
+        if (card.isDone()) {
+            view.getStyleClass().add("card-done");
+        }
         // The "current" card (session 13): the one a mouse click or the arrow
         // keys left selected. Only one card in the whole board carries it.
         if (board.isCardCurrent(card.id())) {
@@ -122,6 +127,7 @@ final class CardViewBuilder {
         HBox.setHgrow(title, javafx.scene.layout.Priority.ALWAYS);
         titleRow.getChildren().add(title);
         if (!selectionMode) {
+            titleRow.getChildren().add(doneButton(i18n, board, card));
             titleRow.getChildren().add(flagButton(i18n, board, card, Card.LABEL_IMPORTANT,
                     "\u2605", "card.flag.important", "card-flag-important"));
             titleRow.getChildren().add(flagButton(i18n, board, card, Card.LABEL_URGENT,
@@ -194,6 +200,12 @@ final class CardViewBuilder {
             reset.setOnAction(e -> board.onSetCardViewMode(card.id(), null));
             viewMenu.getItems().add(reset);
             viewMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
+            // T10: copy this card so it can be pasted into any column (Ctrl+C
+            // has the same effect on the current card).
+            javafx.scene.control.MenuItem copyCard = new javafx.scene.control.MenuItem(
+                    i18n.text("card.copy.menu"));
+            copyCard.setOnAction(e -> board.onCopyCard(card.id()));
+            viewMenu.getItems().add(copyCard);
             javafx.scene.control.MenuItem transfer = new javafx.scene.control.MenuItem(
                     i18n.text("card.transfer.menu"));
             transfer.setOnAction(e -> board.onTransferCardToBoard(card.id()));
@@ -210,6 +222,11 @@ final class CardViewBuilder {
             archiveItem.setOnAction(e -> board.onToggleCardLabel(card.id(),
                     com.personalkanban.domain.board.Card.LABEL_ARCHIVED));
             viewMenu.getItems().add(archiveItem);
+            // T24 · B11: mark done / put back in progress, same as the ✓.
+            javafx.scene.control.MenuItem doneItem = new javafx.scene.control.MenuItem(
+                    i18n.text(card.isDone() ? "card.reopen.menu" : "card.complete.menu"));
+            doneItem.setOnAction(e -> board.onToggleCardDone(card.id()));
+            viewMenu.getItems().add(doneItem);
             // Session 15 (T5/B3): quick reschedule without opening the card.
             viewMenu.getItems().add(rescheduleMenu(i18n, board, card));
             // T23 · B10: the reminder calendar of this card. Only cards with a
@@ -445,7 +462,9 @@ final class CardViewBuilder {
         if (card.dueDate() == null) {
             return;
         }
-        boolean overdue = card.isOverdueOn(LocalDate.now());
+        // T24 · B11: a finished card is history — its date is shown, but the
+        // "overdue" alarm would nag about work already delivered.
+        boolean overdue = !card.isDone() && card.isOverdueOn(LocalDate.now());
         Label badge = new Label("\u2691 " + card.dueDate().format(DUE_FORMAT));
         badge.getStyleClass().add(overdue ? "card-due-overdue" : "card-due");
         String tooltip = overdue
@@ -453,6 +472,23 @@ final class CardViewBuilder {
                 : i18n.text("card.due");
         Tooltip.install(badge, new Tooltip(tooltip));
         view.getChildren().add(badge);
+    }
+
+    /**
+     * T24 · B11: the ✓ toggle on the card front (same shape and wiring as
+     * ★/!): clicks mark the card finished today, or put it back in progress.
+     */
+    private static Button doneButton(I18n i18n, BoardController board, Card card) {
+        Button button = new Button("\u2713");
+        button.getStyleClass().add("card-flag");
+        button.getStyleClass().add(card.isDone() ? "card-done-on" : "card-flag-off");
+        button.setTooltip(new Tooltip(i18n.text(
+                card.isDone() ? "card.done.on" : "card.done.off")));
+        button.setFocusTraversable(false);
+        button.setMinWidth(Region.USE_PREF_SIZE);
+        button.setMinHeight(Region.USE_PREF_SIZE);
+        button.setOnAction(e -> board.onToggleCardDone(card.id()));
+        return button;
     }
 
     /**

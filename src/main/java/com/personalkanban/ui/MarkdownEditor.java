@@ -3,6 +3,7 @@ package com.personalkanban.ui;
 import com.personalkanban.ui.markdown.Markdown;
 import com.personalkanban.ui.theme.ThemeManager;
 import javafx.scene.control.Button;
+import javafx.scene.control.IndexRange;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
@@ -12,6 +13,9 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Reusable multiline text editor with a markdown source mode and a rendered
@@ -33,6 +37,9 @@ final class MarkdownEditor {
     private final HBox header = new HBox(8);
     private final I18n i18n;
     private final ThemeManager themeManager;
+    // Formatting toolbar buttons (user request): they only make sense while
+    // editing, so they are disabled in preview mode.
+    private final List<Button> formatButtons = new ArrayList<>();
 
     /**
      * @param initialText  markdown source to edit
@@ -50,7 +57,6 @@ final class MarkdownEditor {
         if (promptKey != null) {
             editor.setPromptText(i18n.text(promptKey));
         }
-        editor.setTooltip(new Tooltip(i18n.text("card.md.editor.tip")));
 
         preview.getEngine().setJavaScriptEnabled(false);
 
@@ -61,6 +67,7 @@ final class MarkdownEditor {
         toggle.getStyleClass().add("md-mode-toggle");
         toggle.setOnAction(e -> applyMode());
         header.getChildren().add(toggle);
+        addFormatToolbar();
 
         root.getChildren().addAll(header, center);
         VBox.setVgrow(center, Priority.ALWAYS);
@@ -113,9 +120,149 @@ final class MarkdownEditor {
         preview.setManaged(view);
         toggle.setText(view ? "\uD83D\uDC41" : "\u270E"); // eye / pencil
         toggle.setTooltip(new Tooltip(i18n.text(view ? "md.mode.edit.tip" : "md.mode.view.tip")));
+        formatButtons.forEach(button -> button.setDisable(view));
         if (view) {
             renderPreview();
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Formatting toolbar (user request): wrap the selection with markdown
+    // markers so nothing has to be typed by hand. Each action keeps the
+    // selection (or leaves the caret inside the markers when there is none).
+    // ------------------------------------------------------------------
+
+    private void addFormatToolbar() {
+        header.getChildren().add(formatButton("B", "md.format.bold", () -> wrap("**", "**")));
+        header.getChildren().add(formatButton("I", "md.format.italic", () -> wrap("*", "*")));
+        header.getChildren().add(formatButton("H", "md.format.heading", () -> toggleLinePrefix("## ")));
+        header.getChildren().add(formatButton("\u2022", "md.format.list", () -> toggleLinePrefix("- ")));
+        header.getChildren().add(formatButton("\uD83D\uDD17", "md.format.link", this::insertLink));
+        header.getChildren().add(formatButton("</>", "md.format.code", () -> wrap("`", "`")));
+        header.getChildren().add(formatButton("\u232B", "md.format.clear", this::clearFormatting));
+    }
+
+    private Button formatButton(String glyph, String tipKey, Runnable action) {
+        Button button = new Button(glyph);
+        button.getStyleClass().add("md-format-button");
+        button.setTooltip(new Tooltip(i18n.text(tipKey)));
+        button.setFocusTraversable(false);
+        button.setOnAction(e -> {
+            action.run();
+            editor.requestFocus();
+        });
+        formatButtons.add(button);
+        return button;
+    }
+
+    /** Wraps the selection (or inserts an empty pair at the caret). */
+    private void wrap(String before, String after) {
+        IndexRange range = editor.getSelection();
+        if (range.getLength() == 0) {
+            int caret = editor.getCaretPosition();
+            editor.insertText(caret, before + after);
+            editor.positionCaret(caret + before.length());
+            return;
+        }
+        String selected = editor.getText().substring(range.getStart(), range.getEnd());
+        editor.replaceText(range, before + selected + after);
+        editor.selectRange(range.getStart() + before.length(),
+                range.getStart() + before.length() + selected.length());
+    }
+
+    /** Adds {@code prefix} to every selected line, or removes it when present. */
+    private void toggleLinePrefix(String prefix) {
+        String text = editor.getText();
+        IndexRange range = editor.getSelection();
+        int start = lineStart(text, range.getStart());
+        int end = lineEnd(text, range.getEnd());
+        String[] lines = text.substring(start, end).split("\n", -1);
+        boolean allPrefixed = true;
+        boolean anyContent = false;
+        for (String line : lines) {
+            if (line.isBlank()) {
+                continue;
+            }
+            anyContent = true;
+            if (!line.startsWith(prefix)) {
+                allPrefixed = false;
+            }
+        }
+        StringBuilder rebuilt = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) {
+                rebuilt.append('\n');
+            }
+            String line = lines[i];
+            if (line.isBlank()) {
+                rebuilt.append(line);
+            } else if (allPrefixed && anyContent) {
+                rebuilt.append(line.substring(prefix.length()));
+            } else {
+                rebuilt.append(prefix).append(line);
+            }
+        }
+        editor.replaceText(start, end, rebuilt.toString());
+        editor.selectRange(start, start + rebuilt.length());
+    }
+
+    /** Turns the selection into {@code [text](url)} (url left for the user). */
+    private void insertLink() {
+        IndexRange range = editor.getSelection();
+        String label = range.getLength() == 0
+                ? i18n.text("md.format.link.text")
+                : editor.getText().substring(range.getStart(), range.getEnd());
+        String replacement = "[" + label + "](url)";
+        if (range.getLength() == 0) {
+            editor.insertText(range.getStart(), replacement);
+        } else {
+            editor.replaceText(range, replacement);
+        }
+        // Select the "url" placeholder so it can be typed over directly.
+        int urlStart = range.getStart() + 1 + label.length() + 2;
+        editor.selectRange(urlStart, urlStart + 3);
+    }
+
+    /** Strips the common markdown markers from the selection (or whole text). */
+    private void clearFormatting() {
+        IndexRange range = editor.getSelection();
+        boolean whole = range.getLength() == 0;
+        String target = whole
+                ? editor.getText()
+                : editor.getText().substring(range.getStart(), range.getEnd());
+        String cleaned = stripMarkdown(target);
+        if (whole) {
+            editor.setText(cleaned);
+            editor.positionCaret(cleaned.length());
+        } else {
+            editor.replaceText(range, cleaned);
+            editor.selectRange(range.getStart(), range.getStart() + cleaned.length());
+        }
+    }
+
+    private static String stripMarkdown(String text) {
+        String out = text;
+        out = out.replaceAll("(?m)^\\s{0,3}#{1,6}\\s+", "");
+        out = out.replaceAll("(?m)^\\s{0,3}[-*+]\\s+", "");
+        out = out.replaceAll("(?m)^\\s{0,3}\\d+\\.\\s+", "");
+        out = out.replaceAll("!?\\[([^\\]]*)\\]\\([^)]*\\)", "$1");
+        out = out.replaceAll("(?s)\\*\\*(.+?)\\*\\*", "$1");
+        out = out.replaceAll("(?s)__(.+?)__", "$1");
+        out = out.replaceAll("(?s)~~(.+?)~~", "$1");
+        out = out.replaceAll("(?s)`(.+?)`", "$1");
+        out = out.replaceAll("(?s)\\*(.+?)\\*", "$1");
+        out = out.replaceAll("(?s)_(.+?)_", "$1");
+        return out;
+    }
+
+    private static int lineStart(String text, int index) {
+        int newline = text.lastIndexOf('\n', Math.max(0, index - 1));
+        return newline < 0 ? 0 : newline + 1;
+    }
+
+    private static int lineEnd(String text, int index) {
+        int newline = text.indexOf('\n', index);
+        return newline < 0 ? text.length() : newline;
     }
 
     private void renderPreview() {

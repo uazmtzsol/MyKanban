@@ -131,12 +131,12 @@ De arriba abajo:
     **añadir o quitar etiquetas** (Ctrl+L), **archivar/desarchivar** y
     **restablecer las vistas de tarjeta**.
   - **Ver** — modos de vista (**Tarjetas**/**Procesos**), **modo de vista de
-    tarjeta**, **mostrar archivadas**, informe de tiempo, búsqueda global y
-    **modo oscuro**.
+    tarjeta**, **mostrar archivadas**, **mostrar terminadas**, informe de
+    tiempo, búsqueda global y **modo oscuro**.
   - **Tarjetas** — actúa sobre la **tarjeta actual** (la seleccionada con el
     ratón o las flechas): abrir detalle, editar, reprogramar fecha,
-    recordatorios, asignar proceso, archivar, exportar, mover a otro tablero y
-    eliminar.
+    recordatorios, **marcar como terminada / reabrir**, asignar proceso,
+    archivar, exportar, mover a otro tablero y eliminar.
 - **Barra de herramientas:**
   - 🔍 **Buscar en todos los tableros** (§10)
   - ⇄ **Cambiar entre kanban y procesos** (vista alternativa, §11)
@@ -147,8 +147,9 @@ De arriba abajo:
   - 📄 **Exportar tablero a PDF**
   - ☷ **Modo de vista de tarjeta** (menú desplegable)
   - El **nombre del tablero activo** aparece junto a «Personal Kanban».
-- **Barra de filtro:** filtrar por etiquetas, botones ★ y !, y filtro por
-  proceso (§10).
+- **Barra de filtro:** filtrar por etiquetas, botones ★ y !, filtro por
+  proceso (§10), filtros de **vencimiento** (vencidas / hoy / esta semana) y
+  el botón **✓ Mostrar terminadas** (§7).
 - **Área de tablero:** las columnas con sus tarjetas, más una zona de aviso
   discreta (no modal) para mensajes de sincronización.
 
@@ -238,14 +239,27 @@ tarjeta (diálogo completo)…»** del menú **⋯**. Tiene los campos básicos
 casilla **☑ Opciones avanzadas** que despliega: **Notas**, **Lista de tareas**
 (una por línea; `[x] tarea` = hecha, `[ ] tarea` o texto suelto = pendiente),
 **Proceso** y **Tareas previas / posteriores** (mantén **Ctrl** mientras
-eliges).
+eliges). Si eliges una **fecha límite pasada** el formulario **avisa en rojo**
+(una tarjeta ya vencida es válida, pero conviene verlo).
 
 **Frente de la tarjeta:** título, **contenido elegido** (descripción por
 defecto; ver el botón de contenido, §abajo), **★/!** (clic = activar/desactivar
-Importante/Urgente), **chips de etiquetas**, **fecha límite** (con aviso rojo si
-ya venció), **chip de proceso** (⚬), progreso de lista **☑ hechas/total**,
+Importante/Urgente), **✓** (clic = marcar la tarjeta como **terminada** y
+volver a ponerla pendiente; §abajo), **chips de etiquetas**, **fecha límite**
+(con badge de color: ámbar si vence hoy o esta semana, rojo si ya venció),
+**chip de proceso** (⚬), progreso de lista **☑ hechas/total**,
 **📝** si tiene notas, y contadores de precedencia **←n →n**. Al pasar el ratón
 aparecen ✎ (editar) y ✕ (eliminar).
+
+**Tarjetas terminadas:** una tarjeta **terminada** se muestra apagada y con el
+título tachado, con la fecha en la que se terminó. Se marca de tres formas:
+con el **✓** del frente, con **Clic derecho → ✓ Marcar como terminada** (o
+**↩ Reabrir** para deshacerlo), o **arrastrándola a la columna marcada como
+«finalizada»** — al sacarla de esa columna vuelve a estar pendiente. Cada
+marcado/desmarcado es un paso de deshacer. Por defecto las terminadas **no
+aparecen** en los filtros de vencimiento, en el aviso de vencimientos ni en los
+recordatorios; el botón **✓** de la barra de filtros (o **Ver → Mostrar
+terminadas**) las recupera en todo el tablero.
 
 **Qué muestra el frente (por tarjeta):** un botón en la propia tarjeta elige el
 contenido que aparece bajo el título: **① Descripción** (respetando el modo de
@@ -259,7 +273,8 @@ reiniciar; por defecto todas muestran la descripción.
 **Clic derecho en una tarjeta:** elegir el **modo de vista de esa tarjeta**
 (solo título / título + resumen / completa) o volver al **modo del tablero**;
 **Reagendar** (hoy / mañana / semana próxima / lunes siguiente / quitar fecha);
-**🔔 Recordatorios…** (§8.1); **Proceso ▸**, que asigna **esta** tarjeta a
+**🔔 Recordatorios…** (§8.1); **✓ Marcar como terminada** / **↩ Reabrir**;
+**Proceso ▸**, que asigna **esta** tarjeta a
 cualquier proceso del tablero —o **Sin proceso** para sacarla— sin entrar en modo
 selección (sale marcado el proceso actual y no se pierde ninguna relación de
 precedencia).
@@ -280,6 +295,10 @@ bloquea si no cabe.
 
 Doble clic en una tarjeta abre la ventana **Detalle de tarjeta**, con cinco
 pestañas:
+
+Justo bajo el título aparece una línea con las **fechas** de la tarjeta:
+**vencimiento**, **terminada el …** (si está terminada) y su estado
+(**Pendiente** / **Terminada**).
 
 - **Descripción** — editor **markdown** con botón para alternar
   **Editar / Vista** (previa renderizada), **guía rápida de sintaxis** y
@@ -359,6 +378,9 @@ el botón **✖** para quitarlo.
 - Un recordatorio vencido **te espera**: si la app estaba cerrada a esa hora, lo
   verás al próximo arranque (nunca se pierde), pero **nunca insiste** dos veces:
   al marcarlo como atendido desaparece para siempre.
+- Una tarjeta **terminada** (§7) **no dispara sus recordatorios**: los que queden
+  programados se saltan mientras la tarjeta esté terminada y vuelven a la carga
+  si la reabres.
 - Un recordatorio **no puede quedar después de la fecha límite**. Si **adelantas
   el vencimiento** de una tarjeta, los recordatorios que quedaban más allá se
   descartan (y Ctrl+Z lo revierte); si le **quitas la fecha límite**, se
@@ -391,7 +413,19 @@ En la barra de filtro:
 - **★ / !:** muestra solo las tarjetas **Importantes** y/o **Urgentes** (si
   activas ambos, exige los dos).
 - **Proceso:** «Proceso: todos» / «Proceso: ninguno» / un proceso concreto.
+- **Vencimiento:** los tres botones **vencidas / hoy / esta semana** son
+  mutuamente excluyentes (uno activo = los otros dos se apagan) y muestran
+  solo las tarjetas cuya fecha límite cae en ese rango.
+- **✓ Mostrar terminadas:** las tarjetas terminadas (§7) están **ocultas por
+  defecto** en todo el tablero; este botón (igual que **Ver → Mostrar
+  terminadas**) las recupera, **también** dentro de los filtros de
+  vencimiento.
 - **✕ Quitar filtro:** limpia etiquetas, modo y filtro de proceso de una vez.
+
+Mientras haya vencimientos que coincidan con los filtros activos, la barra
+muestra un **aviso discreto** (no modal) «⏳ N vencida(s)» que cuenta
+**exactamente** lo que muestran las columnas; al pulsarlo se activa el filtro
+de vencidas.
 
 Atajo útil: **clic en el chip de una etiqueta** de cualquier tarjeta filtra
 por esa etiqueta al instante; clic sobre el mismo chip otra vez lo quita.

@@ -36,7 +36,8 @@ public final class SchemaMigrator {
             "/db/migration/V8__timeline.sql",
             "/db/migration/V9__done_and_column_background.sql",
             "/db/migration/V10__checklist_subtasks.sql",
-            "/db/migration/V11__card_reminders.sql"
+            "/db/migration/V11__card_reminders.sql",
+            "/db/migration/V12__card_completed.sql"
     );
 
     private final Database database;

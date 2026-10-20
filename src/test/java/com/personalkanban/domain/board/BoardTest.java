@@ -9,6 +9,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BoardTest {
 
+    private static final java.time.LocalDate TODAY = java.time.LocalDate.of(2026, 10, 19);
+
     private Board board;
 
     @BeforeEach
@@ -109,7 +111,7 @@ class BoardTest {
         board.addCard(col.id(), "two", "", BoardColor.BLUE);
         board.addCard(col.id(), "three", "", BoardColor.BLUE);
 
-        board.moveCard(one.cardId(), col.id(), 2);
+        board.moveCard(one.cardId(), col.id(), 2, TODAY);
 
         assertThat(col.cards()).extracting(Card::title).containsExactly("two", "one", "three");
     }
@@ -121,7 +123,7 @@ class BoardTest {
         var card = board.addCard(source.id(), "moving", "", BoardColor.BLUE);
         board.addCard(target.id(), "occupied", "", BoardColor.BLUE);
 
-        assertThatThrownBy(() -> board.moveCard(card.cardId(), target.id(), 0))
+        assertThatThrownBy(() -> board.moveCard(card.cardId(), target.id(), 0, TODAY))
                 .isInstanceOf(WipLimitExceededException.class);
 
         // Atomic: the card must still be on the source column.
@@ -135,7 +137,7 @@ class BoardTest {
         BoardColumn target = column("Target");
         var card = board.addCard(source.id(), "moving", "", BoardColor.BLUE);
 
-        board.moveCard(card.cardId(), target.id(), 0);
+        board.moveCard(card.cardId(), target.id(), 0, TODAY);
 
         assertThat(source.cardCount()).isZero();
         assertThat(target.cards()).extracting(Card::title).containsExactly("moving");
@@ -162,7 +164,7 @@ class BoardTest {
     void drainsEventsOnce() {
         BoardColumn col = column("A");
         var added = board.addCard(col.id(), "one", "", BoardColor.BLUE);
-        board.moveCard(added.cardId(), col.id(), 0);
+        board.moveCard(added.cardId(), col.id(), 0, TODAY);
         board.removeCard(added.cardId());
 
         assertThat(board.drainEvents()).hasSize(3);

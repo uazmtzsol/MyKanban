@@ -71,6 +71,22 @@ class ReminderPlanTest {
     }
 
     @Test
+    void aFinishedCardNeverFiresItsReminders() {
+        // T24 · B11: done is done — leftover moments would nag about
+        // work already delivered.
+        Card card = card("Entregada", TODAY.plusDays(5));
+        board.addReminder(card.id(), TODAY.minusDays(1), null);
+        assertThat(ReminderPlan.dueCount(List.of(card), NOW)).isEqualTo(1);
+
+        board.completeCard(card.id(), TODAY);
+
+        assertThat(ReminderPlan.dueNow(List.of(card), NOW)).isEmpty();
+        // Reopening brings the still-pending moment back.
+        board.reopenCard(card.id());
+        assertThat(ReminderPlan.dueCount(List.of(card), NOW)).isEqualTo(1);
+    }
+
+    @Test
     void anAttendedMomentNeverComesBack() {
         Card card = card("Respondida", TODAY.plusDays(5));
         CardReminder reminder = board.addReminder(card.id(), TODAY.minusDays(1), null);

@@ -116,7 +116,7 @@ public final class Board {
         target.markDone(done);
     }
 
-    /** Sets the column background color (hex) or null to clear it. */
+    /** Sets the column background color (hex); null or blank clears it. */
     public void setColumnBackground(ColumnId columnId, String backgroundColor) {
         columnOrThrow(columnId).setBackground(backgroundColor);
     }
@@ -194,6 +194,20 @@ public final class Board {
     public void rescheduleCard(CardId cardId, LocalDate newDueDate) {
         Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
         card.schedule(newDueDate);
+    }
+
+    /**
+     * Marks one card as finished on the given day (T24 · B11), or reopens it
+     * with {@code null}. Independent of the column: the ✓ button works anywhere,
+     * the move into a finalized column only automates it.
+     */
+    public void completeCard(CardId cardId, LocalDate finishedOn) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId)).complete(finishedOn);
+    }
+
+    /** Puts one finished card back in progress (T24 · B11). */
+    public void reopenCard(CardId cardId) {
+        findCard(cardId).orElseThrow(() -> new NotFoundException(cardId)).reopen();
     }
 
     /** Sets the plain-text notes of one card (session 4.4). */
@@ -416,10 +430,11 @@ public final class Board {
     /**
      * Bulk: moves the given cards into the target column, appending them in
      * list order. Atomic: if the move would push the target past its WIP
-     * limit, nothing changes and a {@link WipLimitExceededException} carrying
-     * the required extra capacity is thrown.
+     * limit, nothing changes and a {@link WipLimitBulkException} carrying
+     * the required extra capacity is thrown. Cards entering or leaving the
+     * finalized column are finished/reopened on {@code today} (T24 · B11).
      */
-    public void moveCardsToColumn(List<CardId> cardIds, ColumnId targetColumnId) {
+    public void moveCardsToColumn(List<CardId> cardIds, ColumnId targetColumnId, LocalDate today) {
         BoardColumn target = columnOrThrow(targetColumnId);
         // Validation pass: unknown ids throw before any mutation, and the
         // whole batch must fit the target's WIP limit (all-or-nothing).
@@ -443,6 +458,7 @@ public final class Board {
                     .orElseThrow(() -> new NotFoundException(cardId));
             if (!source.id().equals(target.id())) {
                 source.transferCardsTo(target, List.of(cardId));
+                syncCompletionState(cardId, source.id(), target.id(), today);
             }
         }
     }
@@ -523,13 +539,17 @@ public final class Board {
     /**
      * Moves a card within its column or across columns. Positions are clamped,
      * WIP limits are enforced by the target column, and a {@link CardMoved}
-     * event is emitted.
+     * event is emitted. Dropping a card into the board's finalized column marks
+     * it finished on {@code today}, and taking it out of that column reopens it
+     * (T24 · B11); the date is a parameter so the domain stays clock-free.
      */
-    public CardMoved moveCard(CardId cardId, ColumnId targetColumnId, int targetIndex) {
+    public CardMoved moveCard(CardId cardId, ColumnId targetColumnId, int targetIndex,
+                              LocalDate today) {
         BoardColumn target = columnOrThrow(targetColumnId);
         BoardColumn source = findColumnOf(cardId)
                 .orElseThrow(() -> new NotFoundException(cardId));
         target.moveCardFrom(source, cardId, targetIndex);
+        syncCompletionState(cardId, source.id(), target.id(), today);
         CardMoved event = new CardMoved(cardId, source.id(), target.id(), Instant.now());
         events.add(event);
         return event;
@@ -544,8 +564,30 @@ public final class Board {
      * carries these pre-drop semantics, so this method is an explicit,
      * intention-revealing alias for drag & drop use.
      */
-    public CardMoved moveCardToSlot(CardId cardId, ColumnId targetColumnId, int slotIndex) {
-        return moveCard(cardId, targetColumnId, slotIndex);
+    public CardMoved moveCardToSlot(CardId cardId, ColumnId targetColumnId, int slotIndex,
+                                    LocalDate today) {
+        return moveCard(cardId, targetColumnId, slotIndex, today);
+    }
+
+    /**
+     * T24 · B11: the finalized column is the board's "done" lane, so crossing
+     * its boundary is what finishes or reopens a card. A reordering inside one
+     * column never changes the state, and a card finished earlier by hand keeps
+     * its original date when it later enters the finalized column.
+     */
+    private void syncCompletionState(CardId cardId, ColumnId sourceColumnId,
+                                     ColumnId targetColumnId, LocalDate today) {
+        if (sourceColumnId.equals(targetColumnId)) {
+            return;
+        }
+        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
+        if (columnOrThrow(targetColumnId).isDone()) {
+            if (!card.isDone()) {
+                card.complete(today);
+            }
+        } else if (columnOrThrow(sourceColumnId).isDone()) {
+            card.reopen();
+        }
     }
 
     // ------------------------------------------------------------------

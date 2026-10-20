@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class MoveCardToSlotTest {
 
+    private static final java.time.LocalDate TODAY = java.time.LocalDate.of(2026, 10, 19);
+
     private final Board board = new Board();
 
     private BoardColumn column(String title) {
@@ -22,7 +24,7 @@ class MoveCardToSlotTest {
         var moving = board.addCard(source.id(), "m", "", BoardColor.BLUE);
 
         // Drop on the slot right after "a" (slot 1): a, m, b.
-        board.moveCardToSlot(moving.cardId(), target.id(), 1);
+        board.moveCardToSlot(moving.cardId(), target.id(), 1, TODAY);
 
         assertThat(target.cards()).extracting(Card::title).containsExactly("a", "m", "b");
         assertThat(source.cardCount()).isZero();
@@ -37,7 +39,7 @@ class MoveCardToSlotTest {
 
         // Pre-drop [a,b,c]; slot 2 sits between b and c. Dropping b there keeps
         // it exactly where it was.
-        board.moveCardToSlot(b.cardId(), col.id(), 2);
+        board.moveCardToSlot(b.cardId(), col.id(), 2, TODAY);
         assertThat(col.cards()).extracting(Card::title).containsExactly("a", "b", "c");
     }
 
@@ -50,7 +52,7 @@ class MoveCardToSlotTest {
 
         // Pre-drop [a,b,c]; slot 2 sits between b and c. Dropping a there must
         // land it right after b — exactly the slot the user aimed at.
-        board.moveCardToSlot(a.cardId(), col.id(), 2);
+        board.moveCardToSlot(a.cardId(), col.id(), 2, TODAY);
         assertThat(col.cards()).extracting(Card::title).containsExactly("b", "a", "c");
     }
 
@@ -62,7 +64,7 @@ class MoveCardToSlotTest {
         board.addCard(col.id(), "c", "", BoardColor.BLUE);
 
         // Slot 0 is before "a": moving a to its own slot 0 is a no-op order.
-        board.moveCardToSlot(a.cardId(), col.id(), 0);
+        board.moveCardToSlot(a.cardId(), col.id(), 0, TODAY);
         assertThat(col.cards()).extracting(Card::title).containsExactly("a", "b", "c");
     }
 
@@ -74,7 +76,7 @@ class MoveCardToSlotTest {
         BoardColumn source = column("Source");
         var moving = board.addCard(source.id(), "m", "", BoardColor.BLUE);
 
-        board.moveCardToSlot(moving.cardId(), target.id(), 99);
+        board.moveCardToSlot(moving.cardId(), target.id(), 99, TODAY);
         assertThat(target.cards()).extracting(Card::title).containsExactly("a", "m");
     }
 
@@ -88,7 +90,7 @@ class MoveCardToSlotTest {
         var moving = board.addCard(source.id(), "m", "", BoardColor.BLUE);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> board.moveCardToSlot(moving.cardId(), target.id(), 0))
+                        () -> board.moveCardToSlot(moving.cardId(), target.id(), 0, TODAY))
                 .isInstanceOf(com.personalkanban.domain.exception.WipLimitExceededException.class);
         assertThat(source.hasCard(moving.cardId())).isTrue();
     }

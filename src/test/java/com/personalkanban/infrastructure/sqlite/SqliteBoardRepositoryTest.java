@@ -250,4 +250,37 @@ class SqliteBoardRepositoryTest {
                 new com.personalkanban.domain.board.CardId("id-" + title),
                 title, "", BoardColor.BLUE, null, List.of(), Instant.now());
     }
+
+    // ------------------------------------------------------------------
+    // T24 · B11: the finished-day column (V12)
+    // ------------------------------------------------------------------
+
+    @Test
+    void completionDateRoundTripsWithAndWithoutValue() {
+        Instant created = Instant.parse("2026-03-01T08:00:00Z");
+        LocalDate due = LocalDate.of(2026, 10, 30);
+        LocalDate finished = LocalDate.of(2026, 10, 18);
+
+        CardSnapshot doneCard = new CardSnapshot(
+                new com.personalkanban.domain.board.CardId("done-1"),
+                "hecha", "", BoardColor.GREEN, due, List.of("x"), created,
+                "notas", List.of(), null, List.of(), finished);
+        CardSnapshot pendingCard = new CardSnapshot(
+                new com.personalkanban.domain.board.CardId("pending-1"),
+                "pendiente", "", BoardColor.BLUE, due, List.of(), created,
+                "", List.of(), null, List.of(), null);
+
+        repository.save(boardId, new BoardMemento(List.of(new ColumnSnapshot(
+                new com.personalkanban.domain.board.ColumnId("col-1"),
+                "Hecho", "", BoardColor.BLUE, WipLimit.unlimited(), created,
+                true, null, List.of(doneCard, pendingCard)))));
+
+        BoardMemento loaded = repository.load(boardId);
+        assertThat(loaded.columns().get(0).cards())
+                .satisfies(cards -> {
+                    assertThat(cards).hasSize(2);
+                    assertThat(cards.get(0).completedAt()).isEqualTo(finished);
+                    assertThat(cards.get(1).completedAt()).isNull();
+                });
+    }
 }

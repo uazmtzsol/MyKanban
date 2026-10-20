@@ -276,11 +276,19 @@ public final class SyncMerge {
                 l.checklist(),
                 r.checklist(),
                 key, conflicts);
-        List<CardReminder> reminders = mergeReminders(
-                b == null ? List.of() : b.reminders(),
-                l.reminders(),
-                r.reminders(),
-                key, conflicts);
+        LocalDate dueDate = lww("dueDate", date(b, CardSnapshot::dueDate),
+                date(l, CardSnapshot::dueDate), date(r, CardSnapshot::dueDate),
+                "card", key, conflicts);
+        List<CardReminder> reminders = pruneRemindersAfterDueDate(
+                mergeReminders(
+                        b == null ? List.of() : b.reminders(),
+                        l.reminders(),
+                        r.reminders(),
+                        key, conflicts),
+                dueDate);
+        // T24 · B11: a reminder past the merged due date can never fire (the
+        // due notice would contradict the card), so it is dropped for both
+        // sides instead of being shipped and re-filtered on every launch.
         return new CardSnapshot(
                 id,
                 lww("title", str(b, CardSnapshot::title), str(l, CardSnapshot::title),
@@ -290,8 +298,7 @@ public final class SyncMerge {
                         "card", key, conflicts),
                 lww("color", col(b, CardSnapshot::color), col(l, CardSnapshot::color),
                         col(r, CardSnapshot::color), "card", key, conflicts),
-                lww("dueDate", date(b, CardSnapshot::dueDate), date(l, CardSnapshot::dueDate),
-                        date(r, CardSnapshot::dueDate), "card", key, conflicts),
+                dueDate,
                 labels,
                 createdAt,
                 lww("notes", str(b, CardSnapshot::notes), str(l, CardSnapshot::notes),
@@ -299,7 +306,25 @@ public final class SyncMerge {
                 checklist,
                 lww("processId", proc(b, CardSnapshot::processId), proc(l, CardSnapshot::processId),
                         proc(r, CardSnapshot::processId), "card", key, conflicts),
-                reminders);
+                reminders,
+                lww("completedAt", date(b, CardSnapshot::completedAt),
+                        date(l, CardSnapshot::completedAt), date(r, CardSnapshot::completedAt),
+                        "card", key, conflicts));
+    }
+
+    /** Drops reminders dated after the card's due date (T24 · B11 correction). */
+    private static List<CardReminder> pruneRemindersAfterDueDate(List<CardReminder> reminders,
+                                                                 LocalDate dueDate) {
+        if (dueDate == null || reminders.isEmpty()) {
+            return reminders;
+        }
+        List<CardReminder> kept = new ArrayList<>();
+        for (CardReminder reminder : reminders) {
+            if (!reminder.date().isAfter(dueDate)) {
+                kept.add(reminder);
+            }
+        }
+        return kept;
     }
 
     private static List<String> mergeLabels(List<String> base, List<String> local, List<String> remote) {
@@ -536,10 +561,20 @@ public final class SyncMerge {
             checklist.append(item.id()).append('=').append(canonical(item.text()))
                     .append('=').append(item.done()).append(';');
         }
+        // Reminders and completion are part of the card's own state: without
+        // them a side that only added a reminder (or marked the card done)
+        // would look "unchanged" and the change would be silently dropped.
+        StringBuilder reminders = new StringBuilder();
+        for (CardReminder reminder : c.reminders()) {
+            reminders.append(reminder.id()).append('=').append(canonical(reminder.date()))
+                    .append('=').append(canonical(reminder.time()))
+                    .append('=').append(reminder.acknowledged()).append(';');
+        }
         return String.join("\u0001", canonical(c.title()), canonical(c.description()),
                 canonical(c.color()), canonical(c.dueDate()), canonical(c.createdAt()),
                 canonical(c.notes()), canonical(c.processId()),
-                String.join(",", c.labels()), checklist.toString());
+                String.join(",", c.labels()), checklist.toString(),
+                reminders.toString(), canonical(c.completedAt()));
     }
 
     // ------------------------------------------------------------------

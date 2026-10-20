@@ -95,6 +95,14 @@ final class CardDetailWindow {
         titleLabel.getStyleClass().add("detail-title");
         titleLabel.setWrapText(true);
 
+        // B4 (T24): the due date (and the day it was finished, T24 · B11) is
+        // part of the card's headline — it used to be gated on the reminders
+        // tab but never actually shown, so checking a deadline meant opening
+        // the edit dialog.
+        Label metaLabel = new Label(describeDates(card));
+        metaLabel.getStyleClass().add("detail-caption");
+        VBox top = new VBox(2, titleLabel, metaLabel);
+
         Tab descriptionTab = new Tab(i18n.text("card.tab.description"), buildDescriptionPane());
         Tab notesTab = new Tab(i18n.text("card.tab.notes"), buildNotesPane());
         Tab checklistTab = new Tab(i18n.text("card.tab.checklist"), buildChecklistPane());
@@ -121,7 +129,7 @@ final class CardDetailWindow {
         buttons.setPadding(new Insets(8));
 
         BorderPane layout = new BorderPane();
-        layout.setTop(titleLabel);
+        layout.setTop(top);
         layout.setCenter(tabs);
         layout.setBottom(buttons);
         layout.getStyleClass().add("detail-window");
@@ -394,6 +402,26 @@ final class CardDetailWindow {
 
     private boolean hasDueDate() {
         return board.cardById(cardId).map(card -> card.dueDate() != null).orElse(false);
+    }
+
+    /**
+     * B4 (T24): the window's headline meta line — "Vence: … · Terminada: …",
+     * dates shown in the user's locale. Blank when the card has neither, so
+     * the title keeps its compact look.
+     */
+    private String describeDates(Card card) {
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        if (card.dueDate() != null) {
+            parts.add(i18n.text("card.detail.meta.due",
+                    card.dueDate().format(java.time.format.DateTimeFormatter
+                            .ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))));
+        }
+        if (card.isDone() && card.completedAt() != null) {
+            parts.add(i18n.text("card.detail.meta.completed",
+                    card.completedAt().format(java.time.format.DateTimeFormatter
+                            .ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))));
+        }
+        return String.join("  \u00B7  ", parts);
     }
 
     /** Adds the day the picker shows, with the (optional) hour of the field. */

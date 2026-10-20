@@ -4,6 +4,7 @@ import com.personalkanban.ui.markdown.MarkdownSummary;
 import javafx.application.Platform;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Label;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -133,5 +134,51 @@ class CardThemeCssTest {
             return (Color) card.getBorder().getStrokes().get(0).getTopStroke();
         });
         assertThat(stroke).isEqualTo(Color.web("#60a5fa"));
+    }
+
+    // ------------------------------------------------------------------
+    // T24 · B1: the due badge and the notice bands always carried these
+    // classes but no stylesheet defined them, so "red when overdue" never
+    // actually painted. These tests pin the selectors to both themes.
+    // ------------------------------------------------------------------
+
+    @Test
+    void bothThemesDefineTheDueBadgeSelectors() throws Exception {
+        for (String stylesheet : List.of("/css/light.css", "/css/dark.css")) {
+            assertThat(css(stylesheet)).contains(".card-due", ".card-due-overdue");
+        }
+    }
+
+    @Test
+    void bothThemesDefineTheNoticeBandSelectors() throws Exception {
+        for (String stylesheet : List.of("/css/light.css", "/css/dark.css")) {
+            assertThat(css(stylesheet))
+                    .contains(".sync-notice", ".due-notice", ".reminder-notice");
+        }
+    }
+
+    @Test
+    void bothThemesDefineTheFinishedCardSelectors() throws Exception {
+        for (String stylesheet : List.of("/css/light.css", "/css/dark.css")) {
+            assertThat(css(stylesheet)).contains(".card.card-done", ".card-done-on");
+        }
+    }
+
+    @Test
+    void anOverdueBadgePaintsRedInTheDarkTheme() throws Exception {
+        Color fill = fx(() -> {
+            Label badge = new Label("vencida");
+            badge.getStyleClass().add("card-due-overdue");
+            applyTheme(new VBox(badge), "/css/dark.css");
+            return (Color) badge.getTextFill();
+        });
+        assertThat(fill).isEqualTo(Color.web("#f87171"));
+    }
+
+    /** The raw text of a theme stylesheet (selectors and declarations). */
+    private static String css(String stylesheet) throws Exception {
+        return new String(CardThemeCssTest.class
+                .getResourceAsStream(stylesheet).readAllBytes(),
+                java.nio.charset.StandardCharsets.UTF_8);
     }
 }

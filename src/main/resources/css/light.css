@@ -270,6 +270,14 @@
     -fx-padding: 2 8 2 8;
 }
 .md-mode-toggle:selected { -fx-background-color: #dbe4f0; }
+.md-format-button {
+    -fx-font-size: 12px;
+    -fx-background-color: #eef1f6;
+    -fx-background-radius: 6;
+    -fx-padding: 2 8 2 8;
+    -fx-min-width: 30;
+}
+.md-format-button:hover { -fx-background-color: #dbe4f0; }
 .time-stopwatch {
     -fx-font-size: 18px;
     -fx-min-width: 40; -fx-min-height: 40;
@@ -392,3 +400,55 @@
 .pk-color-teal-swatch   { -fx-fill: #009688; }
 .pk-color-pink-swatch   { -fx-fill: #e91e63; }
 .pk-color-gray-swatch   { -fx-fill: #607d8b; }
+
+/* T24 · B1: the due-date badge styles the CardViewBuilder always promised —
+   muted when pending, red when the deadline has already passed. */
+.card-due {
+    -fx-font-size: 11px;
+    -fx-text-fill: #6b7280;
+}
+.card-due-overdue {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #dc2626;
+}
+
+/* T24 · B11: a finished card reads as done at a glance (dimmed surface,
+   struck-through title) and its check button stays vivid green. */
+.card.card-done {
+    -fx-opacity: 0.72;
+}
+.card.card-done .card-title {
+    -fx-strikethrough: true;
+}
+.card-done-on {
+    -fx-text-fill: #16a34a;
+}
+.card-done-on:hover {
+    -fx-text-fill: #15803d;
+}
+
+/* T24 · B1: the discreet bands (sync, due-date, reminders) were painted
+   without any style; now they are soft rounded strips, colour-coded. */
+.sync-notice {
+    -fx-background-color: #eef2f7;
+    -fx-background-radius: 6;
+    -fx-text-fill: #374151;
+}
+.due-notice {
+    -fx-background-color: #fef3c7;
+    -fx-text-fill: #92400e;
+    -fx-cursor: hand;
+}
+.reminder-notice {
+    -fx-background-color: #e0e7ff;
+    -fx-text-fill: #3730a3;
+    -fx-cursor: hand;
+}
+
+/* T24 · B5: red hint under the due-date picker when the chosen day is
+   already in the past (legal, but worth saying out loud). */
+.dialog-field-warning {
+    -fx-font-size: 11px;
+    -fx-text-fill: #dc2626;
+}

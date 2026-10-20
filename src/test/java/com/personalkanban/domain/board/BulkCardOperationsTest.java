@@ -12,6 +12,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /** Bulk card operations backing the multi-selection UI use cases. */
 class BulkCardOperationsTest {
 
+    private static final java.time.LocalDate TODAY = java.time.LocalDate.of(2026, 10, 19);
+
     private Board board;
     private ColumnId a;
     private ColumnId b;
@@ -80,7 +82,7 @@ class BulkCardOperationsTest {
         CardId c2 = card(b, "two");
         CardId c3 = card(a, "three");
 
-        board.moveCardsToColumn(List.of(c1, c2, c3), c);
+        board.moveCardsToColumn(List.of(c1, c2, c3), c, TODAY);
 
         assertThat(board.columnOrThrow(c).cards()).extracting(Card::title)
                 .containsExactly("one", "two", "three");
@@ -94,7 +96,7 @@ class BulkCardOperationsTest {
         CardId inB = card(b, "already");
         CardId c2 = card(a, "two");
 
-        board.moveCardsToColumn(List.of(c1, inB, c2), b);
+        board.moveCardsToColumn(List.of(c1, inB, c2), b, TODAY);
 
         assertThat(board.columnOrThrow(b).cards()).extracting(Card::title)
                 .containsExactly("already", "one", "two");
@@ -109,7 +111,7 @@ class BulkCardOperationsTest {
         CardId c2 = card(a, "two");
 
         // 2 occupied + 2 moving > 3: the whole batch must be refused.
-        assertThatThrownBy(() -> board.moveCardsToColumn(List.of(c1, c2), limited))
+        assertThatThrownBy(() -> board.moveCardsToColumn(List.of(c1, c2), limited, TODAY))
                 .isInstanceOf(WipLimitBulkException.class)
                 .satisfies(e -> assertThat(
                         ((WipLimitBulkException) e).excess()).isEqualTo(1));
@@ -148,7 +150,7 @@ class BulkCardOperationsTest {
         CardId c1 = card(a, "one");
         CardId ghost = new CardId("no-such-card");
 
-        assertThatThrownBy(() -> board.moveCardsToColumn(List.of(c1, ghost), b))
+        assertThatThrownBy(() -> board.moveCardsToColumn(List.of(c1, ghost), b, TODAY))
                 .isInstanceOf(com.personalkanban.domain.exception.NotFoundException.class);
         assertThat(board.columnOrThrow(a).cardCount()).isEqualTo(1);
         assertThat(board.columnOrThrow(b).cardCount()).isZero();

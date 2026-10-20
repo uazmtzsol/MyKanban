@@ -159,6 +159,12 @@ final class ColumnViewBuilder {
         Button collapse = iconButton("\u00AB", "pk-collapse", i18n.text("column.collapse"));
         collapse.setOnAction(e -> board.onToggleColumnCollapsed(column.id()));
 
+        // T10: paste a copied card into this column (Ctrl+V also works). The
+        // button is disabled while the clipboard is empty.
+        Button pasteCard = iconButton("\uD83D\uDCCB", "pk-paste-card", i18n.text("column.paste.card"));
+        pasteCard.setDisable(!board.hasClipboardCard());
+        pasteCard.setOnAction(e -> board.onPasteCard(column.id()));
+
         MenuButton columnMenu = menuButton("\u22EF", i18n.text("column.menu"));
         // The full card dialog stays reachable without keyboard modifiers
         // (T13 · B4): a plain entry here, plus Ctrl+click on the ➕ above.
@@ -174,6 +180,9 @@ final class ColumnViewBuilder {
         doneItem.setOnAction(e -> board.onSetColumnDone(column.id()));
         MenuItem backgroundItem = new MenuItem(i18n.text("column.background"));
         backgroundItem.setOnAction(e -> board.onSetColumnBackground(column.id()));
+        MenuItem pasteItem = new MenuItem(i18n.text("column.paste.card"));
+        pasteItem.setDisable(!board.hasClipboardCard());
+        pasteItem.setOnAction(e -> board.onPasteCard(column.id()));
         MenuItem orderItem = new MenuItem(i18n.text("column.order"));
         orderItem.setOnAction(e -> board.onReorderColumn(column.id()));
         MenuItem collapseItem = new MenuItem(i18n.text("column.collapse"));
@@ -184,13 +193,13 @@ final class ColumnViewBuilder {
         clearItem.setOnAction(e -> board.onClearColumn(column.id()));
         // User request N-3: «add column» moved out of the toolbar, so each
         // column offers it where the new column is wanted.
-        columnMenu.getItems().setAll(addCardItem, new SeparatorMenuItem(),
+        columnMenu.getItems().setAll(addCardItem, pasteItem, new SeparatorMenuItem(),
                 addLeftItem, addRightItem, new SeparatorMenuItem(),
                 editItem, doneItem, backgroundItem,
                 orderItem, collapseItem, deleteItem,
                 new SeparatorMenuItem(), clearItem);
 
-        HBox header = new HBox(6, title, doneBadge, wip, addCard, sortPriority, selectCards, collapse, columnMenu);
+        HBox header = new HBox(6, title, doneBadge, wip, addCard, pasteCard, sortPriority, selectCards, collapse, columnMenu);
         header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         header.getStyleClass().add("column-header");
 
@@ -284,10 +293,13 @@ final class ColumnViewBuilder {
         doneItem.setOnAction(e -> board.onSetColumnDone(column.id()));
         MenuItem backgroundItem = new MenuItem(i18n.text("column.background"));
         backgroundItem.setOnAction(e -> board.onSetColumnBackground(column.id()));
+        MenuItem pasteItem = new MenuItem(i18n.text("column.paste.card"));
+        pasteItem.setDisable(!board.hasClipboardCard());
+        pasteItem.setOnAction(e -> board.onPasteCard(column.id()));
         MenuItem orderItem = new MenuItem(i18n.text("column.order"));
         orderItem.setOnAction(e -> board.onReorderColumn(column.id()));
         columnMenu.getItems().setAll(expandItem, new SeparatorMenuItem(),
-                addCardItem, new SeparatorMenuItem(),
+                addCardItem, pasteItem, new SeparatorMenuItem(),
                 addLeftItem, addRightItem, new SeparatorMenuItem(),
                 editItem, doneItem, backgroundItem, orderItem);
 

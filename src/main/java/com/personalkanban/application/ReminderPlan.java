@@ -38,6 +38,11 @@ public final class ReminderPlan {
         Objects.requireNonNull(now, "now");
         List<Due> due = new ArrayList<>();
         for (Card card : cards) {
+            // T24 · B11: a finished card is done work; its leftover
+            // reminders would nag about something already delivered.
+            if (card.isDone()) {
+                continue;
+            }
             for (CardReminder reminder : card.reminders()) {
                 if (!reminder.acknowledged() && !reminder.dueFrom().isAfter(now)) {
                     due.add(new Due(card.id(), card.title(), reminder));

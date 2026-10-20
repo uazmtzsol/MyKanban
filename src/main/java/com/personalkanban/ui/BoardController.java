@@ -147,9 +147,13 @@ public final class BoardController {
     // Live views of the state shown by the "Ver" menu's check entries, so the
     // menu can mark the current value each time it opens.
     private CheckMenuItem archivedViewItem;
+    private CheckMenuItem completedViewItem;
     private CheckMenuItem darkModeItem;
     // The filter bar's archived toggle; the "Ver" menu's entry mirrors it.
     private ToggleButton archivedFilterToggle;
+    // T24 · B11: the filter bar's finished-cards toggle (mirror of the menu
+    // entry above, same wiring as archived).
+    private ToggleButton completedFilterToggle;
     private Label boardNameLabel;
     private HBox toolbarReference;
 
@@ -197,6 +201,9 @@ public final class BoardController {
     private ColumnId selectionColumn;
     private final java.util.Set<CardId> selectedCards = new java.util.LinkedHashSet<>();
     private HBox selectionBar;
+    // Copy/paste of cards (user request T10): Ctrl+C remembers the current
+    // card here; Ctrl+V and the paste button of a column duplicate it there.
+    private CardId cardClipboard;
     // The card filter bar. It is hidden while selection mode is on: the two
     // bars are alternatives, never shown together (user request, 2026-10-13).
     private HBox filterBar;
@@ -250,6 +257,11 @@ public final class BoardController {
     // the database but are hidden until this toggle says otherwise.
     // Session-scoped on purpose: hiding is a view decision, not data.
     private boolean showArchived;
+
+    // T24 · B11: finished cards (completedAt set) are hidden until this
+    // toggle says otherwise — same session-scoped rationale as archived:
+    // a card in the "done" column is history, not pending work.
+    private boolean showCompleted;
 
     // Which database menus were built (the File menu must re-run its builder).
 
@@ -510,6 +522,19 @@ public final class BoardController {
                 }
                 if (code == javafx.scene.input.KeyCode.RIGHT) {
                     switchBoard(1);
+                    event.consume();
+                    return;
+                }
+                // T10: Ctrl+C/Ctrl+V copy and paste the current card. The
+                // filter only reaches this point outside a text field, so
+                // copying text while typing keeps working.
+                if (code == javafx.scene.input.KeyCode.C) {
+                    onCopyFocusedCard();
+                    event.consume();
+                    return;
+                }
+                if (code == javafx.scene.input.KeyCode.V) {
+                    onPasteIntoCurrentColumn();
                     event.consume();
                     return;
                 }
@@ -1022,9 +1047,18 @@ public final class BoardController {
         // The "Ver" menu's "show archived" entry mirrors this toggle (session 16).
         archivedFilterToggle = archivedFilter;
 
+        // T24 · B11: finished cards are history until this toggle says
+        // otherwise; same shape and placement as the archived one.
+        ToggleButton completedFilter = new ToggleButton("\u2713");
+        completedFilter.getStyleClass().addAll("tool-button", "filter-flag");
+        completedFilter.setSelected(showCompleted);
+        completedFilter.setTooltip(new Tooltip(i18n.text("filter.completed.show")));
+        completedFilter.setOnAction(e -> setShowCompleted(completedFilter.isSelected()));
+        completedFilterToggle = completedFilter;
+
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
                 importantFilter, urgentFilter, overdueFilter, dueTodayFilter, dueWeekFilter,
-                processFilter, archivedFilter);
+                processFilter, archivedFilter, completedFilter);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
@@ -1620,6 +1654,8 @@ public final class BoardController {
         open.setDisable(!hasCard);
         MenuItem edit = itemOf("card.edit", this::onEditFocusedCard);
         edit.setDisable(!hasCard);
+        MenuItem copy = itemOf("card.copy.menu", this::onCopyFocusedCard);
+        copy.setDisable(!hasCard);
 
         Menu schedule = CardViewBuilder.rescheduleMenu(i18n, this, card);
         schedule.setDisable(!hasCard);
@@ -1636,6 +1672,10 @@ public final class BoardController {
         }
 
         MenuItem archive = itemOf("card.archive.menu", this::onArchiveFocusedCard);
+        MenuItem complete = itemOf(
+                hasCard && card.isDone() ? "card.reopen.menu" : "card.complete.menu",
+                this::onToggleDoneFocusedCard);
+        complete.setDisable(!hasCard);
         MenuItem export = itemOf("card.export.menu", this::onExportFocusedCard);
         MenuItem transfer = itemOf("card.transfer.menu", this::onTransferFocusedCard);
         MenuItem delete = itemOf("card.delete", this::onDeleteFocusedCard);
@@ -1645,13 +1685,32 @@ public final class BoardController {
         delete.setDisable(!hasCard);
 
         cardsMenu.getItems().setAll(
-                open, edit,
+                open, edit, copy,
                 new SeparatorMenuItem(),
                 schedule, reminders, process,
                 new SeparatorMenuItem(),
-                archive, export, transfer,
+                complete, archive, export, transfer,
                 new SeparatorMenuItem(),
                 delete);
+    }
+
+    /**
+     * T24 · B11: marks the card finished (today) or puts it back in progress,
+     * one undoable step each — the same route the ✓ on the card front takes.
+     */
+    public void onToggleCardDone(com.personalkanban.domain.board.CardId cardId) {
+        guarded(() -> {
+            var card = service.board().findCard(cardId).orElse(null);
+            if (card == null) {
+                return;
+            }
+            if (card.isDone()) {
+                service.reopenCard(cardId);
+            } else {
+                service.completeCard(cardId);
+            }
+            refresh();
+        });
     }
 
     /** The card the arrow keys / a click left current, or null. */
@@ -1680,6 +1739,12 @@ public final class BoardController {
         }
     }
 
+    private void onToggleDoneFocusedCard() {
+        if (cardFocused != null) {
+            onToggleCardDone(cardFocused);
+        }
+    }
+
     private void onExportFocusedCard() {
         if (cardFocused != null) {
             onExportCard(cardFocused);
@@ -1696,6 +1761,78 @@ public final class BoardController {
         if (cardFocused != null) {
             onRemoveCard(cardFocused);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Copy / paste a card (user request T10)
+    // ------------------------------------------------------------------
+
+    /** The card the clipboard shortcut acts on: the focused one, or the first selected. */
+    private CardId clipboardSourceCard() {
+        if (cardFocused != null) {
+            return cardFocused;
+        }
+        if (selectionMode && !selectedCards.isEmpty()) {
+            return selectedCards.iterator().next();
+        }
+        return null;
+    }
+
+    /** Ctrl+C: remembers the current card so it can be pasted into any column. */
+    private void onCopyFocusedCard() {
+        CardId source = clipboardSourceCard();
+        if (source != null) {
+            cardClipboard = source;
+        }
+    }
+
+    /** Context-menu «Copiar tarjeta» (T10). */
+    public void onCopyCard(CardId cardId) {
+        if (cardId != null) {
+            cardClipboard = cardId;
+        }
+    }
+
+    /** True when a copied card is ready to paste (drives the button enabled state). */
+    public boolean hasClipboardCard() {
+        return cardClipboard != null;
+    }
+
+    /** Duplicates the copied card into {@code columnId}, one undoable step (T10). */
+    public void onPasteCard(ColumnId columnId) {
+        if (cardClipboard == null) {
+            dialogs.info(i18n.text("card.paste.empty"));
+            return;
+        }
+        CardId source = cardClipboard;
+        guarded(() -> {
+            service.duplicateCard(source, columnId);
+            refresh();
+        });
+    }
+
+    /** Ctrl+V: pastes into the current card's column (or the first column). */
+    private void onPasteIntoCurrentColumn() {
+        ColumnId target = columnOfCard(clipboardSourceCard());
+        if (target == null && !service.board().columns().isEmpty()) {
+            target = service.board().columns().get(0).id();
+        }
+        if (target != null) {
+            onPasteCard(target);
+        }
+    }
+
+    /** The column that holds {@code cardId}, or null. */
+    private ColumnId columnOfCard(CardId cardId) {
+        if (cardId == null) {
+            return null;
+        }
+        for (BoardColumn column : service.board().columns()) {
+            if (column.hasCard(cardId)) {
+                return column.id();
+            }
+        }
+        return null;
     }
 
     private void rebuildDatabaseMenu() {
@@ -1876,6 +2013,8 @@ public final class BoardController {
 
         archivedViewItem = new CheckMenuItem(i18n.text("filter.archived.show"));
         archivedViewItem.setOnAction(e -> setShowArchived(archivedViewItem.isSelected()));
+        completedViewItem = new CheckMenuItem(i18n.text("filter.completed.show"));
+        completedViewItem.setOnAction(e -> setShowCompleted(completedViewItem.isSelected()));
         darkModeItem = new CheckMenuItem(i18n.text("menu.dark.mode"));
         darkModeItem.setOnAction(e -> onToggleDarkMode());
 
@@ -1887,6 +2026,7 @@ public final class BoardController {
                 cardViewMenu,
                 new SeparatorMenuItem(),
                 archivedViewItem,
+                completedViewItem,
                 new SeparatorMenuItem(),
                 itemOf("report.time", this::onShowTimeReport),
                 itemOf("search.menu", this::onGlobalSearch),
@@ -1917,6 +2057,9 @@ public final class BoardController {
         if (archivedViewItem != null) {
             archivedViewItem.setSelected(showArchived);
         }
+        if (completedViewItem != null) {
+            completedViewItem.setSelected(showCompleted);
+        }
         if (darkModeItem != null) {
             darkModeItem.setSelected(themeManager.isDark());
         }
@@ -1930,6 +2073,18 @@ public final class BoardController {
         showArchived = value;
         if (archivedFilterToggle != null) {
             archivedFilterToggle.setSelected(value);
+        }
+        refresh();
+    }
+
+    /** Shows/hides finished cards (T24 · B11), menu entry and toggle in sync. */
+    private void setShowCompleted(boolean value) {
+        if (showCompleted == value) {
+            return;
+        }
+        showCompleted = value;
+        if (completedFilterToggle != null) {
+            completedFilterToggle.setSelected(value);
         }
         refresh();
     }
@@ -2647,6 +2802,12 @@ public final class BoardController {
                 com.personalkanban.domain.board.Card.LABEL_ARCHIVED)) {
             return false;
         }
+        // T24 · B11: finished cards are hidden with the same single-gate
+        // trick — one condition keeps columns, navigator, counts and search
+        // consistent, and "Mostrar terminadas" restores them everywhere.
+        if (!showCompleted && card.isDone()) {
+            return false;
+        }
         if (activeProcessFilter != null) {
             return activeProcessFilter.equals(card.processId());
         }
@@ -2661,6 +2822,21 @@ public final class BoardController {
      */
     boolean matchesDueFilter(com.personalkanban.domain.board.Card card) {
         return dueScope == null || DueDigest.matches(card, dueScope, LocalDate.now());
+    }
+
+    /**
+     * The full board gate chain in one place (T24 · B2): label filter, quick
+     * flags, process/archived/finished and due scope — exactly what
+     * {@link ColumnViewBuilder} applies per card. The processes view used to
+     * draw {@code cardsOfProcess(...)} unfiltered, so archived (and now
+     * finished) cards reappeared there and its card set drifted from the
+     * board's; both views now answer "is this card visible?" here.
+     */
+    boolean matchesVisibleFilters(com.personalkanban.domain.board.Card card) {
+        return currentLabelFilter().matches(card)
+                && currentQuickFlagFilter().matches(card)
+                && matchesProcessFilter(card)
+                && matchesDueFilter(card);
     }
 
     /**
@@ -2741,10 +2917,17 @@ public final class BoardController {
         if (dueNotice == null) {
             return;
         }
+        // B3 (T24): the notice used to count with only the process filter and
+        // then claimed to match the board exactly. It now runs the very same
+        // gate chain as the columns (labels, quick flags, process, due scope),
+        // so the number it prints is the number the user can click through to.
+        LabelFilter labelFilter = currentLabelFilter();
+        LabelFilter quickFilter = currentQuickFlagFilter();
         List<com.personalkanban.domain.board.Card> candidates = new ArrayList<>();
         for (BoardColumn column : service.board().columns()) {
             for (com.personalkanban.domain.board.Card card : column.cards()) {
-                if (matchesProcessFilter(card)) {
+                if (matchesProcessFilter(card) && matchesDueFilter(card)
+                        && labelFilter.matches(card) && quickFilter.matches(card)) {
                     candidates.add(card);
                 }
             }
@@ -3200,24 +3383,47 @@ public final class BoardController {
     /** Top arrows: adds a NEW card as predecessor/successor of the anchor. */
     public void onProcessAddNewRelation(com.personalkanban.domain.board.CardId anchor,
                                         boolean asPredecessor) {
-        service.board().findCard(anchor).ifPresent(anchorCard -> guarded(() -> {
-            CardId created = service.addCard(anchorCard.columnId(),
-                    i18n.text("process.new.card.title"), "", anchorCard.color());
+        service.board().findCard(anchor).ifPresent(anchorCard -> {
+            // N-7: creating from the green arrow asks for a title (and lets
+            // the user set a due date) instead of inserting an empty card.
+            // The process is preselected from the anchor and the anchor is
+            // pre-linked on the proper side of the relation lists.
+            List<CardId> predecessors;
+            List<CardId> successors;
             if (asPredecessor) {
-                service.linkCards(created, anchor);
+                predecessors = List.of();
+                successors = List.of(anchor);
             } else {
-                service.linkCards(anchor, created);
+                predecessors = List.of(anchor);
+                successors = List.of();
             }
-            refresh();
-            onOpenCardDetail(created);
-        }));
+            var initial = new Dialogs.CardForm("", "", anchorCard.color(), null,
+                    List.of(), "", List.of(), anchorCard.processId());
+            dialogs.cardDialog(initial, globalLabelVocabulary(), service.processes(),
+                            service.board().allCards(), predecessors, successors)
+                    .ifPresent(f -> guarded(() -> {
+                        var created = service.addCard(anchorCard.columnId(), f.title(),
+                                f.description(), f.color(), f.dueDate(), f.labels(),
+                                f.notes(), null, f.processId());
+                        if (!f.checklistLines().isEmpty()) {
+                            service.setChecklistFromLines(created, f.checklistLines());
+                        }
+                        for (var predecessor : f.predecessors()) {
+                            service.linkCards(predecessor, created);
+                        }
+                        for (var successor : f.successors()) {
+                            service.linkCards(created, successor);
+                        }
+                        refresh();
+                        onOpenCardDetail(created);
+                    }));
+        });
     }
 
     /** Bottom arrows: links an EXISTING card as predecessor/successor. */
     public void onProcessLinkExisting(com.personalkanban.domain.board.CardId anchor,
                                       boolean asPredecessor) {
-        List<com.personalkanban.domain.board.Card> others = service.board().allCards().stream()
-                .filter(card -> !card.id().equals(anchor)).toList();
+        List<com.personalkanban.domain.board.Card> others = linkCandidatesFor(anchor);
         dialogs.chooseCard(others, i18n.text(asPredecessor
                         ? "process.link.predecessor.header" : "process.link.successor.header"))
                 .ifPresent(other -> guarded(() -> {
@@ -3228,6 +3434,25 @@ public final class BoardController {
                     }
                     refresh();
                 }));
+    }
+
+    /**
+     * N-9: the cards offered when linking from a process card — only the
+     * members of the anchor's own process (excluding the anchor itself), so a
+     * chain stays self-contained. Falls back to every card when the anchor has
+     * no process; an unknown anchor yields no candidates.
+     */
+    List<com.personalkanban.domain.board.Card> linkCandidatesFor(CardId anchor) {
+        return service.board().findCard(anchor)
+                .map(anchorCard -> {
+                    var anchorProcess = anchorCard.processId();
+                    return service.board().allCards().stream()
+                            .filter(card -> !card.id().equals(anchor))
+                            .filter(card -> anchorProcess == null
+                                    || anchorProcess.equals(card.processId()))
+                            .toList();
+                })
+                .orElseGet(List::of);
     }
 
     /** The card with keyboard focus in the processes view, or null. */
@@ -3880,7 +4105,8 @@ public final class BoardController {
     // Rendering
     // ------------------------------------------------------------------
 
-    private void refresh() {
+    /** Rebuilds the board scene from the current state (package-visible for tests). */
+    void refresh() {
         // An undo may have just brought a deleted card back: restore the
         // attachment files that were trashed when it was deleted. Cheap when
         // there is nothing trashed (one empty directory listing).

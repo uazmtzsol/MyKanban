@@ -218,4 +218,81 @@ class SyncMergeTest {
         MergeOutcome outcome = SyncMerge.merge(base, local, remote);
         assertThat(outcome.merged().links()).containsExactly(new CardLink(a, b));
     }
+
+    // ------------------------------------------------------------------
+    // T24 · B11 + B6: completion date, reminder-only edits, pruning
+    // ------------------------------------------------------------------
+
+    private static CardSnapshot cardWith(String id, java.time.LocalDate dueDate,
+                                         java.util.List<com.personalkanban.domain.board.CardReminder> reminders,
+                                         java.time.LocalDate completedAt) {
+        return new CardSnapshot(new CardId(id), "T", "D", BoardColor.BLUE, dueDate,
+                List.of(), T0, "", List.of(), null, reminders, completedAt);
+    }
+
+    @Test
+    void completionDateIsLastWriterWins() {
+        java.time.LocalDate earlier = java.time.LocalDate.of(2026, 10, 1);
+        java.time.LocalDate later = java.time.LocalDate.of(2026, 10, 2);
+        BoardMemento base = board(cardWith("c1", null, List.of(), null));
+        BoardMemento local = board(cardWith("c1", null, List.of(), earlier));
+        BoardMemento remote = board(cardWith("c1", null, List.of(), later));
+
+        MergeOutcome outcome = SyncMerge.merge(base, local, remote);
+        assertThat(find(outcome.merged(), "c1").completedAt()).isEqualTo(later);
+    }
+
+    @Test
+    void aSideThatOnlyAddsAReminderIsNotTreatedAsUnchanged() {
+        // B6 ①: cardKey ignored reminders, so an edit that only added one
+        // looked identical to base and lost against the other side's delete.
+        var reminder = com.personalkanban.domain.board.CardReminder.of(
+                java.time.LocalDate.of(2026, 10, 25), null);
+        BoardMemento base = board(cardWith("c1", null, List.of(), null));
+        BoardMemento local = board(cardWith("c1", null, List.of(reminder), null));
+        BoardMemento remote = board(); // remote deleted the card, unchanged vs base
+
+        MergeOutcome outcome = SyncMerge.merge(base, local, remote);
+        assertThat(outcome.merged().columns().get(0).cards()).hasSize(1);
+        assertThat(find(outcome.merged(), "c1").reminders())
+                .extracting(com.personalkanban.domain.board.CardReminder::id)
+                .containsExactly(reminder.id());
+    }
+
+    @Test
+    void aSideThatOnlyMarksTheCardDoneIsNotTreatedAsUnchanged() {
+        java.time.LocalDate day = java.time.LocalDate.of(2026, 10, 19);
+        BoardMemento base = board(cardWith("c1", null, List.of(), null));
+        BoardMemento local = board(cardWith("c1", null, List.of(), day));
+        BoardMemento remote = board(); // remote deleted the card, unchanged vs base
+
+        MergeOutcome outcome = SyncMerge.merge(base, local, remote);
+        assertThat(outcome.merged().columns().get(0).cards()).hasSize(1);
+        assertThat(find(outcome.merged(), "c1").completedAt()).isEqualTo(day);
+    }
+
+    @Test
+    void remindersAfterTheMergedDueDateArePruned() {
+        // B6 ②: date and reminders merged separately could leave a reminder
+        // past the winning due date, which Card.adoptReminder let through.
+        var inside = com.personalkanban.domain.board.CardReminder.of(
+                java.time.LocalDate.of(2026, 10, 20), null);
+        var after = com.personalkanban.domain.board.CardReminder.of(
+                java.time.LocalDate.of(2026, 10, 28), null);
+        BoardMemento base = board(cardWith("c1", java.time.LocalDate.of(2026, 10, 30),
+                List.of(inside, after), null));
+        // Local shortens the due date; remote keeps it. The merged date is
+        // the local one, so the 28th reminder can never fire.
+        BoardMemento local = board(cardWith("c1", java.time.LocalDate.of(2026, 10, 25),
+                List.of(inside, after), null));
+        BoardMemento remote = board(cardWith("c1", java.time.LocalDate.of(2026, 10, 30),
+                List.of(inside, after), null));
+
+        MergeOutcome outcome = SyncMerge.merge(base, local, remote);
+        CardSnapshot merged = find(outcome.merged(), "c1");
+        assertThat(merged.dueDate()).isEqualTo(java.time.LocalDate.of(2026, 10, 25));
+        assertThat(merged.reminders())
+                .extracting(com.personalkanban.domain.board.CardReminder::id)
+                .containsExactly(inside.id());
+    }
 }
