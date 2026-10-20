@@ -4045,7 +4045,7 @@ public final class BoardController {
         }
     }
 
-    /** Re-renders the relation inspectors of the processes view rows. */
+    /** Re-renders the relation inspector pinned to the bottom of the processes view. */
     private void refreshProcessInspectors() {
         com.personalkanban.domain.board.Card focused = processFocusId == null
                 ? null
@@ -4057,7 +4057,7 @@ public final class BoardController {
                 ProcessViewBuilder.renderInspector(box, service, i18n, this, focused));
     }
 
-    /** Applies an update to every relation inspector of the processes view. */
+    /** Applies an update to the single relation inspector of the processes view. */
     private void forEachInspector(Consumer<VBox> action) {
         if (!processView) {
             return;

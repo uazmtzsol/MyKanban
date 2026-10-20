@@ -468,6 +468,9 @@ independiente de la columna.
 tarjetas de izquierda a derecha unidas por flechas según el orden de
 precedencia. En cada tarjeta:
 
+- **Un clic** selecciona la tarjeta y la marca como **actual** (la misma que
+  mueven las flechas en el tablero); **doble clic** abre su **detalle**. Es el
+  mismo gesto que en el tablero: un clic nunca abre una ventana por sorpresa.
 - Las flechas **entre** tarjetas también se pueden pulsar: la **punteada**
   (sugerida) enlaza las dos con **un clic**; la **gruesa** (ya enlazada) **pide
   confirmación** antes de quitar la relación — así un clic accidental no borra
@@ -475,6 +478,12 @@ precedencia. En cada tarjeta:
 
 - 2 flechas **superiores**: crear una tarjeta **nueva** antes/después.
 - 2 flechas **inferiores**: enlazar una tarjeta **existente** antes/después.
+
+Al **enfocar** una tarjeta aparece abajo del todo un **inspector de relaciones**
+(una sola banda, plegada mientras no haya nada enfocado) con el título de la
+tarjeta —clic = enfocarla, doble clic = abrir su detalle— y las listas
+**Precedentes / Posteriores** con una **✕** para quitar cada enlace. Se cierra
+con `Esc` o al hacer clic en otra tarjeta.
 
 La vista también admite teclado: `←/→` mover · `Ctrl+←/→` tarjeta nueva ·
 `Shift+←/→` enlazar existente · `Ctrl+Shift+←/→` desenlazar · `Supr` quitar

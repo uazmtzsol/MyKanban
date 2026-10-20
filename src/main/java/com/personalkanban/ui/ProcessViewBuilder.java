@@ -74,6 +74,7 @@ final class ProcessViewBuilder {
         rows.setMaxWidth(Double.MAX_VALUE);
 
         List<Process> processes = service.processes();
+        Node content;
         // B2 (T24): the same gate chain the columns apply, so a filtered
         // board cannot show a different card set here (archived and finished
         // cards used to reappear in this view).
@@ -94,7 +95,22 @@ final class ProcessViewBuilder {
         if (unassigned > 0) {
             rows.getChildren().add(buildUnassignedNote(i18n, unassigned));
         }
-        return rows;
+
+        // B1: one relation inspector pinned to the bottom of the whole view
+        // (not one per row), collapsed until a card is focused.
+        VBox inspector = new VBox(4);
+        inspector.getStyleClass().add("process-inspector");
+        inspector.setMaxWidth(Double.MAX_VALUE);
+        renderInspector(inspector, service, i18n, controller, focusedCard(service, controller));
+        content = new VBox(rows, inspector);
+        ((VBox) content).setMaxWidth(Double.MAX_VALUE);
+        return content;
+    }
+
+    /** The focused card of the processes view, or null. */
+    private static Card focusedCard(BoardService service, BoardController controller) {
+        var id = controller == null ? null : controller.processFocusId();
+        return id == null ? null : service.board().findCard(id).orElse(null);
     }
 
     private static VBox buildRow(BoardService service, I18n i18n,
@@ -116,9 +132,6 @@ final class ProcessViewBuilder {
         Node body = layout.hasEdges()
                 ? graphCanvas(service, i18n, controller, layout)
                 : linearFlow(service, i18n, controller, ordered);
-        Card focused = controller.processFocusId() == null
-                ? null
-                : service.board().findCard(controller.processFocusId()).orElse(null);
 
         // The panel spans the full window width and its height
         // follows the content: never less than one whole card, and
@@ -141,15 +154,7 @@ final class ProcessViewBuilder {
         scroller.setMaxWidth(Double.MAX_VALUE);
         scroller.getStyleClass().add("process-row-scroll");
 
-        // Relation inspector of the process: the links of the card
-        // that has keyboard focus in the processes view.
-        VBox inspector = new VBox(4);
-        inspector.getStyleClass().add("process-inspector");
-        inspector.setUserData(process.id());
-        inspector.setMaxWidth(Double.MAX_VALUE);
-        renderInspector(inspector, service, i18n, controller, focused);
-
-        VBox panel = new VBox(6, header, scroller, inspector);
+        VBox panel = new VBox(6, header, scroller);
         panel.getStyleClass().add("process-panel");
         panel.setMaxWidth(Double.MAX_VALUE);
         return panel;
@@ -547,8 +552,6 @@ final class ProcessViewBuilder {
         title.setWrapText(true);
         title.setMaxWidth(CARD_W - 20);
         title.setMaxHeight(34); // two wrapped lines at most
-        title.setOnMouseClicked(event -> controller.onOpenCardDetail(card.id()));
-        Tooltip.install(title, new Tooltip(i18n.text("process.card.open")));
 
         HBox titleRow = new HBox(6, swatch, title);
         titleRow.setAlignment(Pos.CENTER_LEFT);
@@ -566,12 +569,18 @@ final class ProcessViewBuilder {
         // links (see installKeys).
         node.setFocusTraversable(true);
         node.setUserData(card.id());
+        // A1: one click selects/focuses the card (making it the "current"
+        // one too), exactly like the kanban board; double click opens the
+        // detail window. The title no longer opens on a single click, so a
+        // click never surprises the user with a dialog.
         node.setOnMouseClicked(event -> {
-            // Session 13: the process-view click also makes the card the
-            // "current" one, so both views share the same state.
             controller.onCardSelected(card.id());
             controller.onProcessFocus(card.id());
             node.requestFocus();
+            if (event.getClickCount() == 2) {
+                controller.onOpenCardDetail(card.id());
+                event.consume();
+            }
         });
         installKeys(node, card, nav, controller);
         return node;
@@ -704,8 +713,14 @@ final class ProcessViewBuilder {
                                     BoardController controller, Card focused) {
         box.getChildren().clear();
         if (focused == null) {
+            // Collapsed: the whole inspector is emptied and hidden, so an
+            // unfocused view keeps no dead band at the bottom.
+            box.setVisible(false);
+            box.setManaged(false);
             return;
         }
+        box.setVisible(true);
+        box.setManaged(true);
         CardId anchor = focused.id();
 
         Rectangle swatch = new Rectangle(10, 10, Color.web(focused.color().hex()));
@@ -713,33 +728,30 @@ final class ProcessViewBuilder {
         swatch.setArcHeight(3);
         Label title = new Label(focused.title());
         title.getStyleClass().add("process-inspector-title");
-        title.setOnMouseClicked(event -> controller.onOpenCardDetail(anchor));
+        // One click focuses (re-centers the diagram on) this card; double
+        // click opens its detail, matching the cards themselves (A1).
+        title.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                controller.onOpenCardDetail(anchor);
+            } else {
+                controller.focusProcessCard(anchor);
+            }
+        });
         Tooltip.install(title, new Tooltip(i18n.text("process.card.open")));
-        box.getChildren().add(new HBox(6, swatch, title));
+
+        Label caption = new Label(i18n.text("process.inspector.caption"));
+        caption.getStyleClass().add("process-inspector-caption");
+
+        HBox head = new HBox(6, swatch, title);
+        head.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(title, Priority.ALWAYS);
+        box.getChildren().addAll(caption, head);
 
         HBox lists = new HBox(14);
         lists.getChildren().addAll(
                 relationList(service, i18n, controller, anchor, true),
                 relationList(service, i18n, controller, anchor, false));
         box.getChildren().add(lists);
-
-        // The same four affordances the card carries, as buttons.
-        HBox actions = new HBox(4,
-                drawnArrowButton(true, true, i18n.text("process.arrow.new.predecessor"),
-                        () -> controller.onProcessAddNewRelation(anchor, true)),
-                drawnArrowButton(false, true, i18n.text("process.arrow.new.successor"),
-                        () -> controller.onProcessAddNewRelation(anchor, false)),
-                drawnArrowButton(true, false, i18n.text("process.arrow.link.predecessor"),
-                        () -> controller.onProcessLinkExisting(anchor, true)),
-                drawnArrowButton(false, false, i18n.text("process.arrow.link.successor"),
-                        () -> controller.onProcessLinkExisting(anchor, false)));
-        actions.setAlignment(Pos.CENTER_LEFT);
-        box.getChildren().add(actions);
-
-        Label hint = new Label(i18n.text("process.inspector.hint"));
-        hint.getStyleClass().add("detail-caption");
-        hint.setWrapText(true);
-        box.getChildren().add(hint);
     }
 
     /** One column of the inspector: the links on one side of the anchor. */

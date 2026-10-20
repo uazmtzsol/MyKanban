@@ -311,9 +311,11 @@
     -fx-background-radius: 6;
 }
 .process-card:focused { -fx-border-color: #1d4ed8; -fx-border-width: 2; }
+/* C1: the "current" card of the processes view is marked like on the board. */
+.process-card.card-current { -fx-border-color: #1d4ed8; -fx-border-width: 2; -fx-background-color: #eaf1fe; }
 .process-card-title { -fx-font-weight: bold; }
-/* Relation inspector under the diagram: the links of the focused card. */
-.process-inspector { -fx-padding: 2; }
+/* Relation inspector pinned to the bottom of the whole view (B1). */
+.process-inspector { -fx-padding: 6 12; -fx-background-color: #f1f3f7; -fx-border-color: #d8dee8; -fx-border-width: 1 0 0 0; }
 .process-inspector-title { -fx-font-weight: bold; -fx-text-fill: #1d4ed8; }
 .process-inspector-caption { -fx-font-size: 11px; -fx-text-fill: #6b7280; }
 .process-inspector-relation { -fx-cursor: hand; -fx-padding: 1 3; -fx-background-radius: 3; }

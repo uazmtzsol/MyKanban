@@ -129,9 +129,8 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [ ] 💬 **C-5** H-12 (menor): archivadas visibles en la vista de procesos; el
   toggle «mostrar archivadas» no persiste; resumen del frente configurable;
   filtro guardado por tablero; nombres de color en el tooltip de color.
-- [ ] 💬 **C-6** Vista de procesos: clic que abre el detalle de golpe + panel
-  inferior confuso. Diagnóstico y opciones A/B/C propuestas en **§7.8** (sin
-  implementar hasta decidir).
+- [x] 💬 **C-6** Vista de procesos: clic que abre el detalle de golpe + panel
+  inferior confuso. **Hecho: A1 + B1 + C1** (§7.8).
 
 ### Prueba manual del usuario (el código ya está)
 
@@ -215,6 +214,7 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 
 | Fecha | Tarea | Estado | Commit / notas |
 |---|---|---|---|
+| 2026-10-20 | **C-6** vista de procesos: A1 + B1 + C1 (§7.8) | ✅ | `fix(process-view): one click selects, double click opens, single bottom inspector (A1+B1+C1)` — **A1:** el clic en la tarjeta del diagrama ya no abre el detalle (era el `setOnMouseClicked` del título): un clic la selecciona y enfoca (y la hace «actual»), solo el **doble clic** abre, igual que el tablero; `Enter` sigue abriendo el editor. **B1:** el inspector de relaciones pasa de **uno por fila** a **una sola banda al pie de la vista**, oculta y fuera del layout hasta que hay tarjeta enfocada, con solo la cabecera (título: clic = enfocar, doble clic = abrir) y las dos listas de enlaces; fuera los 4 botones duplicados y la ayuda de teclado permanente (`process.inspector.hint` → `process.inspector.caption` ×5 idiomas). **C1:** `.process-card.card-current` marca la tarjeta actual en ambos temas. `ProcessViewInteractionTest` (3) → suite **622/622** (1 skip) |
 | 2026-10-19 | **T24 · B11** tarjeta «terminada» (V12) + seis correcciones de vencimientos | ✅ | `feat(cards): finished-card state with auto-complete in the done column (V12) + six due-date fixes` — **A:** `Card.completedAt` (`LocalDate`, null = pendiente) con `isDone()/complete/reopen`; `Board.moveCard/moveCardsToColumn` **completan al entrar** en la columna finalizada y **reabren al salir** («hoy» como **parámetro**, dominio sin reloj); `CompleteCardCommand` (1 undo); migración **V12** (`card.completed_at`) + binding/lectura + componente en `CardSnapshot` con ctor retrocompatible; LWW en `SyncMerge`; **✓** en el frente (patrón ★/!), menús de tarjeta y «Tarjetas», clase `card-done` (apagada + tachada) y toggle **«Mostrar terminadas»** (barra + menú Ver) enganchado en `matchesProcessFilter` (un solo gate: columnas, navegador, aviso y búsqueda); `ReminderPlan.dueNow` ignora hechas. **Correcciones:** **B1** `.card-due`/`.card-due-overdue` y las bandas `sync/due/reminder-notice` **no existían en ningún CSS** → añadidas a ambos temas; **B2** la vista de procesos **no aplicaba ningún filtro** → `BoardController.matchesVisibleFilters` (un solo gate para ambas vistas); **B3** el aviso de vencimientos contaba solo con filtro de proceso → ahora corre la misma cadena que las columnas; **B4** la fecha (y «terminada el») se ve en la cabecera del detalle; **B5** el DatePicker del formulario **avisa en rojo** con fecha pasada (sin bloquear); **B6** `SyncMerge.cardKey` incluye recordatorios + `completedAt` (una edición solo-recordatorio ya no pierde contra un borrado) y **poda** los recordatorios posteriores a la fecha ganadora tras el merge. **Hallazgos:** ① la prueba de UI más útil fue la de filtros: el toggle «mostrar» debe **recuperar** las hechas de los filtros de vencimiento también (decisión ②); ② PowerShell `Add-Content` escribe ANSI → el CSS añadido corrompió UTF-8 (`CardKeyboardFocusTest` lo pilló); ③ `refresh()` era `private` → package-private para tests. `CompleteCardTest` (13), `ReminderPlanTest` (+1), `SyncMergeTest` (+4), `SqliteBoardRepositoryTest` (+1), `CompletedCardUiTest` (4), `CardThemeCssTest` (+4) → suite **619/619** (1 skip) |
 | 2026-10-19 | **T10 · N-4** copiar/pegar tarjetas + **T11 · N-7/N-9** vista de proceso | ✅ | `feat(cards)+feat(process-view)+fix(ui): copy/paste cards, richer process creation, markdown format toolbar and clearable column background` — **T10:** portapapeles interno (`cardClipboard`) + **Ctrl+C/Ctrl+V**, entrada **Copiar tarjeta** en el menú de la tarjeta y botón **Pegar** en la cabecera de cada columna; pega **una tarjeta nueva** en la columna actual en **1 undo** (`DuplicateCardCommand` + `BoardService.duplicateCard`), copiando título/descripción/color/vencimiento/etiquetas/notas/checklist/proceso y **sin** enlaces. **T11:** la flecha verde abre el diálogo de tarjeta con el **proceso del ancla preseleccionado** (ya no crea «Nueva tarjeta» vacía) y «elegir existente» filtra por proceso (`linkCandidatesFor`). **UI:** `MarkdownEditor` gana botones **B/I/H/lista/enlace/código/limpiar** y pierde el tooltip invasivo; el «ninguno» del color de fondo de columna ahora **limpia** el fondo. `ProcessRelationDialogTest` (3) → suite **592/592** (1 skip) |
 
@@ -818,13 +818,14 @@ columna por vencimiento, reagendar en lote, «hace N días» en el badge e
 informe de ciclo/entregadas-tarde. **No** se reabre la decisión cerrada de §10
 sobre recordatorios sin fecha.
 
-### 7.8 Propuesta — arreglo y rediseño de la vista de procesos (💬 pendiente de discusión)
+### 7.8 Propuesta — arreglo y rediseño de la vista de procesos (✅ A1 + B1 hechos)
 
 > Origen: queja del usuario (2026-10-20): «apenas selecciono una tarjeta, de
 > inmediato me muestra la ventana para editar sus detalles; esto no era así
 > antes» y «al seleccionar una tarjeta, en la parte de abajo del contenedor
-> del proceso muestran datos de la tarjeta, pero es algo confuso». **Solo
-> diagnóstico + propuestas: no implementar hasta acordar.**
+> del proceso muestran datos de la tarjeta, pero es algo confuso».
+> **Decidido con el usuario (2026-10-20): A1 + B1** (más C1, ya de paso).
+> Diagnóstico original conservado abajo; lo hecho, al final.
 
 #### Diagnóstico (verificado en el código)
 
@@ -895,6 +896,29 @@ sobre recordatorios sin fecha.
 
 **Sin decidir todavía:** nada de esto se implementa hasta que el usuario
 elija combinación (A?, B?, C?).
+
+#### Implementado (2026-10-20: A1 + B1 + C1)
+
+- **A1** — `ProcessViewBuilder.cardNode`: se elimina el `setOnMouseClicked` del
+  título; el clic en la tarjeta ahora **selecciona + enfoca** (y la hace
+  «actual») y solo el **doble clic** abre el detalle, igual que el tablero.
+  `Enter` sigue abriendo el editor de la tarjeta enfocada.
+- **B1** — el inspector deja de ser **uno por fila**: `buildAll` añade **una
+  sola** banda `process-inspector` al pie de toda la vista (`VBox(rows,
+  inspector)`); `renderInspector` la **oculta y la saca del layout**
+  (`setVisible(false)/setManaged(false)`) mientras no haya tarjeta enfocada, y
+  dentro solo lleva la **cabecera** (título de la tarjeta; clic = enfocar,
+  doble clic = abrir) y las **dos listas de enlaces** con ✕. Se **quitan** los
+  4 botones de flecha duplicados y la línea de ayuda permanente (los atajos
+  siguen en `Ctrl+←/→` etc.; su texto `process.inspector.hint` se reemplaza por
+  `process.inspector.caption` = «Relaciones de la tarjeta enfocada»).
+- **C1** — la tarjeta «actual» se marca también aquí: CSS `.process-card.card-current`
+  en claro y obscuro.
+- **Tests:** `ProcessViewInteractionTest` (3: un clic no abre / doble clic abre /
+  inspector único y plegado) → suite **622/622** (1 skip).
+
+**Pendiente de discutir (no hecho):** B2/B3 (variantes del inspector) y las C2
+(menú contextual), C3 (contador en la cabecera), C4 (fila vacía con acción).
 
 
 ---
