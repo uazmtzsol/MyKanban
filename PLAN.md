@@ -129,8 +129,10 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [ ] 💬 **C-5** H-12 (menor): archivadas visibles en la vista de procesos; el
   toggle «mostrar archivadas» no persiste; resumen del frente configurable;
   filtro guardado por tablero; nombres de color en el tooltip de color.
-- [x] 💬 **C-6** Vista de procesos: clic que abre el detalle de golpe + panel
-  inferior confuso. **Hecho: A1 + B1 + C1** (§7.8).
+- [ ] 💬 **C-6** Vista de procesos: clic que abre el detalle de golpe + panel
+  inferior confuso. **Hecho: A1 + B1 + C1** (§7.8); queda **C2** (menú
+  contextual): lluvia de ideas en
+  [`docs/process-view-context-menu.md`](docs/process-view-context-menu.md).
 
 ### Prueba manual del usuario (el código ya está)
 
@@ -919,6 +921,15 @@ elija combinación (A?, B?, C?).
 
 **Pendiente de discutir (no hecho):** B2/B3 (variantes del inspector) y las C2
 (menú contextual), C3 (contador en la cabecera), C4 (fila vacía con acción).
+
+#### C2 — menú contextual (💬 lluvia de ideas abierta)
+Registro completo (inventario, ideas por bloques, contradicciones, sugerencias
+por funcional/UX/ergonomía/usabilidad y una reconstrucción recomendada +
+preguntas abiertas) en
+**[`docs/process-view-context-menu.md`](docs/process-view-context-menu.md)**.
+Hoy la vista de procesos **no tiene ningún menú contextual**: clic derecho no
+hace nada. **No implementar hasta acordar** las preguntas abiertas de §6 de ese
+documento.
 
 
 ---
