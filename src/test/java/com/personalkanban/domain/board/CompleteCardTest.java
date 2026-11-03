@@ -164,7 +164,7 @@ class CompleteCardTest {
         // Pre-V12 snapshots carry no completion and must restore as pending.
         Card card = card("una");
         CardSnapshot legacy = new CardSnapshot(card.id(), card.title(), "", card.color(),
-                null, List.of(), card.createdAt(), "", List.of(), null, List.of());
+                null, List.of(), card.createdAt(), "", List.of(), List.of());
         assertThat(legacy.completedAt()).isNull();
         assertThat(legacy.toCard(pending.id()).isDone()).isFalse();
     }

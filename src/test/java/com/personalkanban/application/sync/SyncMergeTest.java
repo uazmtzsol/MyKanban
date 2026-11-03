@@ -9,8 +9,6 @@ import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.ColumnSnapshot;
 import com.personalkanban.domain.board.EntryId;
-import com.personalkanban.domain.board.ProcessId;
-import com.personalkanban.domain.board.ProcessSnapshot;
 import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.domain.board.WipLimit;
 import org.junit.jupiter.api.Test;
@@ -29,12 +27,11 @@ class SyncMergeTest {
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
     private static final ColumnId COL = new ColumnId("col-1");
     private static final CardId CARD = new CardId("card-1"); 
-    private static final ProcessId PROC = new ProcessId("proc-1");
 
     private static CardSnapshot card(String id, String title, String description, BoardColor color,
                                      List<String> labels, List<ChecklistItem> checklist) {
         return new CardSnapshot(new CardId(id), title, description, color, null, labels, T0,
-                "", checklist, null);
+                "", checklist, List.of(), null);
     }
 
     private static ColumnSnapshot column(CardSnapshot... cards) {
@@ -46,9 +43,9 @@ class SyncMergeTest {
         return new BoardMemento(List.of(column(cards)));
     }
 
-    private static BoardMemento board(List<ColumnSnapshot> columns, List<ProcessSnapshot> processes,
+    private static BoardMemento board(List<ColumnSnapshot> columns,
                                       List<CardLink> links, List<TimelineEntry> timeline) {
-        return new BoardMemento(columns, processes, links, timeline);
+        return new BoardMemento(columns, links, timeline);
     }
 
     private static CardSnapshot find(BoardMemento memento, String cardId) {
@@ -178,7 +175,7 @@ class SyncMergeTest {
     }
 
     // ------------------------------------------------------------------
-    // Processes, links, timeline
+    // Links and timeline
     // ------------------------------------------------------------------
 
     @Test
@@ -186,8 +183,8 @@ class SyncMergeTest {
         TimelineEntry localEntry = TimelineEntry.restore(CARD, new EntryId("e1"), T0, T0.plusSeconds(60), "a");
         TimelineEntry remoteEntry = TimelineEntry.restore(CARD, new EntryId("e2"), T0, T0.plusSeconds(30), "b");
         BoardMemento base = board();
-        BoardMemento local = board(List.of(column()), List.of(), List.of(), List.of(localEntry));
-        BoardMemento remote = board(List.of(column()), List.of(), List.of(), List.of(remoteEntry));
+        BoardMemento local = board(List.of(column()), List.of(), List.of(localEntry));
+        BoardMemento remote = board(List.of(column()), List.of(), List.of(remoteEntry));
 
         MergeOutcome outcome = SyncMerge.merge(base, local, remote);
         assertThat(outcome.merged().timeline()).extracting(entry -> entry.id().value())
@@ -195,24 +192,11 @@ class SyncMergeTest {
     }
 
     @Test
-    void processNamesMergePerField() {
-        BoardMemento base = board(List.of(column()),
-                List.of(new ProcessSnapshot(PROC, "Old")), List.of(), List.of());
-        BoardMemento local = board(List.of(column()),
-                List.of(new ProcessSnapshot(PROC, "New")), List.of(), List.of());
-        BoardMemento remote = base;
-
-        MergeOutcome outcome = SyncMerge.merge(base, local, remote);
-        assertThat(outcome.merged().processes()).singleElement()
-                .satisfies(process -> assertThat(process.name()).isEqualTo("New"));
-    }
-
-    @Test
     void linkPresentOnBothSidesSurvives() {
         CardId a = new CardId("a");
         CardId b = new CardId("b");
-        BoardMemento base = board(List.of(column()), List.of(), List.of(), List.of());
-        BoardMemento local = board(List.of(column()), List.of(), List.of(new CardLink(a, b)), List.of());
+        BoardMemento base = board(List.of(column()), List.of(), List.of());
+        BoardMemento local = board(List.of(column()), List.of(new CardLink(a, b)), List.of());
         BoardMemento remote = local;
 
         MergeOutcome outcome = SyncMerge.merge(base, local, remote);
@@ -227,7 +211,7 @@ class SyncMergeTest {
                                          java.util.List<com.personalkanban.domain.board.CardReminder> reminders,
                                          java.time.LocalDate completedAt) {
         return new CardSnapshot(new CardId(id), "T", "D", BoardColor.BLUE, dueDate,
-                List.of(), T0, "", List.of(), null, reminders, completedAt);
+                List.of(), T0, "", List.of(), reminders, completedAt);
     }
 
     @Test

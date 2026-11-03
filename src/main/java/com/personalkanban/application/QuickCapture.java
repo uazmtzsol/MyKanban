@@ -18,7 +18,7 @@ import java.util.Locale;
  *   <li>{@code +etiqueta} adds a label; {@code +urgente} / {@code +importante}
  *       map onto the system labels (same as the quick flags). {@code #} is
  *       <b>not</b> a label marker on purpose: in this app {@code #} identifies
- *       process tags.</li>
+ *       label tags.</li>
  *   <li>{@code !} = urgent, {@code *} = important (standalone tokens).</li>
  *   <li>{@code @hoy}, {@code @mañana}, {@code @+3d} or {@code @2026-10-20}
  *       set the due date. An unparsable date is left in the title instead of

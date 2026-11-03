@@ -468,7 +468,7 @@ class BoardServiceTest {
                 WipLimit.unlimited());
         LocalDate due = LocalDate.of(2026, 10, 15);
         CardId copied = service.addCard(homeColumn, "Task", "desc", BoardColor.RED,
-                due, List.of("urgent"), "notes", null, null);
+                due, List.of("urgent"), "notes", null);
 
         BoardId archive = addBoard("Archive");
         service.addColumn("Inbox", "", BoardColor.GREEN, WipLimit.unlimited());

@@ -10,8 +10,6 @@ import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.ColumnSnapshot;
 import com.personalkanban.domain.board.EntryId;
-import com.personalkanban.domain.board.ProcessId;
-import com.personalkanban.domain.board.ProcessSnapshot;
 import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.domain.board.WipLimit;
 
@@ -37,7 +35,7 @@ import java.util.function.Function;
  * <p>Rules, applied per field rather than per record so editing the
  * description on one device and the color on the other never loses either:</p>
  * <ul>
- *   <li><b>Scalars</b> (title, description, color, date, notes, process,
+ *   <li><b>Scalars</b> (title, description, color, date, notes,
  *       column fields): last-writer-wins by field. When only one side moved
  *       from the base, that side wins. When both moved to different values
  *       the engine cannot know the real clock (the protocol carries no
@@ -75,10 +73,6 @@ public final class SyncMerge {
         Map<ColumnId, ColumnSnapshot> baseCols = indexColumns(base.columns());
         Map<ColumnId, ColumnSnapshot> localCols = indexColumns(local.columns());
         Map<ColumnId, ColumnSnapshot> remoteCols = indexColumns(remote.columns());
-
-        Map<ProcessId, ProcessSnapshot> baseProc = indexProcesses(base.processes());
-        Map<ProcessId, ProcessSnapshot> localProc = indexProcesses(local.processes());
-        Map<ProcessId, ProcessSnapshot> remoteProc = indexProcesses(remote.processes());
 
         // ---- columns: which survive and their merged scalars ----
         List<ColumnId> columnOrder = ordered(
@@ -158,32 +152,12 @@ public final class SyncMerge {
                     column.backgroundColor(), cardsByColumn.get(id)));
         }
 
-        // ---- processes ----
-        List<ProcessId> processOrder = ordered(localProc.keySet(), remoteProc.keySet());
-        List<ProcessSnapshot> mergedProcesses = new ArrayList<>();
-        for (ProcessId id : processOrder) {
-            ProcessSnapshot b = baseProc.get(id);
-            ProcessSnapshot l = localProc.get(id);
-            ProcessSnapshot r = remoteProc.get(id);
-            // An edit beats a delete on either side; both absent means gone.
-            if (l == null && r == null) {
-                continue;
-            }
-            String name = lww("name", b == null ? null : b.name(),
-                    l == null ? null : l.name(), r == null ? null : r.name(),
-                    "process", id.value(), conflicts);
-            if (name == null) {
-                name = l != null ? l.name() : r.name();
-            }
-            mergedProcesses.add(new ProcessSnapshot(id, name));
-        }
-
         // ---- links and timeline: append-only union with base-aware deletion ----
         List<CardLink> mergedLinks = mergeLinks(base.links(), local.links(), remote.links());
         List<TimelineEntry> mergedTimeline = mergeTimeline(base.timeline(), local.timeline(),
                 remote.timeline());
 
-        BoardMemento merged = new BoardMemento(assembled, mergedProcesses, mergedLinks, mergedTimeline);
+        BoardMemento merged = new BoardMemento(assembled, mergedLinks, mergedTimeline);
         return new MergeOutcome(merged, conflicts);
     }
 
@@ -224,7 +198,7 @@ public final class SyncMerge {
     }
 
     // ------------------------------------------------------------------
-    // Column / card / process merges
+    // Column and card merges
     // ------------------------------------------------------------------
 
     private static ColumnSnapshot mergeColumn(ColumnSnapshot b, ColumnSnapshot rawL, ColumnSnapshot rawR,
@@ -304,8 +278,6 @@ public final class SyncMerge {
                 lww("notes", str(b, CardSnapshot::notes), str(l, CardSnapshot::notes),
                         str(r, CardSnapshot::notes), "card", key, conflicts),
                 checklist,
-                lww("processId", proc(b, CardSnapshot::processId), proc(l, CardSnapshot::processId),
-                        proc(r, CardSnapshot::processId), "card", key, conflicts),
                 reminders,
                 lww("completedAt", date(b, CardSnapshot::completedAt),
                         date(l, CardSnapshot::completedAt), date(r, CardSnapshot::completedAt),
@@ -533,9 +505,6 @@ public final class SyncMerge {
         if (value instanceof ColumnId id) {
             return id.value();
         }
-        if (value instanceof ProcessId id) {
-            return id.value();
-        }
         if (value instanceof EntryId id) {
             return id.value();
         }
@@ -572,7 +541,7 @@ public final class SyncMerge {
         }
         return String.join("\u0001", canonical(c.title()), canonical(c.description()),
                 canonical(c.color()), canonical(c.dueDate()), canonical(c.createdAt()),
-                canonical(c.notes()), canonical(c.processId()),
+                canonical(c.notes()),
                 String.join(",", c.labels()), checklist.toString(),
                 reminders.toString(), canonical(c.completedAt()));
     }
@@ -605,14 +574,6 @@ public final class SyncMerge {
             for (CardSnapshot card : column.cards()) {
                 map.put(card.id(), column.id());
             }
-        }
-        return map;
-    }
-
-    private static Map<ProcessId, ProcessSnapshot> indexProcesses(List<ProcessSnapshot> processes) {
-        Map<ProcessId, ProcessSnapshot> map = new LinkedHashMap<>();
-        for (ProcessSnapshot process : processes) {
-            map.put(process.id(), process);
         }
         return map;
     }
@@ -686,10 +647,6 @@ public final class SyncMerge {
     }
 
     private static LocalDate date(CardSnapshot c, Function<CardSnapshot, LocalDate> getter) {
-        return c == null ? null : getter.apply(c);
-    }
-
-    private static ProcessId proc(CardSnapshot c, Function<CardSnapshot, ProcessId> getter) {
         return c == null ? null : getter.apply(c);
     }
 }

@@ -24,19 +24,15 @@ import java.util.stream.Collectors;
  * flow through here; the board keeps the column ordering and collects the
  * domain events produced during a use case.
  *
- * <p>Session 4 additions: processes (named card groups), precedence links
- * between cards (validated acyclic by {@link DependencyGuard}), and card
- * checklist orchestration. Process and link state participates in the
- * memento, so undo/redo and persistence cover them too.</p>
+ * <p>Session 4 additions: precedence links between cards (validated acyclic by
+ * {@link DependencyGuard}) and card checklist orchestration. Link state
+ * participates in the memento, so undo/redo and persistence cover it too.</p>
  */
 public final class Board {
 
     private final BoardId id;
     private final List<BoardColumn> columns = new ArrayList<>();
     private final List<DomainEvent> events = new ArrayList<>();
-
-    /** Processes of this board (insertion ordered). */
-    private final SequencedMap<ProcessId, Process> processes = new LinkedHashMap<>();
 
     /** Precedence links: key precedes each value ("key → successor"). */
     private final SequencedMap<CardId, SequencedSet<CardId>> links = new LinkedHashMap<>();
@@ -142,20 +138,17 @@ public final class Board {
 
     public CardAdded addCard(ColumnId columnId, String title, String description, BoardColor color,
                              LocalDate dueDate, List<String> labels) {
-        return addCard(columnId, title, description, color, dueDate, labels, null, null, null);
+        return addCard(columnId, title, description, color, dueDate, labels, null, null);
     }
 
     /**
-     * Full card creation (session 4): plain notes, initial checklist items
-     * and an optional process assignment ride along in one undoable step.
-     * Null-safe extras keep the simpler overloads intact.
+     * Full card creation (session 4): plain notes and the initial checklist
+     * items ride along in one undoable step. Null-safe extras keep the simpler
+     * overloads intact.
      */
     public CardAdded addCard(ColumnId columnId, String title, String description, BoardColor color,
                              LocalDate dueDate, List<String> labels,
-                             String notes, List<ChecklistItem> checklist, ProcessId processId) {
-        if (processId != null) {
-            processOrThrow(processId); // validate BEFORE any mutation
-        }
+                             String notes, List<ChecklistItem> checklist) {
         CardAdded event = columnOrThrow(columnId).addCard(Ids.newCardId(), title, description,
                 color, dueDate, labels);
         Card card = findCard(event.cardId()).orElseThrow();
@@ -164,9 +157,6 @@ public final class Board {
         }
         if (checklist != null) {
             checklist.forEach(card::adoptChecklistItem);
-        }
-        if (processId != null) {
-            card.assignTo(processId);
         }
         events.add(event);
         return event;
@@ -591,86 +581,6 @@ public final class Board {
     }
 
     // ------------------------------------------------------------------
-    // Processes (session 4.6): named groups of related cards
-    // ------------------------------------------------------------------
-
-    /** Creates a process and returns it. */
-    public Process addProcess(String name) {
-        Process process = new Process(name);
-        processes.put(process.id(), process);
-        return process;
-    }
-
-    public void renameProcess(ProcessId processId, String newName) {
-        processOrThrow(processId).rename(newName);
-    }
-
-    /** Deletes a process; member cards simply become unassigned. */
-    public void removeProcess(ProcessId processId) {
-        processOrThrow(processId);
-        processes.remove(processId);
-        for (BoardColumn column : columns) {
-            for (Card card : column.cards()) {
-                if (processId.equals(card.processId())) {
-                    card.assignTo(null);
-                }
-            }
-        }
-    }
-
-    /** Assigns one card to a process; null clears the assignment. */
-    public void assignCardToProcess(CardId cardId, ProcessId processId) {
-        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
-        if (processId != null) {
-            processOrThrow(processId); // must exist
-        }
-        card.assignTo(processId);
-    }
-
-    /**
-     * Removes a card from its process AND deletes every precedence
-     * link touching it (incoming and outgoing), so the neighbors
-     * stop pointing at it and it stops pointing at them. Example:
-     * A → X → B becomes A and B with no relation once X is
-     * unassigned.
-     */
-    public void unassignCardFromProcess(CardId cardId) {
-        Card card = findCard(cardId).orElseThrow(() -> new NotFoundException(cardId));
-        card.assignTo(null);
-        detachCard(cardId);
-    }
-
-    public Process processOrThrow(ProcessId processId) {
-        Process process = processes.get(processId);
-        if (process == null) {
-            throw new NotFoundException(processId);
-        }
-        return process;
-    }
-
-    /** Processes in insertion order. */
-    public List<Process> processList() {
-        return List.copyOf(processes.values());
-    }
-
-    public boolean hasProcesses() {
-        return !processes.isEmpty();
-    }
-
-    /** Cards whose {@code processId} matches, in board order. */
-    public List<Card> cardsOfProcess(ProcessId processId) {
-        List<Card> members = new ArrayList<>();
-        for (BoardColumn column : columns) {
-            for (Card card : column.cards()) {
-                if (processId.equals(card.processId())) {
-                    members.add(card);
-                }
-            }
-        }
-        return members;
-    }
-
-    // ------------------------------------------------------------------
     // Precedence links (session 4.6): "from precedes to"
     // ------------------------------------------------------------------
 
@@ -812,11 +722,6 @@ public final class Board {
         memento.columns().stream()
                 .map(snapshot -> snapshot.withCardsOwnedBy(snapshot.id()))
                 .forEach(columns::add);
-        processes.clear();
-        memento.processes().forEach(snapshot -> {
-            Process process = snapshot.toProcess();
-            processes.put(process.id(), process);
-        });
         links.clear();
         for (CardLink link : memento.links()) {
             links.computeIfAbsent(link.from(), key -> new LinkedHashSet<>()).add(link.to());

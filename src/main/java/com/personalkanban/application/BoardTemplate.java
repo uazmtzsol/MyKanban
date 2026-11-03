@@ -15,8 +15,8 @@ import java.util.Optional;
  * A user-defined board template (user request T14 · B5, pure — no JavaFX).
  *
  * <p>It stores the <b>structure</b> the user wants to reuse — name, columns
- * (title, description, color, WIP limit, done flag), process names and the
- * board's card-view mode — and deliberately <b>no cards</b>: creating a board
+ * (title, description, color, WIP limit, done flag) and the board's card-view
+ * mode — and deliberately <b>no cards</b>: creating a board
  * from it starts empty. Serialized as JSON into a {@code SettingsStore} entry
  * ({@code board.template.<name>}), so no schema migration is needed.</p>
  */
@@ -39,17 +39,15 @@ public final class BoardTemplate {
 
     private final String name;
     private final List<TemplateColumn> columns;
-    private final List<String> processNames;
     private final CardViewSettings.Mode viewMode;
 
-    public BoardTemplate(String name, List<TemplateColumn> columns, List<String> processNames,
+    public BoardTemplate(String name, List<TemplateColumn> columns,
                          CardViewSettings.Mode viewMode) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("A template needs a name");
         }
         this.name = name.strip();
         this.columns = columns == null ? List.of() : List.copyOf(columns);
-        this.processNames = processNames == null ? List.of() : List.copyOf(processNames);
         this.viewMode = viewMode == null ? CardViewSettings.DEFAULT_MODE : viewMode;
     }
 
@@ -59,10 +57,6 @@ public final class BoardTemplate {
 
     public List<TemplateColumn> columns() {
         return columns;
-    }
-
-    public List<String> processNames() {
-        return processNames;
     }
 
     public CardViewSettings.Mode viewMode() {
@@ -90,7 +84,6 @@ public final class BoardTemplate {
                 columnList.add(entry);
             }
             payload.put("columns", columnList);
-            payload.put("processes", processNames);
             payload.put("viewMode", viewMode.name());
             return MAPPER.writeValueAsString(payload);
         } catch (Exception e) {
@@ -127,14 +120,6 @@ public final class BoardTemplate {
                     }
                 }
             }
-            List<String> processes = new ArrayList<>();
-            if (payload.get("processes") instanceof List<?> raw) {
-                for (Object item : raw) {
-                    if (item instanceof String process && !process.isBlank()) {
-                        processes.add(process.strip());
-                    }
-                }
-            }
             CardViewSettings.Mode mode = CardViewSettings.DEFAULT_MODE;
             if (payload.get("viewMode") instanceof String stored) {
                 try {
@@ -143,7 +128,7 @@ public final class BoardTemplate {
                     // unknown mode: keep the default
                 }
             }
-            return Optional.of(new BoardTemplate(name, columns, processes, mode));
+            return Optional.of(new BoardTemplate(name, columns, mode));
         } catch (Exception e) {
             return Optional.empty();
         }

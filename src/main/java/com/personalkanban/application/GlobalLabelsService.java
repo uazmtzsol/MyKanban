@@ -215,7 +215,8 @@ public final class GlobalLabelsService {
                         columnChanged = true;
                         cards.add(new CardSnapshot(card.id(), card.title(), card.description(),
                                 card.color(), card.dueDate(), after, card.createdAt(),
-                                card.notes(), card.checklist(), card.processId()));
+                                card.notes(), card.checklist(), card.reminders(),
+                                card.completedAt()));
                     }
                 }
                 if (columnChanged) {
@@ -230,7 +231,7 @@ public final class GlobalLabelsService {
             }
             if (boardChanged) {
                 boardService.saveStored(descriptor.id(),
-                        new BoardMemento(columns, memento.processes(), memento.links(),
+                        new BoardMemento(columns, memento.links(),
                                 memento.timeline()));
             }
         }

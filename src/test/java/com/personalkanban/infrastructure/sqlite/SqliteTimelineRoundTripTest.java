@@ -57,9 +57,9 @@ class SqliteTimelineRoundTripTest {
         ColumnSnapshot column = new ColumnSnapshot(
                 new ColumnId("col-1"), "To Do", "", BoardColor.BLUE, WipLimit.unlimited(), created,
                 List.of(new CardSnapshot(cardId, "with time", "desc", BoardColor.PINK, null,
-                        List.of(), created, "", List.of(), null)));
+                        List.of(), created, "", List.of(), List.of(), null)));
 
-        repository.save(boardId, new BoardMemento(List.of(column), List.of(), List.of(), List.of(closed, running)));
+        repository.save(boardId, new BoardMemento(List.of(column), List.of(), List.of(closed, running)));
         BoardMemento loaded = repository.load(boardId);
 
         assertThat(loaded.timeline()).hasSize(2);
@@ -88,8 +88,8 @@ class SqliteTimelineRoundTripTest {
         ColumnSnapshot column = new ColumnSnapshot(
                 new ColumnId("col-1"), "To Do", "", BoardColor.BLUE, WipLimit.unlimited(), created,
                 List.of(new CardSnapshot(cardId, "c", "d", BoardColor.PINK, null,
-                        List.of(), created, "", List.of(), null)));
-        repository.save(boardId, new BoardMemento(List.of(column), List.of(), List.of(), List.of(entry)));
+                        List.of(), created, "", List.of(), List.of(), null)));
+        repository.save(boardId, new BoardMemento(List.of(column), List.of(), List.of(entry)));
         assertThat(timelineRowCount()).isEqualTo(1);
 
         repository.deleteBoard(boardId);

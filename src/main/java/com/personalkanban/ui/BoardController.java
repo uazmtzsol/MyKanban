@@ -442,8 +442,8 @@ public final class BoardController {
      * works no matter what has focus (card, toolbar button, scroller…).
      * While the user types in a field or drives a list/combo the keys stay
      * with that control; only Escape is taken over (drop the card focus).
-     * The processes view keeps its own keys (ProcessViewBuilder.installKeys)
-     * except Escape and Enter, which are handled here for consistency.
+     * Escape and Enter stay handled here, so they keep working no matter what
+     * has focus.
      */
     private void onBoardKeyPressed(javafx.scene.input.KeyEvent event) {
         if (event.isConsumed() || dialogs.modalActive()) {
@@ -1476,9 +1476,9 @@ public final class BoardController {
             item.setOnAction(e -> onSwitchLanguage(locale));
             languageMenu.getItems().add(item);
         }
-        // Session 4: File (renamed from "Base de datos"), Boards, Processes,
-        // Language, Help — Preferences and the shortcuts help live in their
-        // natural menus.
+        // Session 4: File (renamed from "Base de datos"), Boards, Language,
+        // Help — Preferences and the shortcuts help live in their natural
+        // menus.
         // Session 13 (user request): a "Ver" menu, so both view modes are
         // reachable with the keyboard (Alt opens the menu bar) and each one
         // carries its own accelerator. It refreshes its check marks every time
@@ -1533,7 +1533,7 @@ public final class BoardController {
     /**
      * "Tarjetas" menu (session 16): the card context-menu actions, acting on
      * the current card. Rebuilt each time it opens, so the enabled state and
-     * the checked process follow the card the user is on right now.
+     * the checked entries follow the card the user is on right now.
      */
     private void rebuildCardsMenu() {
         if (cardsMenu == null) {
@@ -1827,7 +1827,7 @@ public final class BoardController {
      * "Ver" menu (session 13, user request): the two view modes with their own
      * accelerator, so the mode can be chosen with the keyboard — either the
      * accelerator directly, or the menu itself (Alt, arrows, Enter). The active
-     * mode carries the radio dot, like the active board / process filter.
+     * mode carries the radio dot, like the active board.
      *
      * <p>Session 16 (user request): the card-view modes, the "show archived"
      * toggle and dark mode joined it, so everything that changes what is on
@@ -2678,18 +2678,17 @@ public final class BoardController {
     /**
      * The due-date reminder (session 15, T5/B3): how many cards are overdue or
      * due today, as a discreet band that takes the user to the matching filter
-     * when clicked. Never modal, never interrupting; only the cards that the
-     * current process/archived filter already shows are counted, so the numbers
-     * match exactly what the filters will show.
+     * when clicked. Never modal, never interrupting; only the cards the current
+     * filters already show are counted, so the numbers match exactly what the
+     * filters will show.
      */
     private void updateDueNotice() {
         if (dueNotice == null) {
             return;
         }
-        // B3 (T24): the notice used to count with only the process filter and
-        // then claimed to match the board exactly. It now runs the very same
-        // gate chain as the columns (labels, quick flags, process, due scope),
-        // so the number it prints is the number the user can click through to.
+        // B3 (T24): the notice runs the very same gate chain as the columns
+        // (labels, quick flags, archived/finished, due scope), so the number it
+        // prints is the number the user can click through to.
         LabelFilter labelFilter = currentLabelFilter();
         LabelFilter quickFilter = currentQuickFlagFilter();
         List<com.personalkanban.domain.board.Card> candidates = new ArrayList<>();
@@ -3140,7 +3139,7 @@ public final class BoardController {
                 service.board().allCards(), List.of(), List.of());
         form.ifPresent(f -> guarded(() -> {
             var created = service.addCard(columnId, f.title(), f.description(), f.color(),
-                    f.dueDate(), f.labels(), f.notes(), null, null);
+                    f.dueDate(), f.labels(), f.notes(), null);
             if (!f.checklistLines().isEmpty()) {
                 service.setChecklistFromLines(created, f.checklistLines());
             }

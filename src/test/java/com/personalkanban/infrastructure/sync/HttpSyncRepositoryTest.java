@@ -117,7 +117,6 @@ class HttpSyncRepositoryTest {
         assertThat(first.notes()).isEqualTo("some notes");
         assertThat(first.checklist())
                 .containsExactly(new ChecklistItem("ci-1", "Check me", false));
-        assertThat(first.processId()).isNull();
 
         assertThat(fetched.links())
                 .containsExactly(new CardLink(first.id(), column.cards().get(1).id()));
@@ -456,12 +455,13 @@ class HttpSyncRepositoryTest {
                         new CardSnapshot(first, "Card 1", "Details", BoardColor.GREEN,
                                 LocalDate.parse("2026-02-01"), List.of("bug"),
                                 Instant.parse("2026-01-01T00:00:00Z"), "some notes",
-                                List.of(new ChecklistItem("ci-1", "Check me", false)), null),
+                                List.of(new ChecklistItem("ci-1", "Check me", false)),
+                                List.of(), null),
                         new CardSnapshot(second, "Card 2", "", BoardColor.RED,
-                                null, List.of(), Instant.parse("2026-01-02T00:00:00Z"))));
+                                null, List.of(), Instant.parse("2026-01-02T00:00:00Z"),
+                                "", List.of(), List.of(), null)));
         return new BoardMemento(
                 List.of(column),
-                List.of(),
                 List.of(new CardLink(first, second)),
                 List.of(TimelineEntry.restore(first, new EntryId("e-1"),
                         Instant.parse("2026-01-03T10:00:00Z"), null, "working on it")));

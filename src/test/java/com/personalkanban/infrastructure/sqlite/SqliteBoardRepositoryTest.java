@@ -264,11 +264,11 @@ class SqliteBoardRepositoryTest {
         CardSnapshot doneCard = new CardSnapshot(
                 new com.personalkanban.domain.board.CardId("done-1"),
                 "hecha", "", BoardColor.GREEN, due, List.of("x"), created,
-                "notas", List.of(), null, List.of(), finished);
+                "notas", List.of(), List.of(), finished);
         CardSnapshot pendingCard = new CardSnapshot(
                 new com.personalkanban.domain.board.CardId("pending-1"),
                 "pendiente", "", BoardColor.BLUE, due, List.of(), created,
-                "", List.of(), null, List.of(), null);
+                "", List.of(), List.of(), null);
 
         repository.save(boardId, new BoardMemento(List.of(new ColumnSnapshot(
                 new com.personalkanban.domain.board.ColumnId("col-1"),

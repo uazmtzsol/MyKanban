@@ -34,7 +34,6 @@ class ArchivedPurgeTest {
         column = service.addColumn("Por hacer", "", BoardColor.BLUE, WipLimit.of(4));
         service.addColumn("Hecho", "", BoardColor.GREEN, WipLimit.unlimited());
         service.setColumnDone(service.board().columns().get(1).id(), true);
-        service.addProcess("Desarrollo");
     }
 
     @Test
@@ -65,7 +64,6 @@ class ArchivedPurgeTest {
                 .containsExactly("Por hacer", "Hecho");
         assertThat(service.board().columns().get(0).wipLimit()).isEqualTo(WipLimit.of(4));
         assertThat(service.board().columns().get(1).isDone()).isTrue();
-        assertThat(service.processes()).extracting(p -> p.name()).containsExactly("Desarrollo");
         // Structure only: the new board starts empty.
         assertThat(service.board().allCards()).isEmpty();
     }

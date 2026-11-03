@@ -13,8 +13,6 @@ import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.ColumnSnapshot;
 import com.personalkanban.domain.board.EntryId;
-import com.personalkanban.domain.board.ProcessId;
-import com.personalkanban.domain.board.ProcessSnapshot;
 import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.domain.board.WipLimit;
 
@@ -144,27 +142,7 @@ public final class SqliteBoardRepository implements BoardRepository {
                     column.color(), column.wipLimit(), column.createdAt(), column.done(),
                     column.backgroundColor(), readCards(column.id())));
         }
-        return new BoardMemento(withCards, readProcesses(boardId), readLinks(boardId),
-                readTimeline(boardId));
-    }
-
-    /** Processes of one board, in stored position order. */
-    private List<ProcessSnapshot> readProcesses(BoardId boardId) {
-        List<ProcessSnapshot> processes = new ArrayList<>();
-        String sql = "SELECT id, name FROM process WHERE board_id = ? ORDER BY position";
-        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
-            statement.setString(1, boardId.value());
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    processes.add(new ProcessSnapshot(
-                            new ProcessId(resultSet.getString("id")),
-                            resultSet.getString("name")));
-                }
-            }
-        } catch (SQLException e) {
-            throw new DataAccessException("Could not load processes of board " + boardId, e);
-        }
-        return processes;
+        return new BoardMemento(withCards, readLinks(boardId), readTimeline(boardId));
     }
 
     /** Time entries of every card that belongs to the given board. */
@@ -273,10 +251,6 @@ public final class SqliteBoardRepository implements BoardRepository {
                 INSERT INTO timeline (id, card_id, started_at, ended_at, comment)
                 VALUES (?, ?, ?, ?, ?)
                 """;
-        String processSql = """
-                INSERT INTO process (id, board_id, name, position, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """;
         String linkSql = """
                 INSERT INTO card_link (from_card_id, to_card_id) VALUES (?, ?)
                 """;
@@ -285,7 +259,6 @@ public final class SqliteBoardRepository implements BoardRepository {
              PreparedStatement checklistStatement = database.connection().prepareStatement(checklistSql);
              PreparedStatement reminderStatement = database.connection().prepareStatement(reminderSql);
              PreparedStatement timelineStatement = database.connection().prepareStatement(timelineSql);
-             PreparedStatement processStatement = database.connection().prepareStatement(processSql);
              PreparedStatement linkStatement = database.connection().prepareStatement(linkSql)) {
             int columnIndex = 0;
             for (ColumnSnapshot column : board.columns()) {
@@ -310,20 +283,14 @@ public final class SqliteBoardRepository implements BoardRepository {
                 timelineStatement.setString(5, entry.comment());
                 timelineStatement.addBatch();
             }
-            int processIndex = 0;
-            for (ProcessSnapshot process : board.processes()) {
-                bindProcess(processStatement, boardId, process, processIndex++);
-                processStatement.addBatch();
-            }
             for (CardLink link : board.links()) {
                 linkStatement.setString(1, link.from().value());
                 linkStatement.setString(2, link.to().value());
                 linkStatement.addBatch();
             }
-            // FK order matters: processes first (cards reference them), then
-            // columns, cards, their checklists/reminders/timeline, and finally
-            // the links (which reference cards).
-            processStatement.executeBatch();
+            // FK order matters: columns, cards, their
+            // checklists/reminders/timeline, and finally the links (which
+            // reference cards).
             columnStatement.executeBatch();
             cardStatement.executeBatch();
             checklistStatement.executeBatch();
@@ -370,21 +337,11 @@ public final class SqliteBoardRepository implements BoardRepository {
         }
     }
 
-    private void bindProcess(PreparedStatement statement, BoardId boardId,
-                             ProcessSnapshot process, int position) throws SQLException {
-        statement.setString(1, process.id().value());
-        statement.setString(2, boardId.value());
-        statement.setString(3, process.name());
-        statement.setInt(4, position);
-        // Not round-tripped (the snapshot has no creation time); a stable
-        // value keeps the NOT NULL column happy.
-        statement.setLong(5, 0L);
-    }
-
     private void deleteBoardContents(BoardId boardId) throws SQLException {
         // Cards of this board first (join through columns): their checklist
-        // items, time entries and links cascade. Then its columns, then its
-        // processes.
+        // items, time entries and links cascade. Then its columns. Rows of the
+        // legacy process table are cleared too, so an old database does not
+        // keep stale data the app no longer reads.
         String deleteCards = """
                 DELETE FROM card WHERE column_id IN (
                     SELECT id FROM board_column WHERE board_id = ?
@@ -446,11 +403,9 @@ public final class SqliteBoardRepository implements BoardRepository {
         statement.setString(8, String.join("\u001F", card.labels()));
         statement.setLong(9, card.createdAt().toEpochMilli());
         statement.setString(10, card.notes());
-        if (card.processId() != null) {
-            statement.setString(11, card.processId().value());
-        } else {
-            statement.setNull(11, Types.VARCHAR);
-        }
+        // process_id stays in the schema (old databases must keep working) but
+        // the app no longer has processes, so nothing is written there.
+        statement.setNull(11, Types.VARCHAR);
         // T24 · B11: the day the card was finished, or NULL while pending.
         if (card.completedAt() != null) {
             statement.setString(12, card.completedAt().toString());
@@ -480,7 +435,7 @@ public final class SqliteBoardRepository implements BoardRepository {
     private List<CardSnapshot> readCards(ColumnId columnId) {
         List<CardSnapshot> cards = new ArrayList<>();
         String sql = """
-                SELECT id, title, description, color, due_date, labels, created_at, notes, process_id, completed_at
+                SELECT id, title, description, color, due_date, labels, created_at, notes, completed_at
                 FROM card
                 WHERE column_id = ?
                 ORDER BY position
@@ -490,7 +445,6 @@ public final class SqliteBoardRepository implements BoardRepository {
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     CardId cardId = new CardId(resultSet.getString("id"));
-                    String processId = resultSet.getString("process_id");
                     cards.add(new CardSnapshot(
                             cardId,
                             resultSet.getString("title"),
@@ -501,7 +455,6 @@ public final class SqliteBoardRepository implements BoardRepository {
                             Instant.ofEpochMilli(resultSet.getLong("created_at")),
                             readNotes(resultSet),
                             readChecklist(cardId),
-                            processId == null ? null : new ProcessId(processId),
                             readReminders(cardId),
                             readCompletedAt(resultSet)));
                 }

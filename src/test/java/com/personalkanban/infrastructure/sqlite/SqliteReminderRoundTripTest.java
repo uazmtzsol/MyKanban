@@ -57,7 +57,7 @@ class SqliteReminderRoundTripTest {
                 new CardReminder("r-3", DUE, LocalTime.of(18, 0), false));
 
         repository.save(boardId, new BoardMemento(List.of(column(cardId, created, reminders)),
-                List.of(), List.of(), List.of()));
+                List.of(), List.of()));
 
         var card = repository.load(boardId).toBoard().findCard(cardId).orElseThrow();
 
@@ -84,7 +84,7 @@ class SqliteReminderRoundTripTest {
         Instant created = Instant.parse("2026-10-14T10:00:00Z");
         CardId cardId = new CardId("card-legacy");
         repository.save(boardId, new BoardMemento(
-                List.of(column(cardId, created, List.of())), List.of(), List.of(), List.of()));
+                List.of(column(cardId, created, List.of())), List.of(), List.of()));
 
         try (var statement = database.connection().prepareStatement(
                 "INSERT INTO card_reminder (id, card_id, on_date, on_time, acknowledged) "
@@ -107,7 +107,7 @@ class SqliteReminderRoundTripTest {
         CardId cardId = new CardId("card-1");
         repository.save(boardId, new BoardMemento(List.of(column(cardId, created,
                 List.of(new CardReminder("r-1", DUE, null, false)))),
-                List.of(), List.of(), List.of()));
+                List.of(), List.of()));
         assertThat(reminderRowCount()).isEqualTo(1);
 
         repository.deleteBoard(boardId);
@@ -119,7 +119,7 @@ class SqliteReminderRoundTripTest {
         return new ColumnSnapshot(new ColumnId("col-1"), "To Do", "", BoardColor.BLUE,
                 WipLimit.unlimited(), created,
                 List.of(new CardSnapshot(cardId, "con recordatorios", "", BoardColor.PINK, DUE,
-                        List.of(), created, "", List.of(), null, reminders)));
+                        List.of(), created, "", List.of(), reminders)));
     }
 
     private int reminderRowCount() throws Exception {

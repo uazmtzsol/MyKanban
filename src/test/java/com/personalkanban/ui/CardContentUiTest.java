@@ -65,7 +65,7 @@ class CardContentUiTest {
         column = context.boardService().addColumn("Todo", "", BoardColor.BLUE, WipLimit.unlimited());
         card = context.boardService().addCard(column, "Tarjeta", DESCRIPTION, BoardColor.DEFAULT,
                 null, List.of(), "%% Compras\n\nLeche, pan",
-                List.of(ChecklistItem.newItem("alpha"), ChecklistItem.newItem("beta")), null);
+                List.of(ChecklistItem.newItem("alpha"), ChecklistItem.newItem("beta")));
 
         i18n = new I18n(context.savedLocale());
         fx(() -> {

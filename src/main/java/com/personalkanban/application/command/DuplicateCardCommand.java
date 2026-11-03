@@ -11,7 +11,7 @@ import java.util.Objects;
 /**
  * Duplicates a card of the active board into a column (the copy/paste-card
  * shortcut, user request T10): title, description, color, due date, labels,
- * notes, checklist and process travel along; time entries, reminders and
+ * notes and checklist travel along; time entries, reminders and
  * precedence links do not (same criteria as moving a card between boards).
  * Undo removes exactly the created card.
  */
@@ -33,7 +33,7 @@ public final class DuplicateCardCommand implements BoardCommand {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown card: " + sourceCardId));
         CardAdded event = board.addCard(targetColumnId, source.title(), source.description(),
                 source.color(), source.dueDate(), source.labels(), source.notes(),
-                source.checklist(), source.processId());
+                source.checklist());
         createdId = event.cardId();
     }
 

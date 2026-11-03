@@ -129,12 +129,12 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 - [ ] 💬 **C-5** H-12 (menor): archivadas visibles en la vista de procesos; el
   toggle «mostrar archivadas» no persiste; resumen del frente configurable;
   filtro guardado por tablero; nombres de color en el tooltip de color.
-- [ ] 💬 **C-6** Vista de procesos: clic que abre el detalle de golpe + panel
-  inferior confuso. **Hecho: A1 + B1 + C1** (§7.8); queda **C2** (menú
-  contextual): lluvia de ideas en
-  [`docs/process-view-context-menu.md`](docs/process-view-context-menu.md).
+- [x] ✅ **C-6** Vista de procesos: clic que abre el detalle de golpe + panel
+  inferior confuso. **Hecho: A1 + B1 + C1** (§7.8); **C2** (menú contextual)
+  quedó sin efecto: la vista y la entidad se retiraron el 2026-11-03
+  («Quitar procesos»), así que este pendiente se cierra.
 
-### 🗑️ Quitar procesos (rama `remove-processes`, desde `ImprovementsV1`)
+### 🗑️ Quitar procesos (rama `remove-processes`, desde `ImprovementsV1`) — ✅ HECHO
 
 > Petición del usuario (2026-11-03): nueva rama y **eliminar la funcionalidad
 > de «procesos»** del programa: el ejecutable, los menús, las opciones del menú
@@ -146,20 +146,20 @@ Todo lo pendiente, en el orden en que se va a desarrollar (§2).
 > y las BDs existentes siguen abriendo. Cada **RP = un commit + push** con la
 > suite verde (reglas §2).
 
-- [ ] **RP-1** Fuera el menú **Procesos** de la barra, el **filtro de proceso**
+- [x] **RP-1** ✅ Fuera el menú **Procesos** de la barra, el **filtro de proceso**
   (barra de filtros + atajo **Ctrl+P**, `Action.PROCESS_FILTER` que las configs
   guardadas se cargan ignorando) y el botón **Proceso** de la barra de
   selección múltiple.
-- [ ] **RP-2** Fuera el **menú contextual «Proceso ▸»** de la tarjeta y el
+- [x] **RP-2** ✅ Fuera el **menú contextual «Proceso ▸»** de la tarjeta y el
   **selector de proceso** del detalle (y el chip del frente, si lo hay).
-- [ ] **RP-3** Fuera la **vista de procesos**: entrada en el menú Ver
+- [x] **RP-3** ✅ Fuera la **vista de procesos**: entrada en el menú Ver
   (Ctrl+Shift+2), `ProcessViewBuilder`, inspector, CSS y sus tests.
-- [ ] **RP-4** Fuera la **tabla por proceso** del informe de tiempo (queda la
+- [x] **RP-4** ✅ Fuera la **tabla por proceso** del informe de tiempo (queda la
   semanal) en la ventana y en la exportación.
-- [ ] **RP-5** Fuera procesos de **dominio, aplicación, persistencia y sync**:
+- [x] **RP-5** ✅ Fuera procesos de **dominio, aplicación, persistencia y sync**:
   `Process*`, `Card.processId`, comandos, `BoardService`, `BoardTemplate`,
   `SqliteBoardRepository`, `SyncMerge` (atómico para que compile y sincronice).
-- [ ] **RP-6** Limpieza final: claves `process.*` de los **5 bundles**, clases
+- [x] **RP-6** ✅ Limpieza final: claves `process.*` de los **5 bundles**, clases
   CSS `.process-*`, docs (manual, arquitectura) y bitácora.
 
 ### Prueba manual del usuario (el código ya está)
@@ -244,7 +244,7 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 
 | Fecha | Tarea | Estado | Commit / notas |
 |---|---|---|---|
-| 2026-11-03 | **RP-1…RP-6** quitar procesos (rama `remove-processes`) | 🔄 en curso | Plan en §1 «Quitar procesos»; commit + push por RP con la suite verde |
+| 2026-11-03 | **RP-1…RP-6** quitar procesos (rama `remove-processes`) | ✅ hecho | `cf8943b` RP-2 · `c31869a` RP-1/3/4 (UI) · último commit RP-5/6 (dominio, persistencia, sync, i18n, CSS, docs). Suite 609/609 OK (1 skip) |
 | 2026-10-20 | **C-6** vista de procesos: A1 + B1 + C1 (§7.8) | ✅ | `fix(process-view): one click selects, double click opens, single bottom inspector (A1+B1+C1)` — **A1:** el clic en la tarjeta del diagrama ya no abre el detalle (era el `setOnMouseClicked` del título): un clic la selecciona y enfoca (y la hace «actual»), solo el **doble clic** abre, igual que el tablero; `Enter` sigue abriendo el editor. **B1:** el inspector de relaciones pasa de **uno por fila** a **una sola banda al pie de la vista**, oculta y fuera del layout hasta que hay tarjeta enfocada, con solo la cabecera (título: clic = enfocar, doble clic = abrir) y las dos listas de enlaces; fuera los 4 botones duplicados y la ayuda de teclado permanente (`process.inspector.hint` → `process.inspector.caption` ×5 idiomas). **C1:** `.process-card.card-current` marca la tarjeta actual en ambos temas. `ProcessViewInteractionTest` (3) → suite **622/622** (1 skip) |
 | 2026-10-19 | **T24 · B11** tarjeta «terminada» (V12) + seis correcciones de vencimientos | ✅ | `feat(cards): finished-card state with auto-complete in the done column (V12) + six due-date fixes` — **A:** `Card.completedAt` (`LocalDate`, null = pendiente) con `isDone()/complete/reopen`; `Board.moveCard/moveCardsToColumn` **completan al entrar** en la columna finalizada y **reabren al salir** («hoy» como **parámetro**, dominio sin reloj); `CompleteCardCommand` (1 undo); migración **V12** (`card.completed_at`) + binding/lectura + componente en `CardSnapshot` con ctor retrocompatible; LWW en `SyncMerge`; **✓** en el frente (patrón ★/!), menús de tarjeta y «Tarjetas», clase `card-done` (apagada + tachada) y toggle **«Mostrar terminadas»** (barra + menú Ver) enganchado en `matchesProcessFilter` (un solo gate: columnas, navegador, aviso y búsqueda); `ReminderPlan.dueNow` ignora hechas. **Correcciones:** **B1** `.card-due`/`.card-due-overdue` y las bandas `sync/due/reminder-notice` **no existían en ningún CSS** → añadidas a ambos temas; **B2** la vista de procesos **no aplicaba ningún filtro** → `BoardController.matchesVisibleFilters` (un solo gate para ambas vistas); **B3** el aviso de vencimientos contaba solo con filtro de proceso → ahora corre la misma cadena que las columnas; **B4** la fecha (y «terminada el») se ve en la cabecera del detalle; **B5** el DatePicker del formulario **avisa en rojo** con fecha pasada (sin bloquear); **B6** `SyncMerge.cardKey` incluye recordatorios + `completedAt` (una edición solo-recordatorio ya no pierde contra un borrado) y **poda** los recordatorios posteriores a la fecha ganadora tras el merge. **Hallazgos:** ① la prueba de UI más útil fue la de filtros: el toggle «mostrar» debe **recuperar** las hechas de los filtros de vencimiento también (decisión ②); ② PowerShell `Add-Content` escribe ANSI → el CSS añadido corrompió UTF-8 (`CardKeyboardFocusTest` lo pilló); ③ `refresh()` era `private` → package-private para tests. `CompleteCardTest` (13), `ReminderPlanTest` (+1), `SyncMergeTest` (+4), `SqliteBoardRepositoryTest` (+1), `CompletedCardUiTest` (4), `CardThemeCssTest` (+4) → suite **619/619** (1 skip) |
 | 2026-10-19 | **T10 · N-4** copiar/pegar tarjetas + **T11 · N-7/N-9** vista de proceso | ✅ | `feat(cards)+feat(process-view)+fix(ui): copy/paste cards, richer process creation, markdown format toolbar and clearable column background` — **T10:** portapapeles interno (`cardClipboard`) + **Ctrl+C/Ctrl+V**, entrada **Copiar tarjeta** en el menú de la tarjeta y botón **Pegar** en la cabecera de cada columna; pega **una tarjeta nueva** en la columna actual en **1 undo** (`DuplicateCardCommand` + `BoardService.duplicateCard`), copiando título/descripción/color/vencimiento/etiquetas/notas/checklist/proceso y **sin** enlaces. **T11:** la flecha verde abre el diálogo de tarjeta con el **proceso del ancla preseleccionado** (ya no crea «Nueva tarjeta» vacía) y «elegir existente» filtra por proceso (`linkCandidatesFor`). **UI:** `MarkdownEditor` gana botones **B/I/H/lista/enlace/código/limpiar** y pierde el tooltip invasivo; el «ninguno» del color de fondo de columna ahora **limpia** el fondo. `ProcessRelationDialogTest` (3) → suite **592/592** (1 skip) |

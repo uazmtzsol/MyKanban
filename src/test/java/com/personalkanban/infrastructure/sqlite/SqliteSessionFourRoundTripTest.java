@@ -7,8 +7,6 @@ import com.personalkanban.domain.board.CardLink;
 import com.personalkanban.domain.board.CardSnapshot;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnSnapshot;
-import com.personalkanban.domain.board.ProcessId;
-import com.personalkanban.domain.board.ProcessSnapshot;
 import com.personalkanban.domain.board.WipLimit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Round-trip tests over a real SQLite database (temp file) for the
- * session-4 data: card notes, checklists, processes and precedence links.
+ * session-4 data: card notes, checklists and precedence links.
  */
 class SqliteSessionFourRoundTripTest {
 
@@ -48,11 +46,10 @@ class SqliteSessionFourRoundTripTest {
     }
 
     @Test
-    void notesChecklistProcessAndLinksRoundTrip() {
+    void notesChecklistAndLinksRoundTrip() {
         Instant created = Instant.parse("2026-09-30T10:00:00Z");
         ChecklistItem pending = new ChecklistItem("item-1", "first step", false);
         ChecklistItem done = new ChecklistItem("item-2", "second step", true);
-        ProcessId processId = new ProcessId("proc-1");
 
         ColumnSnapshot column = new ColumnSnapshot(
                 new com.personalkanban.domain.board.ColumnId("col-1"),
@@ -63,15 +60,14 @@ class SqliteSessionFourRoundTripTest {
                                 "with extras", "desc", BoardColor.PINK, null,
                                 List.of(), created,
                                 "plain notes\nsecond line",
-                                List.of(pending, done), processId),
+                                List.of(pending, done), List.of(), null),
                         new CardSnapshot(
                                 new com.personalkanban.domain.board.CardId("card-2"),
                                 "plain", "desc", BoardColor.PINK, null,
-                                List.of(), created, "", List.of(), null)));
+                                List.of(), created, "", List.of(), List.of(), null)));
 
         BoardMemento snapshot = new BoardMemento(
                 List.of(column),
-                List.of(new ProcessSnapshot(processId, "Mudanza")),
                 List.of(new CardLink(
                         new com.personalkanban.domain.board.CardId("card-1"),
                         new com.personalkanban.domain.board.CardId("card-2"))));
@@ -79,13 +75,11 @@ class SqliteSessionFourRoundTripTest {
         repository.save(boardId, snapshot);
         BoardMemento loaded = repository.load(boardId);
 
-        assertThat(loaded.processes()).extracting(ProcessSnapshot::name).containsExactly("Mudanza");
         assertThat(loaded.links()).hasSize(1);
 
         var cards = loaded.columns().get(0).cards();
         var first = cards.get(0);
         assertThat(first.notes()).isEqualTo("plain notes\nsecond line");
-        assertThat(first.processId()).isEqualTo(processId);
         assertThat(first.checklist()).hasSize(2);
         assertThat(first.checklist().get(0).id()).isEqualTo("item-1");
         assertThat(first.checklist().get(0).text()).isEqualTo("first step");
@@ -95,11 +89,10 @@ class SqliteSessionFourRoundTripTest {
         var second = cards.get(1);
         assertThat(second.notes()).isEmpty();
         assertThat(second.checklist()).isEmpty();
-        assertThat(second.processId()).isNull();
     }
 
     @Test
-    void migratorAppliesV5ToV7AndIsIdempotent() {
+    void migratorRunsTwiceWithoutThrowing() {
         new SchemaMigrator(database).migrate();
         new SchemaMigrator(database).migrate(); // must not throw
     }

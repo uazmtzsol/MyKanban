@@ -120,7 +120,7 @@ class WriteLatencyBenchmarkTest {
                     BoardColor.DEFAULT, WipLimit.unlimited(), now, false, null, cards));
         }
         CardId first = new CardId("card-0-0");
-        return new BoardMemento(columns, List.of(),
+        return new BoardMemento(columns,
                 List.of(new CardLink(first, new CardId("card-0-1"))),
                 List.of(TimelineEntry.restore(first, EntryId.newId(),
                         now.minusSeconds(3600), now, "design session")));

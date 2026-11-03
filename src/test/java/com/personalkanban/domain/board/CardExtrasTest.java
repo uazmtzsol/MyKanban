@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Domain tests for notes, checklist and process state on the aggregate
+ * Domain tests for notes and checklist state on the aggregate
  * (sessions 4.4-4.6), including memento round-trips for undo/redo.
  */
 class CardExtrasTest {
@@ -131,39 +131,6 @@ class CardExtrasTest {
                 .containsExactly("buy milk");
     }
 
-    // ------------------------------------------------------------------
-    // Processes (4.6)
-    // ------------------------------------------------------------------
-
-    @Test
-    void processLifecycleAndMembership() {
-        Card a = card("A");
-        Card b = card("B");
-        Process process = board.addProcess("Mudanza");
-        board.assignCardToProcess(a.id(), process.id());
-        board.assignCardToProcess(b.id(), process.id());
-
-        assertThat(board.processList()).extracting(Process::name).containsExactly("Mudanza");
-        assertThat(board.cardsOfProcess(process.id()))
-                .extracting(Card::id)
-                .containsExactlyInAnyOrder(a.id(), b.id());
-
-        board.renameProcess(process.id(), "Cambio de casa");
-        assertThat(process.name()).isEqualTo("Cambio de casa");
-
-        board.removeProcess(process.id());
-        assertThat(board.processList()).isEmpty();
-        // Members survive, just unassigned.
-        assertThat(board.findCard(a.id()).orElseThrow().processId()).isNull();
-    }
-
-    @Test
-    void assigningToUnknownProcessThrows() {
-        Card a = card("A");
-        assertThatThrownBy(() -> board.assignCardToProcess(a.id(), new ProcessId("ghost")))
-                .isInstanceOf(com.personalkanban.domain.exception.NotFoundException.class);
-    }
-
     @Test
     void removingCardDetachesItsLinks() {
         Card a = card("A");
@@ -173,21 +140,4 @@ class CardExtrasTest {
         assertThat(board.incomingPredecessorsOf(b.id())).isEmpty(); // predecessor gone
     }
 
-    @Test
-    void processesAndLinksSurviveUndoSnapshot() {
-        Card a = card("A");
-        Card b = card("B");
-        Process process = board.addProcess("P");
-        board.assignCardToProcess(a.id(), process.id());
-        board.linkCards(a.id(), b.id());
-        BoardMemento before = BoardMemento.capture(board);
-
-        board.removeProcess(process.id());
-        board.unlinkCards(a.id(), b.id());
-
-        board.restore(before);
-        assertThat(board.processList()).extracting(Process::name).containsExactly("P");
-        assertThat(board.findCard(a.id()).orElseThrow().processId()).isEqualTo(process.id());
-        assertThat(board.linkList()).hasSize(1);
-    }
 }

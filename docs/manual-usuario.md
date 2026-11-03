@@ -24,18 +24,17 @@ la sincronización online.
    - [8.1 Recordatorios (🔔)](#81-recordatorios-)
 9. [Selección múltiple y acciones en lote](#9-selección-múltiple-y-acciones-en-lote)
 10. [Filtros](#10-filtros)
-11. [Procesos y vista de procesos](#11-procesos-y-vista-de-procesos)
-12. [Precedencias (dependencias entre tarjetas)](#12-precedencias-dependencias-entre-tarjetas)
-13. [Seguimiento de tiempo](#13-seguimiento-de-tiempo)
-14. [Apariencia: tema y colores](#14-apariencia-tema-y-colores)
-15. [Idioma](#15-idioma)
-16. [Atajos de teclado](#16-atajos-de-teclado)
-17. [Deshacer/Rehacer y guardado](#17-deshacerrehacer-y-guardado)
-18. [Archivos, datos y portabilidad](#18-archivos-datos-y-portabilidad)
-19. [Exportar e importar](#19-exportar-e-importar)
-20. [Sincronización online (opcional)](#20-sincronización-online-opcional)
-21. [Preguntas frecuentes](#21-preguntas-frecuentes)
-22. [Solución de problemas](#22-solución-de-problemas)
+11. [Precedencias y orden sugerido](#11-precedencias-y-orden-sugerido)
+12. [Seguimiento de tiempo](#12-seguimiento-de-tiempo)
+13. [Apariencia: tema y colores](#13-apariencia-tema-y-colores)
+14. [Idioma](#14-idioma)
+15. [Atajos de teclado](#15-atajos-de-teclado)
+16. [Deshacer/Rehacer y guardado](#16-deshacerrehacer-y-guardado)
+17. [Archivos, datos y portabilidad](#17-archivos-datos-y-portabilidad)
+18. [Exportar e importar](#18-exportar-e-importar)
+19. [Sincronización online (opcional)](#19-sincronización-online-opcional)
+20. [Preguntas frecuentes](#20-preguntas-frecuentes)
+21. [Solución de problemas](#21-solución-de-problemas)
 
 ---
 
@@ -43,7 +42,7 @@ la sincronización online.
 
 - **Qué es:** un kanban para uso **personal**. Tableros, columnas con límite
   WIP, tarjetas con etiquetas, fechas límite, descripción markdown, notas,
-  listas de tareas, procesos, precedencias y cronómetro, todo con deshacer.
+  listas de tareas, precedencias y cronómetro, todo con deshacer.
 - **Requisitos:** un **JDK/JRE 21+** para ejecutarla. Para compilar tú mismo,
   **Maven 3.9+**.
 - **Dónde vive el dato:** un archivo `kanban.db` (SQLite) y una carpeta
@@ -122,7 +121,7 @@ columnas y tarjetas pasan al tablero **«My Board»**.
 De arriba abajo:
 
 - **Barra de menús:** **Archivo**, **Editar**, **Tableros**, **Ver**,
-  **Tarjetas**, **Procesos**, **Etiquetas**, **Idioma**, **Ayuda**:
+  **Tarjetas**, **Etiquetas**, **Idioma**, **Ayuda**:
   - **Archivo** — guardar ahora, preferencias, limpieza de adjuntos, sync
     (estado, sincronizar ahora, configuración), crear/abrir base y bases
     recientes, **importar/exportar tablero (JSON y PDF)**, copias de conflicto
@@ -130,16 +129,15 @@ De arriba abajo:
   - **Editar** — **Deshacer** (Ctrl+Z), **Rehacer** (Ctrl+Shift+Z),
     **añadir o quitar etiquetas** (Ctrl+L), **archivar/desarchivar** y
     **restablecer las vistas de tarjeta**.
-  - **Ver** — modos de vista (**Tarjetas**/**Procesos**), **modo de vista de
-    tarjeta**, **mostrar archivadas**, **mostrar terminadas**, informe de
-    tiempo, búsqueda global y **modo oscuro**.
+  - **Ver** — **modo de vista de tarjeta**, **mostrar archivadas**,
+    **mostrar terminadas**, informe de tiempo, búsqueda global y **modo
+    oscuro**.
   - **Tarjetas** — actúa sobre la **tarjeta actual** (la seleccionada con el
     ratón o las flechas): abrir detalle, editar, reprogramar fecha,
-    recordatorios, **marcar como terminada / reabrir**, asignar proceso,
-    archivar, exportar, mover a otro tablero y eliminar.
+    recordatorios, **marcar como terminada / reabrir**, archivar, exportar,
+    mover a otro tablero y eliminar.
 - **Barra de herramientas:**
   - 🔍 **Buscar en todos los tableros** (§10)
-  - ⇄ **Cambiar entre kanban y procesos** (vista alternativa, §11)
   - ↶ **Deshacer** · ↷ **Rehacer**
   - 💾 **Guardar ahora** (todo se guarda tras cada cambio; es una
     confirmación, §17)
@@ -147,9 +145,9 @@ De arriba abajo:
   - 📄 **Exportar tablero a PDF**
   - ☷ **Modo de vista de tarjeta** (menú desplegable)
   - El **nombre del tablero activo** aparece junto a «Personal Kanban».
-- **Barra de filtro:** filtrar por etiquetas, botones ★ y !, filtro por
-  proceso (§10), filtros de **vencimiento** (vencidas / hoy / esta semana) y
-  el botón **✓ Mostrar terminadas** (§7).
+- **Barra de filtro:** filtrar por etiquetas, botones ★ y !, filtros de
+  **vencimiento** (vencidas / hoy / esta semana) y el botón **✓ Mostrar
+  terminadas** (§7).
 - **Área de tablero:** las columnas con sus tarjetas, más una zona de aviso
   discreta (no modal) para mensajes de sincronización.
 
@@ -173,7 +171,7 @@ Menú **Tableros**:
 - **Agregar columna...** — abre el mismo diálogo de columna y la añade al
   final del tablero.
 - **Guardar como plantilla...** — guarda la **estructura** del tablero activo
-  (columnas con su color y límite WIP, procesos y modo de vista) con un nombre.
+  (columnas con su color y límite WIP y modo de vista) con un nombre.
   Las tarjetas **no** se guardan: al aplicar la plantilla el tablero nace vacío.
   Si ya existe una plantilla con ese nombre, se pide confirmación.
 - **Plantillas** — submenú con tus plantillas; cada una ofrece **Aplicar
@@ -237,9 +235,8 @@ opciones…** abre el diálogo completo con lo ya escrito.
 tarjeta (diálogo completo)…»** del menú **⋯**. Tiene los campos básicos
 (**Título**, **Descripción**, **Color**, **Fecha límite**, **Etiquetas**) y una
 casilla **☑ Opciones avanzadas** que despliega: **Notas**, **Lista de tareas**
-(una por línea; `[x] tarea` = hecha, `[ ] tarea` o texto suelto = pendiente),
-**Proceso** y **Tareas previas / posteriores** (mantén **Ctrl** mientras
-eliges). Si eliges una **fecha límite pasada** el formulario **avisa en rojo**
+(una por línea; `[x] tarea` = hecha, `[ ] tarea` o texto suelto = pendiente)
+y **Tareas previas / posteriores** (mantén **Ctrl** mientras eliges). Si eliges una **fecha límite pasada** el formulario **avisa en rojo**
 (una tarjeta ya vencida es válida, pero conviene verlo).
 
 **Frente de la tarjeta:** título, **contenido elegido** (descripción por
@@ -247,7 +244,7 @@ defecto; ver el botón de contenido, §abajo), **★/!** (clic = activar/desacti
 Importante/Urgente), **✓** (clic = marcar la tarjeta como **terminada** y
 volver a ponerla pendiente; §abajo), **chips de etiquetas**, **fecha límite**
 (con badge de color: ámbar si vence hoy o esta semana, rojo si ya venció),
-**chip de proceso** (⚬), progreso de lista **☑ hechas/total**,
+progreso de lista **☑ hechas/total**,
 **📝** si tiene notas, y contadores de precedencia **←n →n**. Al pasar el ratón
 aparecen ✎ (editar) y ✕ (eliminar).
 
@@ -273,11 +270,7 @@ reiniciar; por defecto todas muestran la descripción.
 **Clic derecho en una tarjeta:** elegir el **modo de vista de esa tarjeta**
 (solo título / título + resumen / completa) o volver al **modo del tablero**;
 **Reagendar** (hoy / mañana / semana próxima / lunes siguiente / quitar fecha);
-**🔔 Recordatorios…** (§8.1); **✓ Marcar como terminada** / **↩ Reabrir**;
-**Proceso ▸**, que asigna **esta** tarjeta a
-cualquier proceso del tablero —o **Sin proceso** para sacarla— sin entrar en modo
-selección (sale marcado el proceso actual y no se pierde ninguna relación de
-precedencia).
+**🔔 Recordatorios…** (§8.1); **✓ Marcar como terminada** / **↩ Reabrir**.
 
 **Modo de vista de todas las tarjetas:** botón **☷** de la barra de
 herramientas (o **Ctrl+1 / Ctrl+2 / Ctrl+3**): ① solo título, ② título +
@@ -397,7 +390,6 @@ el botón **✖** para quitarlo.
 3. Acciones en lote disponibles:
    - **Añadir o quitar etiquetas** (separadas por espacios o comas),
    - **Cambiar color**,
-   - **Asignar proceso**,
    - **Mover a otra columna** (respeta el límite WIP del destino),
    - **Eliminar seleccionadas** (con confirmación),
    - **Salir de la selección**.
@@ -412,7 +404,6 @@ En la barra de filtro:
   que tengan **alguna**; vacío, todas.
 - **★ / !:** muestra solo las tarjetas **Importantes** y/o **Urgentes** (si
   activas ambos, exige los dos).
-- **Proceso:** «Proceso: todos» / «Proceso: ninguno» / un proceso concreto.
 - **Vencimiento:** los tres botones **vencidas / hoy / esta semana** son
   mutuamente excluyentes (uno activo = los otros dos se apagan) y muestran
   solo las tarjetas cuya fecha límite cae en ese rango.
@@ -420,7 +411,7 @@ En la barra de filtro:
   defecto** en todo el tablero; este botón (igual que **Ver → Mostrar
   terminadas**) las recupera, **también** dentro de los filtros de
   vencimiento.
-- **✕ Quitar filtro:** limpia etiquetas, modo y filtro de proceso de una vez.
+- **✕ Quitar filtro:** limpia etiquetas, modo y filtros de una vez.
 
 Mientras haya vencimientos que coincidan con los filtros activos, la barra
 muestra un **aviso discreto** (no modal) «⏳ N vencida(s)» que cuenta
@@ -453,43 +444,7 @@ fragmento del texto.
   si se recorta, el propio contador lo dice.
 - Buscar **no cambia** el tablero activo hasta que abres un resultado.
 
-## 11. Procesos y vista de procesos
-
-Un **proceso** es una agrupación transversal de tarjetas (p. ej. «Mudanza»),
-independiente de la columna.
-
-- **Menú Procesos:** **Nuevo proceso...**, escoger/renombrar/eliminar
-  procesos, y **Filtrar por proceso** (todos / ninguno / uno concreto).
-  Al eliminar un proceso, sus tarjetas se conservan **sin proceso**.
-- **Asignar tarjetas a un proceso:** en el diálogo de la tarjeta (campo
-  **Proceso**) o en lote (§9).
-
-**Vista de procesos** (botón ⇄): muestra **una fila por proceso**, con sus
-tarjetas de izquierda a derecha unidas por flechas según el orden de
-precedencia. En cada tarjeta:
-
-- **Un clic** selecciona la tarjeta y la marca como **actual** (la misma que
-  mueven las flechas en el tablero); **doble clic** abre su **detalle**. Es el
-  mismo gesto que en el tablero: un clic nunca abre una ventana por sorpresa.
-- Las flechas **entre** tarjetas también se pueden pulsar: la **punteada**
-  (sugerida) enlaza las dos con **un clic**; la **gruesa** (ya enlazada) **pide
-  confirmación** antes de quitar la relación — así un clic accidental no borra
-  nada (el tooltip dice cuál es cuál).
-
-- 2 flechas **superiores**: crear una tarjeta **nueva** antes/después.
-- 2 flechas **inferiores**: enlazar una tarjeta **existente** antes/después.
-
-Al **enfocar** una tarjeta aparece abajo del todo un **inspector de relaciones**
-(una sola banda, plegada mientras no haya nada enfocado) con el título de la
-tarjeta —clic = enfocarla, doble clic = abrir su detalle— y las listas
-**Precedentes / Posteriores** con una **✕** para quitar cada enlace. Se cierra
-con `Esc` o al hacer clic en otra tarjeta.
-
-La vista también admite teclado: `←/→` mover · `Ctrl+←/→` tarjeta nueva ·
-`Shift+←/→` enlazar existente · `Ctrl+Shift+←/→` desenlazar · `Supr` quitar
-todos los enlaces · `Esc` salir.
-
-## 12. Precedencias (dependencias entre tarjetas)
+## 11. Precedencias y orden sugerido
 
 En el diálogo de la tarjeta, **Tareas previas** y **Tareas posteriores**
 definen el orden lógico (multi-selección con **Ctrl**).
@@ -500,7 +455,7 @@ definen el orden lógico (multi-selección con **Ctrl**).
   topológico (si hay un ciclo, avisa y lista las tarjetas que quedaron
   fuera).
 
-## 13. Seguimiento de tiempo
+## 12. Seguimiento de tiempo
 
 En la pestaña **Tiempo** del detalle:
 
@@ -515,10 +470,8 @@ Todo el seguimiento de tiempo es **deshacible**.
 ### Informe de tiempo (Ver -> Informe de tiempo...)
 
 El cronómetro alimenta un **informe** de solo lectura del **tablero activo**:
-**Ver -> Informe de tiempo...** abre una ventana no modal con dos tablas.
+**Ver -> Informe de tiempo...** abre una ventana no modal con una tabla.
 
-- **Tiempo por proceso**, de más a menos tiempo y con el número de tarjetas, y
-  una última fila **Sin proceso** con lo que no pertenece a ningún proceso.
 - **Tiempo por semana** (semanas ISO, de lunes a domingo), con las semanas sin
   registros a `0:00` para que se vean los huecos.
 
@@ -533,7 +486,7 @@ Reglas del informe: una entrada cuenta en el rango en el que **empezó**, y una
 entrada de duración cero no aparece. La columna **Minutos** lleva enteros, para
 poder sumarlos en una hoja de cálculo.
 
-## 14. Apariencia: tema y colores
+## 13. Apariencia: tema y colores
 
 **Archivo → Preferencias**, con la pestaña **Apariencia**: tema **Claro /
 Oscuro**, colores de **fondo** y **texto**, **colores de resalte** de las
@@ -544,12 +497,12 @@ se retiró en la Sesión 11: hoy la apariencia es solo color.
 
 El **modo oscuro** también se cambia al vuelo con el botón 🌙 o **Ctrl+D**.
 
-## 15. Idioma
+## 14. Idioma
 
 **Menú Idioma:** English, Español, Deutsch, Français. Se aplica al instante y
 se recuerda entre arranques.
 
-## 16. Atajos de teclado
+## 15. Atajos de teclado
 
 Pulsa **F1** (o **Ayuda → Atajos de teclado...**) para ver esta tabla dentro
 de la app:
@@ -559,27 +512,19 @@ de la app:
 | **Ctrl+Z** | Deshacer |
 | **Ctrl+Shift+Z** | Rehacer |
 | **Ctrl+1 / Ctrl+2 / Ctrl+3** | Vista de tarjeta: solo título / + resumen / completa |
-
 | **Ctrl+Shift+F** | Buscar en todos los tableros |
-| **Ctrl+Shift+1 / Ctrl+Shift+2** | Vista de tablero / vista de procesos |
 | **Ctrl+L** | Añadir o quitar etiquetas a lo seleccionado (o a la tarjeta actual) |
 | **Ctrl+N** | Nuevo tablero |
 | **Ctrl+F** | Enfocar el filtro de etiquetas |
-| **Ctrl+P** | Enfocar el filtro de proceso |
-| **Ctrl+Shift+P** | Mostrar tarjetas de todos los procesos (quitar filtro) |
-| **Ctrl+Shift+N** | Mostrar solo tarjetas sin proceso |
 | **Ctrl+D** | Cambiar modo oscuro |
 | **Ctrl+S** | Guardar ahora (confirma el estado) |
 | **Ctrl+Q** | Salir |
 | **F1** | Ayuda de atajos |
-
-> En la **vista de procesos** hay atajos adicionales (§11).
-
-## 17. Deshacer/Rehacer y guardado
+## 16. Deshacer/Rehacer y guardado
 
 - **Deshacer/Rehacer** con Ctrl+Z / Ctrl+Shift+Z, botones ↶ ↷ de la barra, o
   el menú. Cada mutación es **una** transacción deshacible (crear/editar/
-  borrar, mover, etiquetas en lote, checklist, procesos, tiempo…).
+  borrar, mover, etiquetas en lote, checklist, tiempo…).
 - El historial es **persistente por tablero** y **sobrevive al reinicio**;
   vive en la carpeta `history/` junto a la base de datos.
 - **Guardado:** cada cambio se confirma en SQLite **al instante**
@@ -587,7 +532,7 @@ de la app:
   mensaje («Todo está guardado en la base de datos»). No hay trabajo perdido
   por olvidar guardar.
 
-## 18. Archivos, datos y portabilidad
+## 17. Archivos, datos y portabilidad
 
 | Modo | Ubicación |
 |---|---|
@@ -605,12 +550,12 @@ de la app:
   escribir y el `.db` queda completo. Nunca uses el `.db` por carpeta
   compartida como método de sincronización "en vivo" (ver §20).
 
-## 19. Exportar e importar
+## 18. Exportar e importar
 
 Las tres acciones viven en el menú **Archivo**:
 
 - **Exportar tablero (JSON)...** — guarda un tablero como `.json` portable
-  (incluye columnas, tarjetas, notas, checklist, procesos, precedencias y
+  (incluye columnas, tarjetas, notas, checklist, precedencias y
   tiempo).
 - **Exportar tablero a PDF...** — genera un PDF paginado del tablero (formato
   póster).
@@ -619,7 +564,7 @@ Las tres acciones viven en el menú **Archivo**:
 
 La carpeta de exportación/importación se recuerda.
 
-## 20. Sincronización online (opcional)
+## 19. Sincronización online (opcional)
 
 > Requiere un servidor con la API de sync (por ejemplo el backend PHP
 > incluido en `sync/`, desplegable con `deploy-sync-api.bat`). Si no la usas,
@@ -659,7 +604,7 @@ tablero activo** (nunca el `.db`). Los errores más comunes se traducen a
 mensajes claros (sin red, 401 clave rechazada, 413 demasiado grande, error  del servidor). *Recomendación:* no sincronices el archivo `.db` por
   Drive/Dropbox como sustituto; usa esta función de red.
 
-## 21. Preguntas frecuentes
+## 20. Preguntas frecuentes
 
 - **¿Tengo que guardar?** No. Cada cambio se guarda al instante; Ctrl+S solo
   te lo confirma.
@@ -673,7 +618,7 @@ mensajes claros (sin red, 401 clave rechazada, 413 demasiado grande, error  del 
 - **¿Qué es «Marcar como finalizada»?** Una marca por tablero (normalmente la
   columna «Hecho») para distinguirla visualmente.
 
-## 22. Solución de problemas
+## 21. Solución de problemas
 
 - **No arranca / falta JavaFX:** usa el jar **portátil** (incluye JavaFX), o
   arranca con `mvn javafx:run` en desarrollo con JDK 21+.

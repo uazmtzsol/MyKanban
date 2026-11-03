@@ -16,7 +16,7 @@ import java.util.Set;
  * optional due date, a small set of free-form labels, plain-text notes
  * (session 4.4: distinct from the markdown description), a flat checklist
  * of verifiable steps (session 4.5, user decision: one level, items
- * convertible into cards later), and an optional process assignment
+ * convertible into cards later)
  * (session 4.6).
  */
 public final class Card {
@@ -63,7 +63,6 @@ public final class Card {
     private final List<ChecklistItem> checklist = new ArrayList<>();
     /** Reminder moments of this card (T23 · B10), kept in chronological order. */
     private final List<CardReminder> reminders = new ArrayList<>();
-    private ProcessId processId;
     private final Timeline timeline;
     private final Instant createdAt;
 
@@ -146,11 +145,6 @@ public final class Card {
     /** Clears the finished state (the card is pending again). */
     void reopen() {
         this.completedAt = null;
-    }
-
-    /** Assigns this card to a process (or clears it with null); aggregate-checked. */
-    void assignTo(ProcessId newProcessId) {
-        this.processId = newProcessId;
     }
 
     // ------------------------------------------------------------------
@@ -486,11 +480,6 @@ public final class Card {
 
     public List<String> labels() {
         return labels;
-    }
-
-    /** Process this card belongs to, or null when unassigned. */
-    public ProcessId processId() {
-        return processId;
     }
 
     public Instant createdAt() {

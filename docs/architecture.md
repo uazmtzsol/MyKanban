@@ -36,15 +36,14 @@ testeables; la UI solo pinta.
 |---|---|---|
 | `Board` | **Agregado raíz**. Columnas + tarjetas, invariantes, emite `DomainEvent`s | `addCard/editCard/moveCard/moveCardToSlot/removeCard` + bulk: `addLabels/removeLabels/recolorCards/removeCards/moveCardsToColumn` (atómicos, ver §3.10 de roadmap), `restore(BoardMemento)` |
 | `BoardColumn` | Columna con WIP; dueña de sus tarjetas y su orden | `moveCardFrom` valida WIP del destino |
-| `Card` | Inmutable en identidad, mutable en campos vía `Board`. Etiquetas: `MAX_LABELS=8`, `MAX_LABEL_LENGTH=40`. Sesión 4: `notes` (texto plano), `checklist` (lista de `ChecklistItem`), `processId` | `setLabels` lanza `IllegalArgumentException` si excede |
+| `Card` | Inmutable en identidad, mutable en campos vía `Board`. Etiquetas: `MAX_LABELS=8`, `MAX_LABEL_LENGTH=40`. Sesión 4: `notes` (texto plano), `checklist` (lista de `ChecklistItem`) | `setLabels` lanza `IllegalArgumentException` si excede |
 | `ChecklistItem` | **Record inmutable** `(id, text, done)` — ítem del checklist plano de la tarjeta (1 nivel por decisión del usuario); `withText`/`withDone` devuelven copias; el id estable permite convertirlo en tarjeta. `MAX_TEXT_LENGTH=120`, tope 50/tarjeta | Jackson lo serializa sin anotaciones |
-| `Process` / `ProcessId` | Proceso = grupo con nombre de tarjetas relacionadas para un fin (sesión 4.6); las tarjetas lo referencian por id (no es contenedor) | `NotFoundException(ProcessId)` |
 | `CardLink` | Record `(from, to)`: un enlace de precedencia tal como viaja en snapshots ("from precede a to") | lista plana, no mapa, por Jackson |
 | `DependencyGuard` | Política pura de precedencias: `requireLinkable` rechaza auto-enlaces, desconocidos y **ciclos** (directos y transitivos, DFS); `topologicalOrder` = orden sugerido con `Result(ordered, cycleRemaining)` | 9 tests unitarios puros |
 | `BoardColor` | Record `(name, hex)`. 8 presets + custom. `fromHex` de custom crea `name=null` (usar `stored()` para persistir: nunca null). `fromStored` lee hex o nombre legacy | Validación hex `#rrggbb` |
 | `LabelFilter` | Filtro por etiquetas, **case-insensitive** (normaliza con `toLowerCase`), modos ALL/ANY, vacío = sin filtro | usado por `ColumnViewBuilder` |
 | `LabelSuggester` | Lógica pura del autocompletado: `currentToken(text,caret)`, `suggestions(token,exclude)` por prefijo case-insensitive, `apply(...)` reemplaza token + espacio. Vocabulario = LinkedHashSet | test unitario puro; lo usa `LabelAutoComplete` (ui) |
-| `BoardMemento` | Snapshot inmutable del tablero: `(columns, processes, links)` — procesos y precedencias incluidos desde la sesión 4, así undo/redo y export los cubren | Triple uso: undo/redo, persistencia, export JSON |
+| `BoardMemento` | Snapshot inmutable del tablero: `(columns, links, timeline)` — precedencias y tiempo incluidos desde la sesión 4, así undo/redo y export los cubren | Triple uso: undo/redo, persistencia, export JSON |
 | `CardReminder` | **Record inmutable** `(id, LocalDate date, LocalTime time, boolean acknowledged)` — un *momento* de recordatorio de una tarjeta (T23 · B10). Sin hora = dispara desde las 00:00 de su día (`dueFrom()`); `ORDER` los mantiene cronológicos; `acknowledged` vive en el agregado (sobrevive al reinicio, viaja en undo/export/sync) | lista ordenada dentro de `Card`; `MAX_REMINDERS=200` |
 | `CardSnapshot` / `ColumnSnapshot` | DTOs inmutables del memento | con `toCard()`/`toColumn()` |
 | `WipLimit` | Value object: unlimited o 0..999 | |
@@ -55,10 +54,10 @@ testeables; la UI solo pinta.
 | Clase | Rol |
 |---|---|
 | `BoardService` | **Fachada única para la UI**. Catálogo multi-tablero, `execute(command)` con memento: captura *before* → ejecuta comando → `history.push(before)` → `persist()` → `drainEvents()`. También undo/redo, export/import JSON (Jackson), `selectInitialBoard` al arrancar, preferencias UI por tablero (`collapsedColumnsOf/setCollapsedColumns`, `cardViewSettingsOf/setCardViewSettings`) y vocabulario de etiquetas (`labelVocabulary`) |
-| `command/*Command` | Un comando por mutación (`AddCardCommand`, `EditCardCommand`, `MoveCardToSlotCommand`…) — patrón Command. Sesión 4: `NoteCardCommand`, `Add/Toggle/Rename/Remove/ConvertChecklistItemCommand`, `Add/Rename/RemoveProcessCommand`, `AssignProcessCommand`, `LinkCardsCommand`, `UnlinkCardsCommand` |
+| `command/*Command` | Un comando por mutación (`AddCardCommand`, `EditCardCommand`, `MoveCardToSlotCommand`…) — patrón Command. Sesión 4: `NoteCardCommand`, `Add/Toggle/Rename/Remove/ConvertChecklistItemCommand`, `LinkCardsCommand`, `UnlinkCardsCommand` |
 | `port/BoardRepository` | `listBoards/createBoard/renameBoard/deleteBoard/load/save` |
 | `GlobalSearch` | Búsqueda en **todos** los tableros (sesión 14, B2): recorre el catálogo con `findCards` (el activo primero), dice en qué campo coincidió cada tarjeta y da un fragmento alrededor de la coincidencia | tope por tablero (`DEFAULT_LIMIT_PER_BOARD`) y `Result.truncated`; buscar no cambia el tablero activo |
-| `TimeReport` | Informe de tiempo de solo lectura (sesión 14, B1): agrega las entradas de `Timeline` del tablero por **proceso** y por **semana ISO**. Rango configurable (4/8/12 semanas o `ALL`) y fila final con las tarjetas que no son de ningún proceso | `of(board, now, zone, weeks)`; una entrada cuenta en la semana en la que **empezó** y una abierta cuenta hasta `now` |
+| `TimeReport` | Informe de tiempo de solo lectura (sesión 14, B1): agrega las entradas de `Timeline` del tablero por **semana ISO**. Rango configurable (4/8/12 semanas o `ALL`) | `of(board, now, zone, weeks)`; una entrada cuenta en la semana en la que **empezó** y una abierta cuenta hasta `now` |
 | `port/SettingsStore` | `get/put` clave→valor (tabla `app_setting`) — usar para preferencias nuevas (modos de vista P2, etc.) sin migraciones |
 | `port/UndoHistory` | `push/pop/clear/depth` por tablero |
 | `ReminderPlan` | **Puro y sin reloj** (T23 · B10): `dueNow(cards, now)`/`dueCount`/`dueOf` dicen qué momentos ya vencieron y siguen pendientes (un aviso perdido con la app cerrada sigue viniendo), `daily(from,to)`/`weekly(from,to,weekday)` son los generadores «diario» y «cada semana» de la UI, y `schedule(existing, días, hora)` reconstruye la selección del calendario **conservando id y estado atendido** de los momentos que ya existían | la UI le pasa «ahora»; verificado sin JavaFX |
@@ -136,7 +135,7 @@ card             (id TEXT PK, column_id TEXT NOT NULL FK→board_column ON DELET
                   labels TEXT NOT NULL DEFAULT '',  -- separadas por \u001F
                   created_at INTEGER,
                   notes TEXT NOT NULL DEFAULT '',   -- V5: notas en texto plano
-                  process_id TEXT NULL FK→process ON DELETE SET NULL)  -- V7
+                  process_id TEXT NULL)             -- V7, en desuso: procesos retirados
 card_checklist_item (id TEXT PK, card_id FK→card ON DELETE CASCADE,
                   position INTEGER NOT NULL, text TEXT NOT NULL,
                   done INTEGER NOT NULL DEFAULT 0,
@@ -148,7 +147,9 @@ card_link        (from_card_id FK→card ON DELETE CASCADE,
                   PRIMARY KEY (from_card_id, to_card_id))              -- V7
 process          (id TEXT PK, board_id FK→board ON DELETE CASCADE,
                   name TEXT NOT NULL, position INTEGER NOT NULL,
-                  created_at INTEGER NOT NULL)                         -- V7
+                  created_at INTEGER NOT NULL)   -- V7, en desuso: se conserva
+                                                 -- la tabla para que las BD
+                                                 -- antiguas sigan abriendo
 card_reminder    (id TEXT PK, card_id FK→card ON DELETE CASCADE,
                   on_date TEXT NOT NULL,             -- ISO-8601
                   on_time TEXT NULL,                 -- ISO-8601 o NULL = todo el día
@@ -158,17 +159,16 @@ schema_version   (version INTEGER PK, description, applied_at)
 ```
 
 Índices: `idx_column_board_position`, `idx_checklist_card_position`,
-`idx_card_link_to`, `idx_process_board_position`, `idx_reminder_card`
+`idx_card_link_to`, `idx_reminder_card`
 (`card_reminder (card_id, on_date)`).
 
 Convenciones: colores guardados como **nombre de paleta** (legacy) o **hex**;
 `BoardColor.fromStored` acepta ambos. IDs UUID string. Positions enteros
 reescritos por orden de lista en cada save.
 
-**Orden de inserción en `replaceAll` (importante):** procesos → columnas →
-tarjetas → checklist → enlaces. SQLite valida las FK **inmediatamente**
-aunque haya transacción: las tarjetas con `process_id` deben insertarse
-DESPUÉS de sus procesos.
+**Orden de inserción en `replaceAll` (importante):** columnas → tarjetas →
+checklist → enlaces. SQLite valida las FK **inmediatamente** aunque haya
+transacción, así que el orden no es decorativo.
 
 **Para migrar en el futuro** (p. ej. P3 tabla label): crear
 `src/main/resources/db/migration/V8__<desc>.sql` y **registrar la ruta en
@@ -218,7 +218,7 @@ columna. El área de tarjetas completa es drop-target fallback (append al final)
 - **Toda** cadena visible pasa por `i18n.text("clave")`. Claves nuevas →
   añadir a los 4 archivos (lo enforcea `I18nCoverageTest`; la sesión 4 añadió
   ~60 claves: `menu.file`, `file.exit`, `prefs.*`, `help.*`, `checklist.*`,
-  `process.*`, `filter.process.*`, `card.tab.*`, `card.notes.*`, `card.relations.tip`).
+  `card.tab.*`, `card.notes.*`, `card.relations.tip`).
   Clave faltante = se muestra la clave (bug de los botones del editor markdown, P0-2).
 - Cambiar idioma/tema/tablero/BD ⇒ `rebuildAll()` (grafo completo nuevo).
 - CSS: una sola hoja activa (light/dark). Clases de tarjetas: `.card`,
@@ -226,8 +226,7 @@ columna. El área de tarjetas completa es drop-target fallback (append al final)
   `.card-label-chip`, `.column`, `.column-title`,
   `.column-wip`, `.wip-full`, `.tool-button`, `.drop-slot(-active)`,
   `.detail-*`, `.md-editor`, `.pk-color-<name>`. Sesión 4: `.card-checklist`,
-  `.card-checklist-done`, `.card-notes-indicator`, `.card-process-chip`,
-  `.card-relations`, `.shortcut-keys/action`, `.prefs-file-label`.
+  `.card-checklist-done`, `.card-notes-indicator`, `.card-relations`, `.shortcut-keys/action`, `.prefs-file-label`.
 
 ## 6. Tests (dónde añadir)
 

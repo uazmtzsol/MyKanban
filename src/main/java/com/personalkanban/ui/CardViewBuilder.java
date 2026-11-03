@@ -258,15 +258,6 @@ final class CardViewBuilder {
     }
 
     /**
-     * The card's process as a submenu of its context menu (T9 · N-5): the
-     * board's processes as radio entries plus «Sin proceso». Choosing one
-     * assigns this single card — the same list and the same labels as the bulk
-     * bar, so both routes cannot drift apart.
-     */
-
-    /** Radio entry of the process submenu: label + checked state + action. */
-
-    /**
      * The card's reschedule submenu (session 15 · T5/B3): quick dates that
      * reschedule without opening the card. Each entry computes its date when
      * it is used, so a window left open overnight still reschedules from the
@@ -379,8 +370,6 @@ final class CardViewBuilder {
         badge.setTooltip(new Tooltip(i18n.text("card.attachments.badge.tip", count)));
         view.getChildren().add(badge);
     }
-
-    /** Small chip naming the process the card belongs to (session 4.6). */
 
     /** "\u2190n \u2192n" badges counting predecessors/successors (session 4.6). */
     private static void addRelationBadgesIfPresent(I18n i18n, BoardController board,

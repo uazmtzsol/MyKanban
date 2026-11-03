@@ -54,7 +54,7 @@ soporta sin tocar dominio ni UI.
 1. **Local-first.** La app funciona 100 % sin red. SQLite (`kanban.db`) sigue
    siendo la fuente de verdad local; la nube es un espejo, nunca un requisito.
 2. **IDs generados por el cliente.** Ya usamos UUID en `BoardId`, `ColumnId`,
-   `CardId`, `ProcessId`, `EntryId`. Esto elimina el problema más difícil de
+   `CardId`, `EntryId`. Esto elimina el problema más difícil de
    la sincronización (remapear IDs asignados por el servidor). No hay que
    cambiar el modelo de identidad.
 3. **Sincronización por cambios, no por snapshots completos.** Subir el
@@ -68,7 +68,7 @@ soporta sin tocar dominio ni UI.
 
 ## 2. Estado actual aprovechable
 
-- `BoardMemento` ya es el DTO canónico (columnas + tarjetas + procesos +
+- `BoardMemento` ya es el DTO canónico (columnas + tarjetas +
   enlaces + timeline) y es serializable a JSON con `BoardJsonMapper`.
 - `BoardExport`/`importBoard` ya exportan e importan un tablero a JSON.
 - `SqliteBoardRepository` guarda en una transacción por comando y el
@@ -86,7 +86,7 @@ Al confirmar cada comando, además de `save`, se anota el objeto tocado:
 
 ```sql
 CREATE TABLE sync_object (
-    entity_type TEXT NOT NULL,          -- board|column|card|checklist_item|link|process|timeline_entry
+    entity_type TEXT NOT NULL,          -- board|column|card|checklist_item|link|timeline_entry
     entity_id   TEXT NOT NULL,
     version     INTEGER NOT NULL DEFAULT 0,  -- versión remota que ya tenemos (0 = nunca subido)
     updated_at  INTEGER NOT NULL,       -- epoch ms del último cambio local
@@ -157,7 +157,7 @@ Aun así definimos reglas deterministas:
 
 | Tipo de dato | Estrategia |
 |---|---|
-| Campos escalares (título, descripción, color, fecha, notas, proceso) | **Last-Writer-Wins por campo** usando `updated_at`; empate → mayor `device_id` (determinista) |
+| Campos escalares (título, descripción, color, fecha, notas) | **Last-Writer-Wins por campo** usando `updated_at`; empate → mayor `device_id` (determinista) |
 | Colecciones (`labels`, checklist) | **Unión por id** de ítem; borrado gana si hay lápida |
 | **Timeline** (`TimelineEntry`) | **Unión append-only**: entradas inmutables, sin conflicto posible; borrado gana con lápida |
 | Enlaces de precedencia (`CardLink`) | Unión de pares; borrado gana con lápida |

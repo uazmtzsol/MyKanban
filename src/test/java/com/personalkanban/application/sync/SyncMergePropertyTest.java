@@ -9,8 +9,6 @@ import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.ColumnSnapshot;
 import com.personalkanban.domain.board.EntryId;
-import com.personalkanban.domain.board.ProcessId;
-import com.personalkanban.domain.board.ProcessSnapshot;
 import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.domain.board.WipLimit;
 import org.junit.jupiter.api.Test;
@@ -192,7 +190,6 @@ class SyncMergePropertyTest {
 
     private static void assertValid(BoardMemento m, int caseIndex) {
         assertThat(m.columns()).as("case %d: columns", caseIndex).isNotNull();
-        assertThat(m.processes()).as("case %d: processes", caseIndex).isNotNull();
         assertThat(m.links()).as("case %d: links", caseIndex).isNotNull();
         assertThat(m.timeline()).as("case %d: timeline", caseIndex).isNotNull();
         for (ColumnSnapshot c : m.columns()) {
@@ -217,10 +214,6 @@ class SyncMergePropertyTest {
                 }
             }
         }
-        for (ProcessSnapshot p : m.processes()) {
-            assertThat(p.id()).as("case %d: process id", caseIndex).isNotNull();
-            assertThat(p.name()).as("case %d: process name", caseIndex).isNotNull();
-        }
     }
 
     // ------------------------------------------------------------------
@@ -234,10 +227,6 @@ class SyncMergePropertyTest {
         for (int c = 0; c < columnCount; c++) {
             columns.add(randomColumn(r, COL_POOL.get(c), seq));
         }
-        List<ProcessSnapshot> processes = new ArrayList<>();
-        for (int p = 0; p < r.nextInt(3); p++) {
-            processes.add(new ProcessSnapshot(new ProcessId("p" + p), pick(r, TITLES)));
-        }
         List<CardLink> links = new ArrayList<>();
         List<TimelineEntry> timeline = new ArrayList<>();
         if (r.nextBoolean()) {
@@ -249,7 +238,7 @@ class SyncMergePropertyTest {
             timeline.add(TimelineEntry.restore(new CardId("c0"), new EntryId("e0"),
                     T0, T0.plusSeconds(60), "work"));
         }
-        return new BoardMemento(columns, processes, links, timeline);
+        return new BoardMemento(columns, links, timeline);
     }
 
     private static ColumnSnapshot randomColumn(Random r, String id, int[] seq) {
@@ -286,7 +275,7 @@ class SyncMergePropertyTest {
         cards.add(randomCard(r, uniqueId(usedIds(board))));
         List<ColumnSnapshot> columns = new ArrayList<>(board.columns());
         columns.set(0, withCards(first, cards));
-        return new BoardMemento(columns, board.processes(), board.links(), board.timeline());
+        return new BoardMemento(columns, board.links(), board.timeline());
     }
 
     /** Edits random scalar fields (and labels/checklist) without changing structure. */
@@ -301,11 +290,7 @@ class SyncMergePropertyTest {
                     ? withTitle(column, pick(r, TITLES)) : column;
             columns.add(withCards(c, cards));
         }
-        List<ProcessSnapshot> processes = new ArrayList<>();
-        for (ProcessSnapshot p : board.processes()) {
-            processes.add(r.nextBoolean() ? new ProcessSnapshot(p.id(), pick(r, TITLES)) : p);
-        }
-        return new BoardMemento(columns, processes, board.links(), board.timeline());
+        return new BoardMemento(columns, board.links(), board.timeline());
     }
 
     private static CardSnapshot mutateCard(Random r, CardSnapshot c) {
@@ -330,7 +315,7 @@ class SyncMergePropertyTest {
             default -> checklist.add(new ChecklistItem("extra-i", pick(r, TITLES), r.nextBoolean()));
         }
         return new CardSnapshot(c.id(), title, description, color, dueDate, labels, c.createdAt(),
-                notes, checklist, c.processId());
+                notes, checklist, c.reminders(), c.completedAt());
     }
 
     /** Adds/removes whole cards and columns on top of field edits. */
@@ -351,7 +336,7 @@ class SyncMergePropertyTest {
         if (columns.size() > 1 && r.nextInt(4) == 0) {
             columns.remove(r.nextInt(columns.size()));
         }
-        return new BoardMemento(columns, edited.processes(), edited.links(), edited.timeline());
+        return new BoardMemento(columns, edited.links(), edited.timeline());
     }
 
     private static Set<String> usedIds(BoardMemento board) {
@@ -380,13 +365,13 @@ class SyncMergePropertyTest {
     private static BoardMemento withCardTitle(BoardMemento board, String title) {
         return withFirstCard(board, card -> new CardSnapshot(card.id(), title, card.description(),
                 card.color(), card.dueDate(), card.labels(), card.createdAt(), card.notes(),
-                card.checklist(), card.processId()));
+                card.checklist(), card.reminders(), card.completedAt()));
     }
 
     private static BoardMemento withCardDescription(BoardMemento board, String description) {
         return withFirstCard(board, card -> new CardSnapshot(card.id(), card.title(), description,
                 card.color(), card.dueDate(), card.labels(), card.createdAt(), card.notes(),
-                card.checklist(), card.processId()));
+                card.checklist(), card.reminders(), card.completedAt()));
     }
 
     private static BoardMemento withFirstCard(BoardMemento board,
@@ -405,7 +390,7 @@ class SyncMergePropertyTest {
             }
             columns.add(withCards(column, cards));
         }
-        return new BoardMemento(columns, board.processes(), board.links(), board.timeline());
+        return new BoardMemento(columns, board.links(), board.timeline());
     }
 
     private static CardSnapshot firstCard(BoardMemento board) {
@@ -440,7 +425,6 @@ class SyncMergePropertyTest {
                         .append('|').append(card.description()).append('|').append(stored(card.color()))
                         .append('|').append(card.dueDate()).append('|').append(card.createdAt())
                         .append('|').append(card.notes()).append('|')
-                        .append(card.processId() == null ? "" : card.processId().value()).append('|')
                         .append(String.join(",", card.labels())).append('|');
                 for (ChecklistItem item : card.checklist()) {
                     sb.append(item.id()).append(':').append(item.text()).append(':')
@@ -448,9 +432,6 @@ class SyncMergePropertyTest {
                 }
                 sb.append('\n');
             }
-        }
-        for (ProcessSnapshot p : m.processes()) {
-            sb.append("PROC ").append(p.id().value()).append('|').append(p.name()).append('\n');
         }
         for (CardLink l : m.links()) {
             sb.append("LINK ").append(l.from().value()).append("->").append(l.to().value()).append('\n');

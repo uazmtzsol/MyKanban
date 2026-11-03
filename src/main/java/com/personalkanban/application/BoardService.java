@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.personalkanban.application.command.AddCardCommand;
 import com.personalkanban.application.command.AddColumnCommand;
-import com.personalkanban.application.command.AddProcessCommand;
-import com.personalkanban.application.command.AssignProcessCommand;
 import com.personalkanban.application.command.BoardCommand;
 import com.personalkanban.application.command.ClearColumnCommand;
 import com.personalkanban.application.command.CommentTimeEntryCommand;
@@ -30,7 +28,6 @@ import com.personalkanban.application.command.RecolorCardsCommand;
 import com.personalkanban.application.command.RemoveChecklistItemCommand;
 import com.personalkanban.application.command.ToggleChecklistItemCommand;
 import com.personalkanban.application.command.RenameChecklistItemCommand;
-import com.personalkanban.application.command.RemoveProcessCommand;
 import com.personalkanban.application.command.RemoveReminderCommand;
 import com.personalkanban.application.command.RescheduleCardCommand;
 import com.personalkanban.application.command.CompleteCardCommand;
@@ -41,7 +38,6 @@ import com.personalkanban.application.command.RemoveLabelsCommand;
 import com.personalkanban.application.command.RemoveCardCommand;
 import com.personalkanban.application.command.RemoveColumnCommand;
 import com.personalkanban.application.command.RenameColumnCommand;
-import com.personalkanban.application.command.RenameProcessCommand;
 import com.personalkanban.application.command.RemoveTimeEntryCommand;
 import com.personalkanban.application.command.SetChecklistFromLinesCommand;
 import com.personalkanban.application.command.StartTimeTrackingCommand;
@@ -49,9 +45,7 @@ import com.personalkanban.application.command.StopTimeTrackingCommand;
 import com.personalkanban.application.command.SetColumnBackgroundCommand;
 import com.personalkanban.application.command.SetColumnDoneCommand;
 import com.personalkanban.application.command.SortColumnByPriorityCommand;
-import com.personalkanban.application.command.UnassignFromProcessCommand;
 import com.personalkanban.application.command.UnlinkCardsCommand;
-import com.personalkanban.application.command.BulkAssignProcessCommand;
 import com.personalkanban.application.port.BoardRepository;
 import com.personalkanban.application.port.SettingsStore;
 import com.personalkanban.application.port.UndoHistory;
@@ -69,8 +63,6 @@ import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
 import com.personalkanban.domain.board.DependencyGuard;
 import com.personalkanban.domain.board.EntryId;
-import com.personalkanban.domain.board.Process;
-import com.personalkanban.domain.board.ProcessId;
 import com.personalkanban.domain.board.TimelineEntry;
 import com.personalkanban.domain.board.WipLimit;
 
@@ -241,8 +233,8 @@ public final class BoardService {
 
     /**
      * Saves the active board's <b>structure</b> as a named template: columns
-     * (title, description, color, WIP limit, done flag), process names and the
-     * card-view mode. Cards are never part of a template.
+     * (title, description, color, WIP limit, done flag) and the card-view mode.
+     * Cards are never part of a template.
      */
     public void saveAsTemplate(String name) {
         if (name == null || name.isBlank()) {
@@ -252,10 +244,7 @@ public final class BoardService {
                 .map(column -> new BoardTemplate.TemplateColumn(column.title(),
                         column.description(), column.color(), column.wipLimit(), column.isDone()))
                 .toList();
-        List<String> processNames = activeBoard.processList().stream()
-                .map(Process::name)
-                .toList();
-        BoardTemplate template = new BoardTemplate(name, columns, processNames,
+        BoardTemplate template = new BoardTemplate(name, columns,
                 cardViewSettingsOf(activeBoard.id()).boardDefault());
         settings.put(TEMPLATE_PREFIX + template.name(), template.toJson());
     }
@@ -269,7 +258,7 @@ public final class BoardService {
 
     /**
      * Creates a new board from a template and makes it active: columns in
-     * order (at most one marked done), process names, and the card-view mode.
+     * order (at most one marked done) and the card-view mode.
      * No cards are copied — the board starts empty on purpose.
      */
     public BoardId createBoardFromTemplate(BoardTemplate template, String boardName) {
@@ -285,9 +274,6 @@ public final class BoardService {
                 setColumnDone(created.get(i), true);
                 break; // the domain keeps at most one done column per board
             }
-        }
-        for (String processName : template.processNames()) {
-            addProcess(processName);
         }
         CardViewSettings cardView = cardViewSettingsOf(id);
         cardView.setBoardDefault(template.viewMode());
@@ -501,12 +487,12 @@ public final class BoardService {
         return execute(command, command::createdCardId);
     }
 
-    /** Full card creation (session 4): notes, checklist and process in one step. */
+    /** Full card creation (session 4): notes and checklist in one step. */
     public CardId addCard(ColumnId columnId, String title, String description, BoardColor color,
                           LocalDate dueDate, List<String> labels,
-                          String notes, List<ChecklistItem> checklist, ProcessId processId) {
+                          String notes, List<ChecklistItem> checklist) {
         AddCardCommand command = new AddCardCommand(columnId, title, description, color,
-                dueDate, labels, notes, checklist, processId);
+                dueDate, labels, notes, checklist);
         return execute(command, command::createdCardId);
     }
 
@@ -526,8 +512,8 @@ public final class BoardService {
 
     /**
      * Duplicates a card of the active board into a column; returns the new
-     * card's id. Title, description, color, due date, labels, notes, checklist
-     * and process are copied (user request T10: copy/paste a card).
+     * card's id. Title, description, color, due date, labels, notes and
+     * checklist are copied (user request T10: copy/paste a card).
      */
     public CardId duplicateCard(CardId cardId, ColumnId targetColumnId) {
         DuplicateCardCommand command = new DuplicateCardCommand(cardId, targetColumnId);
@@ -734,48 +720,6 @@ public final class BoardService {
         return activeBoard.timeEntriesOf(cardId).stream()
                 .mapToLong(entry -> entry.durationMillis(now))
                 .sum();
-    }
-
-    // ------------------------------------------------------------------
-    // Processes (session 4.6)
-    // ------------------------------------------------------------------
-
-    /** Creates a process and returns its id. */
-    public ProcessId addProcess(String name) {
-        AddProcessCommand command = new AddProcessCommand(name);
-        return execute(command, () -> command.createdProcess().id());
-    }
-
-    /** Renames a process. */
-    public void renameProcess(ProcessId processId, String newName) {
-        execute(new RenameProcessCommand(processId, newName));
-    }
-
-    /** Deletes a process; member cards become unassigned. */
-    public void removeProcess(ProcessId processId) {
-        execute(new RemoveProcessCommand(processId));
-    }
-
-    /** Processes of the active board, in creation order. */
-    public List<Process> processes() {
-        return activeBoard.processList();
-    }
-
-    /** Assigns one card to a process (null = unassign). */
-    public void assignCardToProcess(CardId cardId, ProcessId processId) {
-        execute(new AssignProcessCommand(cardId, processId));
-    }
-    /**
-     * Removes a card from its process AND deletes every precedence
-     * link touching it, undoable (card dialog "Ninguno").
-     */
-    public void unassignCardFromProcess(CardId cardId) {
-        execute(new UnassignFromProcessCommand(cardId));
-    }
-
-    /** Bulk: assigns the cards to a process (null = unassign, links kept). */
-    public void assignProcessToCards(List<CardId> cardIds, ProcessId processId) {
-        execute(new BulkAssignProcessCommand(cardIds, processId));
     }
 
     // ------------------------------------------------------------------
@@ -1017,9 +961,8 @@ public final class BoardService {
 
     /**
      * Copies a card to ANOTHER board, keeping title, description, color,
-     * due date, labels, notes and checklist. The process is re-matched by
-     * name on the target board (processes are board-local); time entries
-     * and precedence links are not transferred. The target board records
+     * due date, labels, notes and checklist. Time entries and precedence links
+     * are not transferred. The target board records
      * an undo entry, so undoing there removes the copied card.
      *
      * @throws com.personalkanban.domain.exception.WipLimitExceededException
@@ -1040,7 +983,7 @@ public final class BoardService {
 
         CardAdded created = target.addCard(targetColumnId, source.title(), source.description(),
                 source.color(), source.dueDate(), source.labels(), source.notes(),
-                source.checklist(), matchedProcessIdOnTarget(source.processId(), target));
+                source.checklist());
         // Roll the aggregate back if persistence fails, like the
         // regular commands do, so memory never diverges from storage.
         try {
@@ -1220,21 +1163,6 @@ public final class BoardService {
     // ------------------------------------------------------------------
     // Internals
     // ------------------------------------------------------------------
-
-    /** Re-matches a process by name on the target board (processes are board-local). */
-    private ProcessId matchedProcessIdOnTarget(ProcessId sourceProcessId, Board target) {
-        if (sourceProcessId == null) {
-            return null;
-        }
-        return activeBoard.processList().stream()
-                .filter(process -> process.id().equals(sourceProcessId))
-                .findFirst()
-                .flatMap(sourceProcess -> target.processList().stream()
-                        .filter(candidate -> candidate.name().equals(sourceProcess.name()))
-                        .findFirst())
-                .map(Process::id)
-                .orElse(null);
-    }
 
     private void applySnapshot(BoardMemento target) {
         activeBoard.restore(target);

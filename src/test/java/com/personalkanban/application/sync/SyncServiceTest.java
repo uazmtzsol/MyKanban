@@ -126,7 +126,7 @@ class SyncServiceTest {
         List<ColumnSnapshot> columns = new ArrayList<>(source.columns());
         columns.add(new ColumnSnapshot(new ColumnId("remote-column"), "Remote", "",
                 BoardColor.GREEN, WipLimit.unlimited(), Instant.now(), false, null, List.of()));
-        return new BoardMemento(columns, source.processes(), source.links(), source.timeline());
+        return new BoardMemento(columns, source.links(), source.timeline());
     }
 
     private static BoardMemento withCardTitle(BoardMemento source, CardId cardId, String title) {
@@ -137,7 +137,7 @@ class SyncServiceTest {
                 if (card.id().equals(cardId)) {
                     cards.add(new CardSnapshot(card.id(), title, card.description(), card.color(),
                             card.dueDate(), card.labels(), card.createdAt(), card.notes(),
-                            card.checklist(), card.processId()));
+                            card.checklist(), card.reminders(), card.completedAt()));
                 } else {
                     cards.add(card);
                 }
@@ -146,6 +146,6 @@ class SyncServiceTest {
                     column.color(), column.wipLimit(), column.createdAt(), column.done(),
                     column.backgroundColor(), cards));
         }
-        return new BoardMemento(columns, source.processes(), source.links(), source.timeline());
+        return new BoardMemento(columns, source.links(), source.timeline());
     }
 }

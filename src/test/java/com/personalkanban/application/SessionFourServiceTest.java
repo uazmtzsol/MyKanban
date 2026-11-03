@@ -86,31 +86,6 @@ class SessionFourServiceTest {
     }
 
     @Test
-    void processLifecycleIsUndoable() {
-        setUp();
-        var columnId = service.board().columns().get(0).id();
-        var cardId = service.addCard(columnId, "task", "", BoardColor.DEFAULT);
-
-        var processId = service.addProcess("Mudanza");
-        service.assignCardToProcess(cardId, processId);
-        assertThat(service.board().cardsOfProcess(processId)).hasSize(1);
-
-        service.undo(); // unassign
-        assertThat(service.board().findCard(cardId).orElseThrow().processId()).isNull();
-
-        service.redo();
-        assertThat(service.board().findCard(cardId).orElseThrow().processId()).isEqualTo(processId);
-
-        service.removeProcess(processId);
-        assertThat(service.processes()).isEmpty();
-        assertThat(service.board().findCard(cardId).orElseThrow().processId()).isNull();
-
-        service.undo(); // process back, card re-assigned
-        assertThat(service.processes()).extracting(p -> p.name()).containsExactly("Mudanza");
-        assertThat(service.board().findCard(cardId).orElseThrow().processId()).isEqualTo(processId);
-    }
-
-    @Test
     void linksRejectCyclesAndUndoCoversLinking() {
         setUp();
         var columnId = service.board().columns().get(0).id();
@@ -148,21 +123,18 @@ class SessionFourServiceTest {
     void persistedStateSurvivesRepositoryRoundTrip() {
         setUp();
         var columnId = service.board().columns().get(0).id();
-        var processId = service.addProcess("P");
         var a = service.addCard(columnId, "A", "", BoardColor.DEFAULT,
-                null, List.of(), "some notes", null, processId);
+                null, List.of(), "some notes", null);
         var b = service.addCard(columnId, "B", "", BoardColor.DEFAULT);
         service.linkCards(a, b);
 
-        // Save through the repository and load back: notes, process and the
-        // link must all survive the replaceAll round trip.
+        // Save through the repository and load back: notes and the link must
+        // both survive the replaceAll round trip.
         var loaded = repository.load(board);
         assertThat(loaded.columns().get(0).cards()).hasSize(2);
         var loadedA = loaded.columns().get(0).cards().stream()
                 .filter(card -> card.id().equals(a)).findFirst().orElseThrow();
         assertThat(loadedA.notes()).isEqualTo("some notes");
-        assertThat(loadedA.processId()).isEqualTo(processId);
         assertThat(loaded.links()).hasSize(1);
-        assertThat(loaded.processes()).extracting(p -> p.name()).containsExactly("P");
     }
 }

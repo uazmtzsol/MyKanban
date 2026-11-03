@@ -42,7 +42,7 @@ class CardExporterTest {
                 LocalDate.of(2026, 10, 9),
                 List.of("home", "Importante"),
                 "## Shopping\n\nMilk, bread\n\n## Reminders\n\nCall the plumber",
-                null, null);
+                null);
         var created = board.findCard(added.cardId()).orElseThrow();
         ChecklistItem done = board.addChecklistItem(created.id(), "done item");
         board.setChecklistItemDone(created.id(), done.id(), true);
@@ -125,7 +125,7 @@ class CardExporterTest {
     void untitledNotesFallBackToTheTranslatedPlaceholder() {
         var columnId = board.addColumn("T", "", BoardColor.DEFAULT, WipLimit.unlimited()).id();
         CardAdded added = board.addCard(columnId, "Plain notes", "", BoardColor.DEFAULT,
-                null, List.of(), "text written before notes had titles", null, null);
+                null, List.of(), "text written before notes had titles", null);
         var plain = board.findCard(added.cardId()).orElseThrow();
 
         String out = CardExporter.render(plain, List.of(),

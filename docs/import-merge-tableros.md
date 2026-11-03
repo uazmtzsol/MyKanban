@@ -49,11 +49,11 @@ usuario solo donde hay conflicto real (columna y contenido).
   que descartar. El sync además **guarda el ancestro común** por tablero
   (`BASE_PREFIX + boardId`) y ya escribe una copia del perdedor en
   `<bdDir>/conflicts/` (§4.1 de [`sync-design.md`](sync-design.md)).
-- **Ya hay un precedente de re-emparejado entre tableros**:
-  `matchedProcessIdOnTarget` vuelve a casar procesos **por nombre** cuando
-  una tarjeta cruza de tablero
-  ([BoardService.java:944-953](../src/main/java/com/personalkanban/application/BoardService.java#L944)).
-  Ese criterio es reutilizable para columnas y procesos en el merge.
+- **Ya hay un precedente de re-emparejado entre tableros**: mover o copiar
+  una tarjeta de un tablero a otro
+  ([BoardService.java](../src/main/java/com/personalkanban/application/BoardService.java)).
+  Ese criterio (casar por identidad y, si falta, por nombre normalizado) es
+  reutilizable para columnas en el merge.
 
 **Conclusión técnica**: lo que falta no es el motor de mezcla de contenido
 (está hecho y probado con tests de propiedades), sino (a) **decidir la
@@ -130,7 +130,7 @@ el resto de la app.
 
 | Situación | Acción |
 |---|---|
-| Está en el archivo y no aquí | **Añadir** a su columna (con su checklist, notas, vencimiento, etiquetas, proceso y registros de tiempo) |
+| Está en el archivo y no aquí | **Añadir** a su columna (con su checklist, notas, vencimiento, etiquetas y registros de tiempo) |
 | Está aquí y no en el archivo | **Se queda** (importar nunca borra) |
 | Idéntica | **Nada** |
 | Diferente, misma columna | Preguntar **cómo mezclar el contenido** |
@@ -138,7 +138,7 @@ el resto de la app.
 
 «Idéntica» debe significar **todos los campos que viajan en el archivo**
 (título, descripción, notas, etiquetas, checklist, vencimiento, color,
-proceso, columna, posición), no solo el título.
+columna, posición), no solo el título.
 
 Interfaz propuesta para el contenido: una fila por tarjeta con **dos
 columnas (local / archivo)** y, por campo, un radio *mío / del archivo*;
@@ -173,8 +173,6 @@ es indispensable.
   columna que solo trae el archivo se **crea** (al final, o en el orden del
   archivo). La marca de «columna final/hecho» es del tablero: si difiere,
   **se pregunta una sola vez**, no por tarjeta.
-- **Procesos**: casar por nombre, reutilizando el criterio que ya existe
-  para tarjetas que cruzan de tablero.
 - **Enlaces de precedencia**: unión; se descartan los que apunten a
   tarjetas que no existen en el resultado.
 - **Registros de tiempo**: unión por `EntryId`; **nunca se pierde un

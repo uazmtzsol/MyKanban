@@ -6,7 +6,6 @@ import com.personalkanban.domain.board.CardAdded;
 import com.personalkanban.domain.board.CardId;
 import com.personalkanban.domain.board.ChecklistItem;
 import com.personalkanban.domain.board.ColumnId;
-import com.personalkanban.domain.board.ProcessId;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -23,18 +22,17 @@ public final class AddCardCommand implements BoardCommand {
     private final List<String> labels;
     private final String notes;                    // session 4.4
     private final List<ChecklistItem> checklist;   // session 4.5 (nullable)
-    private final ProcessId processId;             // session 4.6 (nullable)
 
     private CardId createdId;
 
     public AddCardCommand(ColumnId columnId, String title, String description, BoardColor color,
                           LocalDate dueDate, List<String> labels) {
-        this(columnId, title, description, color, dueDate, labels, null, null, null);
+        this(columnId, title, description, color, dueDate, labels, null, null);
     }
 
     public AddCardCommand(ColumnId columnId, String title, String description, BoardColor color,
                           LocalDate dueDate, List<String> labels,
-                          String notes, List<ChecklistItem> checklist, ProcessId processId) {
+                          String notes, List<ChecklistItem> checklist) {
         this.columnId = Objects.requireNonNull(columnId);
         this.title = Objects.requireNonNull(title);
         this.description = description == null ? "" : description;
@@ -43,13 +41,12 @@ public final class AddCardCommand implements BoardCommand {
         this.labels = labels == null ? List.of() : List.copyOf(labels);
         this.notes = notes == null ? "" : notes;
         this.checklist = checklist == null ? null : List.copyOf(checklist);
-        this.processId = processId;
     }
 
     @Override
     public void execute(Board board) {
         CardAdded event = board.addCard(columnId, title, description, color, dueDate, labels,
-                notes, checklist, processId);
+                notes, checklist);
         createdId = event.cardId();
     }
 

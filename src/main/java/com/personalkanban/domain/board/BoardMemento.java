@@ -9,33 +9,29 @@ import java.util.List;
  * mutated through the live board; doubles as the persistence DTO exchanged
  * with {@code BoardRepository} implementations.
  *
- * <p>It snapshots the board's columns (and their cards), processes, the
- * precedence links between cards (as a flat {@link CardLink} pair list) and
- * the time-tracking entries of every card (as a flat {@link TimelineEntry}
+ * <p>It snapshots the board's columns (and their cards), the precedence links
+ * between cards (as a flat {@link CardLink} pair list) and the
+ * time-tracking entries of every card (as a flat {@link TimelineEntry}
  * list keyed by card id), so undo/redo and persistence cover them.</p>
  */
 public record BoardMemento(List<ColumnSnapshot> columns,
-                           List<ProcessSnapshot> processes,
                            List<CardLink> links,
                            List<TimelineEntry> timeline) {
 
     public BoardMemento {
         columns = List.copyOf(columns);
-        processes = processes == null ? List.of() : List.copyOf(processes);
         links = links == null ? List.of() : List.copyOf(links);
         timeline = timeline == null ? List.of() : List.copyOf(timeline);
     }
 
-    /** Backward-compatible constructor (no processes, no links, no timeline). */
+    /** Backward-compatible constructor (no links, no timeline). */
     public BoardMemento(List<ColumnSnapshot> columns) {
-        this(columns, List.of(), List.of(), List.of());
+        this(columns, List.of(), List.of());
     }
 
     /** Backward-compatible constructor (no timeline). */
-    public BoardMemento(List<ColumnSnapshot> columns,
-                        List<ProcessSnapshot> processes,
-                        List<CardLink> links) {
-        this(columns, processes, links, List.of());
+    public BoardMemento(List<ColumnSnapshot> columns, List<CardLink> links) {
+        this(columns, links, List.of());
     }
 
     public static BoardMemento empty() {
@@ -54,7 +50,6 @@ public record BoardMemento(List<ColumnSnapshot> columns,
                 .forEach(entry -> timeline.add(entry.copy())));
         return new BoardMemento(
                 board.columns().stream().map(ColumnSnapshot::from).toList(),
-                board.processList().stream().map(ProcessSnapshot::from).toList(),
                 links,
                 timeline);
     }

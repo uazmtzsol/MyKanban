@@ -806,9 +806,8 @@ final class Dialogs {
         if (text == null || text.isBlank()) {
             return List.of();
         }
-        // Manually entered labels must be simple names: a leading '#' (or any
-        // '#') is rejected here, since process labels are the only ones that
-        // start with '#' (LabelConventions, session 6).
+        // Manually entered labels must be simple names: '#' is rejected here
+        // (LabelConventions), because it is reserved by the label catalog.
         return Arrays.stream(text.split("[,\\s\uFF0C]+"))
                 .map(String::strip)
                 .filter(LabelConventions::isValid)

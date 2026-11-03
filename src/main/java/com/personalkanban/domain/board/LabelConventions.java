@@ -3,14 +3,13 @@ package com.personalkanban.domain.board;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Constants and validation rules for card/process labels. */
+/** Constants and validation rules for card labels. */
 public final class LabelConventions {
 
     private LabelConventions() {
     }
 
-    /** Leading "#" is not allowed: labels are simple names (processes are
-     * stored in the dedicated {"code ""#compras"} table). */
+    /** Leading "#" is not allowed: labels are simple names. */
     public static boolean startsWithHash(String label) {
         return label != null && label.startsWith("#");
     }

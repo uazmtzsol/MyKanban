@@ -122,7 +122,6 @@ class DependencyGuardTest {
         // it): restore REPLACES links, so include the existing two as well.
         board.restore(new BoardMemento(
                 board.columns().stream().map(ColumnSnapshot::from).toList(),
-                List.of(),
                 List.of(new CardLink(a, b), new CardLink(b, c), new CardLink(c, a))));
 
         var result = DependencyGuard.topologicalOrder(board, List.of(a, b, c));

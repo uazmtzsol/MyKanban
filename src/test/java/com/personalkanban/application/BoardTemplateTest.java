@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * User request T14 · B5.1: user-defined board templates survive a JSON round
- * trip with their columns, process names and card-view mode, and a corrupt
+ * trip with their columns and card-view mode, and a corrupt
  * entry never breaks the Templates menu.
  */
 class BoardTemplateTest {
@@ -23,7 +23,6 @@ class BoardTemplateTest {
                         WipLimit.of(3), false),
                 new BoardTemplate.TemplateColumn("Hecho", "done things", BoardColor.GREEN,
                         WipLimit.unlimited(), true)),
-                List.of("Desarrollo", "Revisión"),
                 CardViewSettings.Mode.FULL);
     }
 
@@ -32,7 +31,6 @@ class BoardTemplateTest {
         BoardTemplate restored = BoardTemplate.fromJson(sample().toJson()).orElseThrow();
 
         assertThat(restored.name()).isEqualTo("Sprint");
-        assertThat(restored.processNames()).containsExactly("Desarrollo", "Revisión");
         assertThat(restored.viewMode()).isEqualTo(CardViewSettings.Mode.FULL);
         assertThat(restored.columns()).hasSize(3);
         assertThat(restored.columns().get(0).title()).isEqualTo("Ideas");
