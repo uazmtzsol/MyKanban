@@ -218,7 +218,7 @@ final class ColumnViewBuilder {
         view.setPrefWidth(280);
         view.getChildren().add(header);
 
-        // --- Cards (label/flag/process-filtered; WIP badge keeps counting
+        // --- Cards (label/flag/visibility-filtered; WIP badge keeps counting
         //     everything). Every card carries its own TOP drop edge (splits
         //     the card: above = its index, below = index+1), plus a trailing
         //     slot after the last card, so a drop can land exactly where the
@@ -228,7 +228,7 @@ final class ColumnViewBuilder {
         int cardIndex = 0;
         for (var card : column.cards()) {
             if (labelFilter.matches(card) && quickFilter.matches(card)
-                    && board.matchesProcessFilter(card) && board.matchesDueFilter(card)) {
+                    && board.matchesVisibilityGate(card) && board.matchesDueFilter(card)) {
                 VBox cardView = CardViewBuilder.build(
                         service, i18n, dialogs, board, card, selectionMode, dark);
                 installTopDropEdge(cardView, column.id(), cardIndex, board);

@@ -10,9 +10,6 @@ import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.MenuBar;
-import javafx.scene.control.RadioMenuItem;
-import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.PickResult;
@@ -194,38 +191,4 @@ class CardCurrentSelectionTest {
         assertThat(selectedOnly).as("selection mode keeps its own highlight").isTrue();
     }
 
-    @Test
-    void theViewMenuSwitchesModesWithItsShortcuts() throws Exception {
-        Boolean switched = fx(() -> {
-            MenuBar bar = (MenuBar) controller.root().getChildren().stream()
-                    .filter(MenuBar.class::isInstance)
-                    .findFirst()
-                    .orElseThrow();
-            RadioMenuItem boardView = radioWithAccelerator(bar, "Shortcut+Shift+1");
-            RadioMenuItem processViewItem = radioWithAccelerator(bar, "Shortcut+Shift+2");
-            boolean initiallyBoard = boardView.isSelected() && !processViewItem.isSelected();
-
-            processViewItem.fire();
-            boolean movedToProcesses = processViewItem.isSelected() && !boardView.isSelected();
-
-            boardView.fire();
-            boolean backToBoard = boardView.isSelected() && !processViewItem.isSelected();
-            return initiallyBoard && movedToProcesses && backToBoard;
-        });
-        assertThat(switched)
-                .as("the \"Ver\" menu offers both modes and switches between them")
-                .isTrue();
-    }
-
-    private static RadioMenuItem radioWithAccelerator(MenuBar bar, String accelerator) {
-        KeyCombination combination = KeyCombination.valueOf(accelerator);
-        return bar.getMenus().stream()
-                .flatMap(menu -> menu.getItems().stream())
-                .filter(RadioMenuItem.class::isInstance)
-                .map(RadioMenuItem.class::cast)
-                .filter(item -> combination.equals(item.getAccelerator()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(
-                        "no menu radio item bound to " + accelerator));
-    }
 }

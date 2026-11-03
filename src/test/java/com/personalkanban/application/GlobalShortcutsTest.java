@@ -23,14 +23,12 @@ class GlobalShortcutsTest {
                 .isEqualTo(GlobalShortcuts.defaultFor(GlobalShortcuts.Action.EXIT));
         assertThat(shortcuts.get(GlobalShortcuts.Action.LABEL_FILTER))
                 .isEqualTo(GlobalShortcuts.defaultFor(GlobalShortcuts.Action.LABEL_FILTER));
-        assertThat(shortcuts.get(GlobalShortcuts.Action.PROCESS_FILTER))
-                .isEqualTo(GlobalShortcuts.defaultFor(GlobalShortcuts.Action.PROCESS_FILTER));
     }
 
     @Test
     void storedJsonWithoutAnActionFallsBackToItsDefault() {
         // A list saved before the filter actions existed: those must not stay
-        // blank (blank = unbound, which disabled Ctrl+F / Ctrl+P).
+        // blank (blank = unbound, which disabled Ctrl+F).
         String legacy = """
                 [{"action":"NEXT_CARD","keyCombination":"Right"},
                  {"action":"PREV_CARD","keyCombination":"Left"},
@@ -41,7 +39,6 @@ class GlobalShortcutsTest {
         GlobalShortcuts shortcuts = GlobalShortcuts.fromJson(legacy);
 
         assertThat(shortcuts.get(GlobalShortcuts.Action.LABEL_FILTER)).isEqualTo("Ctrl+F");
-        assertThat(shortcuts.get(GlobalShortcuts.Action.PROCESS_FILTER)).isEqualTo("Ctrl+P");
         // Added later (labels shortcut): a JSON saved before it existed must
         // still pick up its default binding.
         assertThat(shortcuts.get(GlobalShortcuts.Action.LABELS)).isEqualTo("Ctrl+L");
@@ -62,7 +59,7 @@ class GlobalShortcutsTest {
                  {"action":"EDIT_CARD","keyCombination":"Enter"},
                  {"action":"EXIT","keyCombination":"Escape"},
                  {"action":"LABEL_FILTER","keyCombination":"Ctrl+F"},
-                 {"action":"PROCESS_FILTER","keyCombination":"Ctrl+P"}]
+                 {"action":"LABELS","keyCombination":"Ctrl+L"}]
                 """;
 
         GlobalShortcuts shortcuts = GlobalShortcuts.fromJson(stored);
@@ -79,7 +76,6 @@ class GlobalShortcutsTest {
         assertThat(shortcuts.get(GlobalShortcuts.Action.EDIT_CARD)).isEqualTo("Enter");
         assertThat(shortcuts.get(GlobalShortcuts.Action.EXIT)).isEqualTo("Escape");
         assertThat(shortcuts.get(GlobalShortcuts.Action.LABEL_FILTER)).isEqualTo("Ctrl+F");
-        assertThat(shortcuts.get(GlobalShortcuts.Action.PROCESS_FILTER)).isEqualTo("Ctrl+P");
     }
 
     @Test
@@ -103,9 +99,9 @@ class GlobalShortcutsTest {
     @Test
     void setWithEmptyBecomesBlank() {
         GlobalShortcuts shortcuts = new GlobalShortcuts();
-        shortcuts.set(GlobalShortcuts.Action.PROCESS_FILTER, "   ");
+        shortcuts.set(GlobalShortcuts.Action.LABEL_FILTER, "   ");
 
-        assertThat(shortcuts.get(GlobalShortcuts.Action.PROCESS_FILTER)).isEmpty();
+        assertThat(shortcuts.get(GlobalShortcuts.Action.LABEL_FILTER)).isEmpty();
     }
 
     @Test
@@ -170,7 +166,6 @@ class GlobalShortcutsTest {
                 GlobalShortcuts.Action.EDIT_CARD.name(),
                 GlobalShortcuts.Action.EXIT.name(),
                 GlobalShortcuts.Action.LABEL_FILTER.name(),
-                GlobalShortcuts.Action.PROCESS_FILTER.name(),
                 GlobalShortcuts.Action.LABELS.name()
         );
     }

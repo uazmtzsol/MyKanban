@@ -48,33 +48,26 @@ final class Dialogs {
         }
     }
 
-    /** Result of the bulk process dialog: null processId = "Ninguno". */
-    record BulkProcessForm(com.personalkanban.domain.board.ProcessId processId) {
-    }
-
-    /** Sentinel shown as the explicit "no process" entry of a process combo. */
-    private record NoProcess() {
-    }
-
     /** Result of the card dialog (session 5: advanced fields added). */
     record CardForm(String title, String description, BoardColor color,
                     LocalDate dueDate, List<String> labels,
-                    String notes, List<String> checklistLines, com.personalkanban.domain.board.ProcessId processId,
+                    String notes, List<String> checklistLines,
                     List<com.personalkanban.domain.board.CardId> predecessors,
                     List<com.personalkanban.domain.board.CardId> successors) {
 
         /** Session-5 shape without relation fields. */
         CardForm(String title, String description, BoardColor color,
                  LocalDate dueDate, List<String> labels,
-                 String notes, List<String> checklistLines, com.personalkanban.domain.board.ProcessId processId) {
-            this(title, description, color, dueDate, labels, notes, checklistLines, processId,
+                 String notes, List<String> checklistLines) {
+            this(title, description, color, dueDate, labels, notes, checklistLines,
                     List.of(), List.of());
         }
 
         /** Backward-compatible shape: minimal fields only. */
         CardForm(String title, String description, BoardColor color,
                  LocalDate dueDate, List<String> labels) {
-            this(title, description, color, dueDate, labels, "", List.of(), null, List.of(), List.of());
+            this(title, description, color, dueDate, labels, "", List.of(),
+                    List.of(), List.of());
         }
     }
 
@@ -170,7 +163,6 @@ final class Dialogs {
     // ------------------------------------------------------------------
 
     Optional<CardForm> cardDialog(CardForm initial, List<String> labelVocabulary,
-                                  List<com.personalkanban.domain.board.Process> processes,
                                   List<com.personalkanban.domain.board.Card> otherCards,
                                   List<com.personalkanban.domain.board.CardId> currentPredecessors,
                                   List<com.personalkanban.domain.board.CardId> currentSuccessors) {
@@ -203,7 +195,7 @@ final class Dialogs {
 
         // --- Advanced (collapsible) section — user request: the dialog shows
         //     the minimal useful fields by default; one checklist-shaped
-        //     toggle reveals notes, checklist and process. ---
+        //     toggle reveals notes and checklist. ---
         MarkdownEditor notesEditor = new MarkdownEditor(
                 initial == null ? "" : initial.notes(), "card.notes.prompt", 50, i18n, null);
         TextArea checklistArea = new TextArea(initial == null || initial.checklistLines().isEmpty()
@@ -211,36 +203,6 @@ final class Dialogs {
         checklistArea.setPromptText(i18n.text("checklist.dialog.prompt"));
         checklistArea.setPrefRowCount(3);
         checklistArea.setWrapText(true);
-        // Process chooser with an explicit "Ninguno" entry (user request:
-        // deselecting must be possible, not only leaving the combo empty).
-        javafx.scene.control.ComboBox<Object> processCombo = new javafx.scene.control.ComboBox<>();
-        processCombo.getItems().add(new NoProcess());
-        processCombo.getItems().addAll(processes);
-        processCombo.setMaxWidth(Double.MAX_VALUE);
-        processCombo.setConverter(new javafx.util.StringConverter<>() {
-            @Override
-            public String toString(Object item) {
-                if (item instanceof com.personalkanban.domain.board.Process process) {
-                    return process.name();
-                }
-                return item instanceof NoProcess ? i18n.text("card.process.none") : "";
-            }
-
-            @Override
-            public Object fromString(String string) {
-                return null;
-            }
-        });
-        if (initial != null && initial.processId() != null) {
-            processes.stream()
-                    .filter(process -> process.id().equals(initial.processId()))
-                    .findFirst()
-                    .ifPresent(processCombo.getSelectionModel()::select);
-        } else {
-            // "Ninguno" selected explicitly, so editing a card that has no
-            // process shows the deselected state instead of a blank prompt.
-            processCombo.getSelectionModel().selectFirst();
-        }
 
         javafx.scene.control.Label notesCaption =
                 new javafx.scene.control.Label(i18n.text("card.tab.notes"));
@@ -248,11 +210,8 @@ final class Dialogs {
                 new javafx.scene.control.Label(i18n.text("card.tab.checklist"));
         checklistCaption.setTooltip(new javafx.scene.control.Tooltip(
                 i18n.text("checklist.dialog.help")));
-        javafx.scene.control.Label processCaption =
-                new javafx.scene.control.Label(i18n.text("card.process.label"));
         javafx.scene.layout.VBox advancedBox = new javafx.scene.layout.VBox(
-                8, notesCaption, notesEditor.node(), checklistCaption, checklistArea,
-                processCaption, processCombo);
+                8, notesCaption, notesEditor.node(), checklistCaption, checklistArea);
 
         // --- Precedence links (user request ②): which tasks come BEFORE and
         //     AFTER this one. Two multi-selection lists of the other cards;
@@ -330,8 +289,6 @@ final class Dialogs {
             return new CardForm(title, descriptionEditor.text(), selectedColor(colorPicker),
                     dueDatePicker.getValue(), parseLabels(labelsField.getText()),
                     notesEditor.text(), parseChecklistLines(checklistArea.getText()),
-                    processCombo.getValue() instanceof com.personalkanban.domain.board.Process process
-                            ? process.id() : null,
                     selectedIds(predecessorsList, candidates),
                     selectedIds(successorsList, candidates));
         });
@@ -383,40 +340,6 @@ final class Dialogs {
                 .toList();
     }
 
-    // ------------------------------------------------------------------
-    // Card chooser (process view relations)
-    // ------------------------------------------------------------------
-
-    /**
-     * Lets the user pick one existing card by title. Titles may repeat, so
-     * duplicates get a numeric suffix while the underlying card mapping stays
-     * exact. Returns empty when there is nothing to choose or the user cancels.
-     */
-    Optional<com.personalkanban.domain.board.Card> chooseCard(
-            List<com.personalkanban.domain.board.Card> cards, String header) {
-        if (cards.isEmpty()) {
-            info(i18n.text("process.link.none"));
-            return Optional.empty();
-        }
-        java.util.LinkedHashMap<String, com.personalkanban.domain.board.Card> byLabel =
-                new java.util.LinkedHashMap<>();
-        for (com.personalkanban.domain.board.Card card : cards) {
-            String base = card.title();
-            String label = base;
-            int suffix = 2;
-            while (byLabel.containsKey(label)) {
-                label = base + " (" + suffix++ + ")";
-            }
-            byLabel.put(label, card);
-        }
-        ChoiceDialog<String> dialog = new ChoiceDialog<>(
-                byLabel.keySet().iterator().next(), byLabel.keySet());
-        dialog.setTitle(i18n.text("dialog.card.choice.title"));
-        dialog.setHeaderText(header);
-        dialog.setContentText(i18n.text("dialog.card.choice.label"));
-        track(dialog);
-        return dialog.showAndWait().map(byLabel::get);
-    }
 
     // ------------------------------------------------------------------
     // Bulk (multi-selection) dialogs
@@ -449,54 +372,6 @@ final class Dialogs {
         // Session 13 (user request): the focus belongs in the labels field,
         // not on "Aceptar", so the dialog can be typed into immediately.
         dialog.setOnShown(event -> javafx.application.Platform.runLater(labelsField::requestFocus));
-        return dialog.showAndWait();
-    }
-
-    /**
-     * Process for N selected cards: any process, or the explicit
-     * "Ninguno" entry (null processId) to take them all out of
-     * their process — without touching their arrow relations.
-     */
-    Optional<BulkProcessForm> bulkProcessDialog(int selectedCount,
-                                                    List<com.personalkanban.domain.board.Process> processes) {
-        javafx.scene.control.ComboBox<Object> combo = new javafx.scene.control.ComboBox<>();
-        combo.getItems().add(new NoProcess());
-        combo.getItems().addAll(processes);
-        combo.getSelectionModel().selectFirst(); // "Ninguno" by default
-        combo.setMaxWidth(Double.MAX_VALUE);
-        combo.setConverter(new javafx.util.StringConverter<>() {
-            @Override
-            public String toString(Object item) {
-                if (item instanceof com.personalkanban.domain.board.Process process) {
-                    return process.name();
-                }
-                return item instanceof NoProcess ? i18n.text("card.process.none") : "";
-            }
-
-            @Override
-            public Object fromString(String string) {
-                return null;
-            }
-        });
-
-        Dialog<BulkProcessForm> dialog = new Dialog<>();
-        dialog.setTitle(i18n.text("bulk.process.title"));
-        dialog.setHeaderText(i18n.text("bulk.process.header", selectedCount));
-        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
-        GridPane grid = formGrid();
-        grid.add(new Label(i18n.text("card.process.label")), 0, 0);
-        grid.add(combo, 1, 0);
-        dialog.getDialogPane().setContent(grid);
-
-        track(dialog);
-        dialog.setResultConverter(button -> {
-            if (button != ButtonType.OK) {
-                return null;
-            }
-            return new BulkProcessForm(
-                    combo.getValue() instanceof com.personalkanban.domain.board.Process process
-                            ? process.id() : null);
-        });
         return dialog.showAndWait();
     }
 

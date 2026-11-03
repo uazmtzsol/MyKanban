@@ -139,7 +139,6 @@ class MainMenuStructureTest {
                 i18n.text("menu.boards"),
                 i18n.text("menu.view"),
                 i18n.text("menu.cards"),
-                i18n.text("menu.processes"),
                 i18n.text("menu.labels"),
                 i18n.text("menu.language"),
                 i18n.text("menu.help"));
@@ -173,8 +172,6 @@ class MainMenuStructureTest {
     void theViewMenuReachesEveryWayOfLookingAtTheBoard() throws Exception {
         Boolean ok = fx(() -> {
             Menu view = menuByKey(menuBar(), "menu.view");
-            itemByText(view, "view.board");
-            itemByText(view, "view.processes");
             itemByText(view, "filter.archived.show");
             itemByText(view, "report.time");
             itemByText(view, "search.menu");

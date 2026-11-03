@@ -30,15 +30,13 @@ class TimeReportExportTest {
                 .toInstant(ZoneOffset.UTC);
     }
 
-    private static TimeReport report(String processName) {
+    private static TimeReport report() {
         Board board = new Board();
         var column = board.addColumn("Todo", "", BoardColor.DEFAULT, WipLimit.unlimited()).id();
-        CardId inProcess = board.addCard(column, "A", "", BoardColor.DEFAULT).cardId();
-        CardId loose = board.addCard(column, "B", "", BoardColor.DEFAULT).cardId();
-        var process = board.addProcess(processName);
-        board.assignCardToProcess(inProcess, process.id());
-        logged(board, inProcess, "08:00", "09:30"); // 90 min
-        logged(board, loose, "09:00", "09:30");     // 30 min, no process
+        CardId first = board.addCard(column, "A", "", BoardColor.DEFAULT).cardId();
+        CardId second = board.addCard(column, "B", "", BoardColor.DEFAULT).cardId();
+        logged(board, first, "08:00", "09:30"); // 90 min
+        logged(board, second, "09:00", "09:30"); // 30 min
         return TimeReport.of(board, NOW, ZoneOffset.UTC, 4);
     }
 
@@ -57,36 +55,30 @@ class TimeReportExportTest {
     }
 
     @Test
-    void csvHasHeaderBothTablesAndTheNoProcessRow() {
-        String csv = TimeReportExport.csv(report("Dev"), "Mi tablero", ES);
+    void csvHasHeaderAndTheWeekTable() {
+        String csv = TimeReportExport.csv(report(), "Mi tablero", ES);
 
         assertThat(csv).contains("Informe de tiempo;Tablero;Mi tablero\n");
         assertThat(csv).contains("Desde;2026-09-21\n");
         assertThat(csv).contains("Hasta;2026-10-12\n");
         assertThat(csv).contains("Total;2:00;120\n");
-        assertThat(csv).contains("Proceso;Tarjetas;Horas;Minutos\n");
-        assertThat(csv).contains("Dev;1;1:30;90\n");
-        assertThat(csv).contains("Sin proceso;1;0:30;30\n");
         assertThat(csv).contains("Semana;Horas;Minutos\n");
         assertThat(csv).contains("2026-10-12;2:00;120\n");
     }
 
     @Test
     void csvQuotesFieldsThatWouldBreakTheColumnLayout() {
-        String csv = TimeReportExport.csv(report("A;B"), "Mi tablero", ES);
+        String csv = TimeReportExport.csv(report(), "Mi;tablero", ES);
 
-        assertThat(csv).contains("\"A;B\";1;1:30;90\n");
+        assertThat(csv).contains("Informe de tiempo;Tablero;\"Mi;tablero\"\n");
     }
 
     @Test
-    void textStartsWithTheTitleAndListsBothTables() {
-        String text = TimeReportExport.text(report("Dev"), "Mi tablero", ES, Locale.of("es"));
+    void textStartsWithTheTitleAndListsTheWeeks() {
+        String text = TimeReportExport.text(report(), "Mi tablero", ES, Locale.of("es"));
 
         assertThat(text.lines().findFirst()).hasValue("Informe de tiempo — Mi tablero");
         assertThat(text).contains("Total: 2:00 (120 Minutos)");
-        assertThat(text).contains("Tiempo por proceso");
-        assertThat(text).contains("Dev — 1:30 (1 Tarjetas)");
-        assertThat(text).contains("Sin proceso — 0:30");
         assertThat(text).contains("Tiempo por semana");
     }
 

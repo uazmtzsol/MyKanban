@@ -13,7 +13,6 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.SplitPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.layout.BorderPane;
@@ -32,7 +31,7 @@ import java.time.ZoneId;
 
 /**
  * Non-modal time report window (session 14, B1): how much tracked time went
- * into each process and each week of the board on screen, with CSV and PDF
+ * into each week of the board on screen, with CSV and PDF
  * export. One shared window per app, like the shortcuts reference.
  *
  * <p>All the numbers come from {@link TimeReport}; this class only draws them
@@ -60,7 +59,6 @@ final class TimeReportWindow {
 
     private final Label subtitle = new Label();
     private final ComboBox<Range> rangePicker = new ComboBox<>();
-    private final TableView<TimeReport.ProcessRow> processTable = new TableView<>();
     private final TableView<TimeReport.WeekRow> weekTable = new TableView<>();
     private final Label totalLabel = new Label();
 
@@ -122,12 +120,9 @@ final class TimeReportWindow {
         header.setPadding(new Insets(10));
         header.getStyleClass().add("toolbar");
 
-        buildProcessTable();
         buildWeekTable();
 
-        SplitPane tables = new SplitPane(section("report.by.process", processTable),
-                section("report.by.week", weekTable));
-        tables.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        VBox tables = section("report.by.week", weekTable);
 
         totalLabel.getStyleClass().add("detail-title");
         HBox footer = new HBox(totalLabel);
@@ -153,32 +148,6 @@ final class TimeReportWindow {
         box.setPadding(new Insets(8));
         VBox.setVgrow(table, Priority.ALWAYS);
         return box;
-    }
-
-    private void buildProcessTable() {
-        TableColumn<TimeReport.ProcessRow, String> process = new TableColumn<>(
-                i18n.text("report.col.process"));
-        process.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
-                TimeReportExport.processName(cell.getValue(), i18n)));
-        process.setPrefWidth(240);
-        TableColumn<TimeReport.ProcessRow, String> cards = new TableColumn<>(
-                i18n.text("report.col.cards"));
-        cards.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
-                String.valueOf(cell.getValue().cardCount())));
-        cards.setPrefWidth(90);
-        TableColumn<TimeReport.ProcessRow, String> hours = new TableColumn<>(
-                i18n.text("report.col.hours"));
-        hours.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
-                TimeReportExport.hours(cell.getValue().millis())));
-        hours.setPrefWidth(100);
-        TableColumn<TimeReport.ProcessRow, String> minutes = new TableColumn<>(
-                i18n.text("report.col.minutes"));
-        minutes.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
-                TimeReportExport.minutes(cell.getValue().millis())));
-        minutes.setPrefWidth(100);
-        processTable.getColumns().setAll(java.util.List.of(process, cards, hours, minutes));
-        processTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        processTable.setPlaceholder(new Label(i18n.text("report.empty")));
     }
 
     private void buildWeekTable() {
@@ -209,7 +178,6 @@ final class TimeReportWindow {
         subtitle.setText(i18n.text("report.title") + " — " + boardName);
         report = TimeReport.of(service.board(), Instant.now(), ZoneId.systemDefault(),
                 selected.weeks());
-        processTable.setItems(FXCollections.observableArrayList(report.byProcess()));
         weekTable.setItems(FXCollections.observableArrayList(report.byWeek()));
         totalLabel.setText(report.isEmpty()
                 ? i18n.text("report.empty")

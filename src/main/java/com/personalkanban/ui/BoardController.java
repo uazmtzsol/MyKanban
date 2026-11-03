@@ -88,7 +88,7 @@ public final class BoardController {
 
     /**
      * All card ids visible in the active board under the current filters:
-     * process, label text/mode and quick flags, exactly what the columns
+     * label text/mode, quick flags and due scope, exactly what the columns
      * render — otherwise the arrow keys would stop on hidden cards.
      */
     private List<CardId> visibleCardIds() {
@@ -105,7 +105,7 @@ public final class BoardController {
         List<List<CardId>> columns = new ArrayList<>();
         for (BoardColumn column : service.board().columns()) {
             columns.add(column.cards().stream()
-                    .filter(this::matchesProcessFilter)
+                    .filter(this::matchesVisibilityGate)
                     .filter(this::matchesDueFilter)
                     .filter(labelFilter::matches)
                     .filter(quickFilter::matches)
@@ -125,15 +125,8 @@ public final class BoardController {
 
     private HBox columnsRow;
     private ScrollPane boardScroller;
-    // View mode: kanban (columns) or processes (one row per process).
-    private boolean processView;
-    // The card the arrow keys move around in the processes view.
-    // Survives the rebuilds refresh() performs, so the keyboard
-    // workflow keeps working after a link changes.
-    private CardId processFocusId;
     private Menu boardMenu;
     private Menu databaseMenu;
-    private Menu processMenu;
     private Menu viewMenu;
     private Menu labelsMenu;
     private Menu helpMenu;
@@ -241,17 +234,6 @@ public final class BoardController {
 
     // Card view preferences of the active board (UI preference, per board).
     private CardViewSettings cardViewSettings = new CardViewSettings();
-
-    // Process filter of the active board: null = no specific process
-    // (either every card is shown, or — with processFilterNone — only
-    // the cards that belong to no process at all).
-    private com.personalkanban.domain.board.ProcessId activeProcessFilter;
-
-    // "None" process filter: true = only cards outside every process.
-    private boolean processFilterNone;
-
-    // The process filter combo of the filter bar (rebuilt on rebuilds).
-    private ComboBox<String> processFilterCombo;
 
     // Session 10 (board cleanup): archived cards (LABEL_ARCHIVED) stay in
     // the database but are hidden until this toggle says otherwise.
@@ -375,10 +357,6 @@ public final class BoardController {
         // is cheap reassurance even though every change is already committed.
         scene.getAccelerators().put(javafx.scene.input.KeyCombination.valueOf("Shortcut+S"),
                 this::onSaveNow);
-        // Process filter: focus and open the filter combo, like Ctrl+F
-        // does for the label filter.
-        scene.getAccelerators().put(keyComboFor(GlobalShortcuts.Action.PROCESS_FILTER),
-                this::onFocusProcessFilter);
         // Session 10 (user request): the whole card keyboard map runs as a
         // scene-level event FILTER instead of accelerators. A filter fires
         // before the focused control gets the event, so the keys work no
@@ -475,21 +453,6 @@ public final class BoardController {
         boolean alt = event.isAltDown();
         boolean ctrl = event.isShortcutDown();
         boolean plain = !alt && !ctrl && !event.isShiftDown() && !event.isMetaDown();
-
-        if (processView) {
-            // Arrows, Delete and modifiers belong to the diagram here.
-            if (matches(GlobalShortcuts.Action.EXIT, event)) {
-                onClearProcessFocus();
-                event.consume();
-            } else if (matches(GlobalShortcuts.Action.EDIT_CARD, event)) {
-                CardId target = processFocusId != null ? processFocusId : cardFocused;
-                if (target != null) {
-                    onEditCard(target);
-                    event.consume();
-                }
-            }
-            return;
-        }
 
         if (!inTextEntryContext()) {
             if (alt && !ctrl && !event.isMetaDown()) {
@@ -777,10 +740,25 @@ public final class BoardController {
 
     private Optional<Node> findKanbanCardNode(CardId id) {
         Node content = boardScroller.getContent();
-        if (content == null || processView) {
+        if (content == null) {
             return Optional.empty();
         }
         return findNodeWithData(content, id);
+    }
+
+    private Optional<Node> findNodeWithData(Node node, Object data) {
+        if (data.equals(node.getUserData())) {
+            return Optional.of(node);
+        }
+        if (node instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                Optional<Node> found = findNodeWithData(child, data);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private void onFocusFilter() {
@@ -789,13 +767,6 @@ public final class BoardController {
         }
     }
 
-    /** Focuses the process filter combo and opens it (Ctrl+P). */
-    private void onFocusProcessFilter() {
-        if (processFilterCombo != null) {
-            processFilterCombo.requestFocus();
-            processFilterCombo.show();
-        }
-    }
 
     // ------------------------------------------------------------------
     // Full UI construction (also used to apply a new language/theme state)
@@ -865,9 +836,6 @@ public final class BoardController {
         // User request N-3: no «add column» button here any more — the action
         // lives in the Boards menu and in each column's own menu (add to the
         // left / to the right), which is where the user was looking for it.
-        Button viewToggle = toolButton("\u21C4", "toolbar.view.toggle");
-        viewToggle.setOnAction(e -> onToggleView());
-
         Button undoButton = toolButton("\u21B6", "toolbar.undo");
         undoButton.disableProperty().bind(undoRedo.canUndoProperty().not());
         undoButton.setOnAction(e -> undoRedo.undo());
@@ -921,7 +889,7 @@ public final class BoardController {
         // (onBoardKeyPressed): arrows, Alt+arrows, Ctrl+arrows, digits,
         // Enter, Alt+I/U and Delete.
 
-        HBox toolbar = new HBox(8, brand, boardNameLabel, viewToggle,
+        HBox toolbar = new HBox(8, brand, boardNameLabel,
                 undoButton, redoButton, save, search, darkMode, exportPdf, archive, cardViewMenu,
                 spacer);
         toolbar.setAlignment(Pos.CENTER_LEFT);
@@ -994,49 +962,6 @@ public final class BoardController {
         javafx.scene.control.ToggleButton dueWeekFilter = dueScopeButton(
                 "\uD83D\uDDD3", "filter.due.week", DueDigest.Scope.WEEK);
 
-        // Process filter: "All" and "None" are explicit entries, so the
-        // filter is a real tri-state — a chosen process can be undone again
-        // and the cards that belong to no process at all can be shown
-        // (user request). Every entry is reachable by keyboard.
-        ComboBox<String> processFilter = new ComboBox<>();
-        processFilterCombo = processFilter;
-        processFilter.setPrefWidth(150);
-        processFilter.setTooltip(new Tooltip(i18n.text("filter.process.tooltip")));
-        var processes = service.processes();
-        // A filter chosen on another board must not linger invisibly here.
-        if (activeProcessFilter != null && processes.stream()
-                .noneMatch(process -> process.id().equals(activeProcessFilter))) {
-            activeProcessFilter = null;
-            processFilterNone = false;
-        }
-        processFilter.getItems().add(i18n.text("filter.process.all"));
-        processFilter.getItems().add(i18n.text("filter.process.none"));
-        for (var process : processes) {
-            processFilter.getItems().add(process.name());
-        }
-        if (activeProcessFilter != null) {
-            processes.stream()
-                    .filter(process -> process.id().equals(activeProcessFilter))
-                    .findFirst()
-                    .ifPresent(process -> processFilter.setValue(process.name()));
-        } else {
-            processFilter.setValue(i18n.text(
-                    processFilterNone ? "filter.process.none" : "filter.process.all"));
-        }
-        processFilter.setOnAction(e -> {
-            String selected = processFilter.getValue();
-            if (selected == null || selected.equals(i18n.text("filter.process.all"))) {
-                onFilterProcessAll();
-            } else if (selected.equals(i18n.text("filter.process.none"))) {
-                onFilterProcessNone();
-            } else {
-                processes.stream()
-                        .filter(process -> process.name().equals(selected))
-                        .findFirst()
-                        .ifPresent(process -> onFilterProcess(process.id()));
-            }
-        });
-
         // Archived cards are hidden by default (session 10); this toggle
         // brings them back without touching any data.
         ToggleButton archivedFilter = new ToggleButton("\uD83D\uDDC4");
@@ -1058,7 +983,7 @@ public final class BoardController {
 
         HBox bar = new HBox(8, filterLabel, labelFilterField, labelFilterMode, clearFilter,
                 importantFilter, urgentFilter, overdueFilter, dueTodayFilter, dueWeekFilter,
-                processFilter, archivedFilter, completedFilter);
+                archivedFilter, completedFilter);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().addAll("toolbar", "filter-bar");
         bar.setPadding(new Insets(6, 10, 6, 10));
@@ -1066,17 +991,15 @@ public final class BoardController {
     }
 
     /**
-     * Clears every filter of the bar — label text and mode, process choice and
-     * the quick flags ★/! — and refreshes. Returns true when something was
-     * actually filtered out, so the callers that rebuild the whole scene
-     * (opening a search hit, session 14 B2) only pay for a rebuild when the
-     * visible cards really changed.
+     * Clears every filter of the bar — label text and mode, archived/finished
+     * toggles and the due scope and the quick flags ★/! — and refreshes.
+     * Returns true when something was actually filtered out, so the callers
+     * that rebuild the whole scene (opening a search hit, session 14 B2) only
+     * pay for a rebuild when the visible cards really changed.
      */
     private boolean clearFilters() {
         boolean changed = !activeFilterLabels.isBlank()
                 || activeFilterMode != null
-                || activeProcessFilter != null
-                || processFilterNone
                 || dueScope != null
                 || !quickFlagFilters.isEmpty();
         labelFilterField.clear();
@@ -1084,14 +1007,9 @@ public final class BoardController {
         labelFilterField.setDisable(false);
         activeFilterLabels = "";
         activeFilterMode = null;
-        activeProcessFilter = null;
-        processFilterNone = false;
         dueScope = null;
         syncDueButtons();
         quickFlagFilters.clear();
-        if (processFilterCombo != null) {
-            processFilterCombo.setValue(i18n.text("filter.process.all"));
-        }
         refresh();
         return changed;
     }
@@ -1240,13 +1158,6 @@ public final class BoardController {
             Button colorButton = toolButton("\uD83C\uDFA8", "bulk.color");
             colorButton.setOnAction(e -> onBulkColor());
 
-            // The ⬫ glyph alone is not recognizable, so the
-            // process action also carries a text label — bulk
-            // actions must be discoverable without hovering.
-            Button processButton = toolButton("\u26AD", "bulk.process");
-            processButton.setText("\u26AD " + i18n.text("card.process.label"));
-            processButton.setOnAction(e -> onBulkProcess());
-
             Button moveButton = toolButton("\u27A1", "bulk.move");
             moveButton.setOnAction(e -> onBulkMove());
 
@@ -1258,7 +1169,7 @@ public final class BoardController {
             Region spacer = new Region();
             HBox.setHgrow(spacer, Priority.ALWAYS);
             selectionBar.getChildren().setAll(
-                    exit, labelButton, colorButton, processButton, moveButton, removeButton,
+                    exit, labelButton, colorButton, moveButton, removeButton,
                     spacer, count);
         } else {
             selectionBar.getChildren().setAll();
@@ -1393,23 +1304,6 @@ public final class BoardController {
                 .map(c -> {
                     guarded(() -> {
                         service.recolorCards(ids, c);
-                        exitSelectionMode();
-                    });
-                    return true;
-                }).orElse(false)) {
-            return;
-        }
-    }
-
-    private void onBulkProcess() {
-        List<CardId> ids = List.copyOf(selectedCards);
-        // "Ninguno" (null) takes the cards out of their process
-        // without touching their arrow relations — bulk actions
-        // must never destroy links silently.
-        if (dialogs.bulkProcessDialog(ids.size(), service.processes())
-                .map(f -> {
-                    guarded(() -> {
-                        service.assignProcessToCards(ids, f.processId());
                         exitSelectionMode();
                     });
                     return true;
@@ -1598,16 +1492,14 @@ public final class BoardController {
         cardsMenu = new Menu(i18n.text("menu.cards"));
         cardsMenu.setOnShowing(e -> rebuildCardsMenu());
         rebuildCardsMenu();
-        processMenu = new Menu(i18n.text("menu.processes"));
-        rebuildProcessMenu();
         // Global labels: the vocabulary is shared by every board, so its
-        // manager gets its own menu (between Processes and Language).
+        // manager gets its own menu.
         labelsMenu = new Menu(i18n.text("menu.labels"));
         rebuildLabelsMenu();
         helpMenu = new Menu(i18n.text("menu.help"));
         rebuildHelpMenu();
         return new MenuBar(databaseMenu, editMenu, boardMenu, viewMenu, cardsMenu,
-                processMenu, labelsMenu, languageMenu, helpMenu);
+                labelsMenu, languageMenu, helpMenu);
     }
 
     /**
@@ -1931,44 +1823,6 @@ public final class BoardController {
         new ConflictReviewDialog(null, i18n, dataDirectory, entries).showAndWait();
     }
 
-    /** Rebuilds the process management menu (creation order, like boards). */
-    private void rebuildProcessMenu() {
-        if (processMenu == null) {
-            return;
-        }
-        processMenu.getItems().setAll(
-                itemOf("process.new", this::onNewProcess));
-        // Process filter (user request): reachable from the menu — and
-        // therefore from the keyboard (Alt opens the menu bar) — with the
-        // two special states on accelerators. The active filter is marked
-        // like the active board in the boards menu.
-        MenuItem filterHeader = new MenuItem(i18n.text("menu.process.filter"));
-        filterHeader.setDisable(true);
-        MenuItem allProcesses = new MenuItem(
-                (activeProcessFilter == null && !processFilterNone ? "\u25CF " : "\u25CB ")
-                        + i18n.text("filter.process.all"));
-        allProcesses.setAccelerator(
-                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+P"));
-        allProcesses.setOnAction(e -> onFilterProcessAll());
-        MenuItem noProcess = new MenuItem(
-                (processFilterNone ? "\u25CF " : "\u25CB ") + i18n.text("filter.process.none"));
-        noProcess.setAccelerator(
-                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+N"));
-        noProcess.setOnAction(e -> onFilterProcessNone());
-        processMenu.getItems().addAll(filterHeader, allProcesses, noProcess,
-                new SeparatorMenuItem());
-        for (com.personalkanban.domain.board.Process process : service.processes()) {
-            boolean filtered = activeProcessFilter != null
-                    && activeProcessFilter.equals(process.id());
-            MenuItem pick = new MenuItem((filtered ? "\u25CF " : "\u25CB ") + process.name());
-            pick.setOnAction(e -> onFilterProcess(process.id()));
-            MenuItem rename = itemOf("process.rename", () -> onRenameProcess(process.id()));
-            MenuItem delete = itemOf("process.delete", () -> onDeleteProcess(process.id()));
-            processMenu.getItems().addAll(new SeparatorMenuItem(),
-                    pick, rename, delete);
-        }
-    }
-
     /**
      * "Ver" menu (session 13, user request): the two view modes with their own
      * accelerator, so the mode can be chosen with the keyboard — either the
@@ -1984,17 +1838,6 @@ public final class BoardController {
         if (viewMenu == null) {
             return;
         }
-        RadioMenuItem boardView = new RadioMenuItem(i18n.text("view.board"));
-        boardView.setUserData(Boolean.FALSE);
-        boardView.setAccelerator(
-                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+1"));
-        boardView.setOnAction(e -> onSelectView(false));
-        RadioMenuItem processViewItem = new RadioMenuItem(i18n.text("view.processes"));
-        processViewItem.setUserData(Boolean.TRUE);
-        processViewItem.setAccelerator(
-                javafx.scene.input.KeyCombination.valueOf("Shortcut+Shift+2"));
-        processViewItem.setOnAction(e -> onSelectView(true));
-
         cardViewMenu = new Menu(i18n.text("menu.cardview"));
         for (CardViewSettings.Mode mode : CardViewSettings.Mode.values()) {
             RadioMenuItem item = new RadioMenuItem(i18n.text(cardViewTextKey(mode)));
@@ -2013,8 +1856,7 @@ public final class BoardController {
         // Session 14 (user request B1): the time report is a way of LOOKING at
         // the board, so it lives in the "Ver" menu next to the view modes —
         // no new top-level menu for a single entry.
-        viewMenu.getItems().setAll(boardView, processViewItem,
-                new SeparatorMenuItem(),
+        viewMenu.getItems().setAll(
                 cardViewMenu,
                 new SeparatorMenuItem(),
                 archivedViewItem,
@@ -2031,12 +1873,6 @@ public final class BoardController {
     private void syncViewMenu() {
         if (viewMenu == null) {
             return;
-        }
-        for (MenuItem item : viewMenu.getItems()) {
-            if (item instanceof RadioMenuItem radio
-                    && radio.getUserData() instanceof Boolean wantsProcesses) {
-                radio.setSelected(wantsProcesses == processView);
-            }
         }
         if (cardViewMenu != null) {
             for (MenuItem item : cardViewMenu.getItems()) {
@@ -2732,61 +2568,11 @@ public final class BoardController {
         refresh();
     }
 
-    // ------------------------------------------------------------------
-    // Intents: processes (session 4.6, menu + filter)
-    // ------------------------------------------------------------------
-
-    private void onNewProcess() {
-        dialogs.promptText(i18n.text("process.new"), "").ifPresent(name ->
-                guarded(() -> {
-                    if (name == null || name.isBlank()) {
-                        dialogs.info(i18n.text("process.name.required"));
-                        return;
-                    }
-                    service.addProcess(name);
-                    refresh(); // rebuilds the process menu too
-                }));
-    }
-
-    private void onRenameProcess(com.personalkanban.domain.board.ProcessId processId) {
-        var process = service.processes().stream()
-                .filter(p -> p.id().equals(processId))
-                .findFirst();
-        if (process.isEmpty()) {
-            return;
-        }
-        dialogs.promptText(i18n.text("process.rename"), process.get().name()).ifPresent(name ->
-                guarded(() -> {
-                    service.renameProcess(processId, name);
-                    refresh();
-                }));
-    }
-
-    private void onDeleteProcess(com.personalkanban.domain.board.ProcessId processId) {
-        if (dialogs.confirm(i18n.text("process.delete.confirm"))) {
-            if (activeProcessFilter != null && activeProcessFilter.equals(processId)) {
-                activeProcessFilter = null; // filter would dangle
-                processFilterNone = false;
-            }
-            guarded(() -> {
-                service.removeProcess(processId);
-                refresh();
-            });
-        }
-    }
-
-    /** Package-visible lookup for the card dialog's process combo. */
-    List<com.personalkanban.domain.board.Process> currentProcesses() {
-        return service.processes();
-    }
-
-    /** The process the cards are currently filtered by (null = all). */
-    com.personalkanban.domain.board.ProcessId activeProcessFilter() {
-        return activeProcessFilter;
-    }
-
-    /** True when the card passes the active process filter (null = all pass). */
-    boolean matchesProcessFilter(com.personalkanban.domain.board.Card card) {
+    /**
+     * True when the card passes the archived/finished gates — the two
+     * visibility conditions every view shares.
+     */
+    boolean matchesVisibilityGate(com.personalkanban.domain.board.Card card) {
         // Session 10 (board cleanup): every filter chain (rendering AND the
         // keyboard navigator) passes through here, so hiding archived cards
         // in this one place keeps views, counts and navigation consistent.
@@ -2797,19 +2583,13 @@ public final class BoardController {
         // T24 · B11: finished cards are hidden with the same single-gate
         // trick — one condition keeps columns, navigator, counts and search
         // consistent, and "Mostrar terminadas" restores them everywhere.
-        if (!showCompleted && card.isDone()) {
-            return false;
-        }
-        if (activeProcessFilter != null) {
-            return activeProcessFilter.equals(card.processId());
-        }
-        return !processFilterNone || card.processId() == null;
+        return showCompleted || !card.isDone();
     }
 
     /**
      * True when the card passes the active due-date filter (null = all pass).
      * Package-visible because the column renderer applies it too, next to
-     * {@link #matchesProcessFilter(com.personalkanban.domain.board.Card)}: one
+     * {@link #matchesVisibilityGate(com.personalkanban.domain.board.Card)}: one
      * gate for both the drawn cards and the keyboard navigator.
      */
     boolean matchesDueFilter(com.personalkanban.domain.board.Card card) {
@@ -2818,16 +2598,13 @@ public final class BoardController {
 
     /**
      * The full board gate chain in one place (T24 · B2): label filter, quick
-     * flags, process/archived/finished and due scope — exactly what
-     * {@link ColumnViewBuilder} applies per card. The processes view used to
-     * draw {@code cardsOfProcess(...)} unfiltered, so archived (and now
-     * finished) cards reappeared there and its card set drifted from the
-     * board's; both views now answer "is this card visible?" here.
+     * flags, archived/finished and due scope — exactly what
+     * {@link ColumnViewBuilder} applies per card.
      */
     boolean matchesVisibleFilters(com.personalkanban.domain.board.Card card) {
         return currentLabelFilter().matches(card)
                 && currentQuickFlagFilter().matches(card)
-                && matchesProcessFilter(card)
+                && matchesVisibilityGate(card)
                 && matchesDueFilter(card);
     }
 
@@ -2918,7 +2695,7 @@ public final class BoardController {
         List<com.personalkanban.domain.board.Card> candidates = new ArrayList<>();
         for (BoardColumn column : service.board().columns()) {
             for (com.personalkanban.domain.board.Card card : column.cards()) {
-                if (matchesProcessFilter(card) && matchesDueFilter(card)
+                if (matchesVisibilityGate(card) && matchesDueFilter(card)
                         && labelFilter.matches(card) && quickFilter.matches(card)) {
                     candidates.add(card);
                 }
@@ -3132,41 +2909,6 @@ public final class BoardController {
         });
     }
 
-    /**
-     * T9 · N-5 (user request): assigns <b>one</b> card to a process straight
-     * from its own menu, without entering selection mode. A null process means
-     * «Sin proceso» (the card leaves its process without losing its arrow
-     * relations — exactly like the bulk bar). One undoable step.
-     */
-    public void onAssignProcessToCard(com.personalkanban.domain.board.CardId cardId,
-                                      com.personalkanban.domain.board.ProcessId processId) {
-        guarded(() -> {
-            service.assignProcessToCards(List.of(cardId), processId);
-            refresh();
-        });
-    }
-
-    /** Process filter intent: every card is visible again (no filter). */
-    void onFilterProcessAll() {
-        activeProcessFilter = null;
-        processFilterNone = false;
-        refresh();
-    }
-
-    /** Process filter intent: only the cards outside every process. */
-    void onFilterProcessNone() {
-        activeProcessFilter = null;
-        processFilterNone = true;
-        refresh();
-    }
-
-    /** Process filter intent: only the cards of the given process. */
-    void onFilterProcess(com.personalkanban.domain.board.ProcessId processId) {
-        activeProcessFilter = processId;
-        processFilterNone = false;
-        refresh();
-    }
-
     /** Direct predecessors of a card, for the card-front badges. */
     int predecessorCountOf(com.personalkanban.domain.board.CardId cardId) {
         return service.board().incomingPredecessorsOf(cardId).size();
@@ -3326,202 +3068,6 @@ public final class BoardController {
     }
 
     // ------------------------------------------------------------------
-    // Intents: process view (session 6)
-    // ------------------------------------------------------------------
-
-    /**
-     * Arrow between two cards in a process row: links them, or — when they are
-     * already linked — <b>asks first</b>.
-     *
-     * <p>T12 · N-8 (user report: «se borran las relaciones al hacer clic en una
-     * flecha»): the connector of an existing link carried a 16 px invisible
-     * click target and a single plain click removed the relation, which broke
-     * the closed rule «destructive actions away from a stray click». Linking a
-     * suggested (dotted) connector is not destructive and still costs one
-     * click; removing one now needs the confirmation, like every other
-     * destructive action of the app. The keyboard path (Ctrl+Shift+←/→) is an
-     * explicit gesture and keeps its single step.</p>
-     */
-    public void onArrangeArrow(com.personalkanban.domain.board.CardId from,
-                               com.personalkanban.domain.board.CardId to) {
-        if (service.board().hasLink(from, to)) {
-            if (!dialogs.confirm(i18n.text("process.unlink.confirm", arrowPairLabel(from, to)))) {
-                return;
-            }
-            guarded(() -> {
-                service.unlinkCards(from, to);
-                refresh();
-            });
-            return;
-        }
-        guarded(() -> {
-            service.linkCards(from, to);
-            refresh();
-        });
-    }
-
-    /** ««A» → «B»» for the unlink confirmation (ids when a card is gone). */
-    private String arrowPairLabel(com.personalkanban.domain.board.CardId from,
-                                  com.personalkanban.domain.board.CardId to) {
-        return "\u00AB" + cardTitleOrId(from) + "\u00BB \u2192 \u00AB" + cardTitleOrId(to) + "\u00BB";
-    }
-
-    private String cardTitleOrId(com.personalkanban.domain.board.CardId cardId) {
-        return service.board().findCard(cardId)
-                .map(com.personalkanban.domain.board.Card::title)
-                .orElse(cardId.value());
-    }
-
-    /** Top arrows: adds a NEW card as predecessor/successor of the anchor. */
-    public void onProcessAddNewRelation(com.personalkanban.domain.board.CardId anchor,
-                                        boolean asPredecessor) {
-        service.board().findCard(anchor).ifPresent(anchorCard -> {
-            // N-7: creating from the green arrow asks for a title (and lets
-            // the user set a due date) instead of inserting an empty card.
-            // The process is preselected from the anchor and the anchor is
-            // pre-linked on the proper side of the relation lists.
-            List<CardId> predecessors;
-            List<CardId> successors;
-            if (asPredecessor) {
-                predecessors = List.of();
-                successors = List.of(anchor);
-            } else {
-                predecessors = List.of(anchor);
-                successors = List.of();
-            }
-            var initial = new Dialogs.CardForm("", "", anchorCard.color(), null,
-                    List.of(), "", List.of(), anchorCard.processId());
-            dialogs.cardDialog(initial, globalLabelVocabulary(), service.processes(),
-                            service.board().allCards(), predecessors, successors)
-                    .ifPresent(f -> guarded(() -> {
-                        var created = service.addCard(anchorCard.columnId(), f.title(),
-                                f.description(), f.color(), f.dueDate(), f.labels(),
-                                f.notes(), null, f.processId());
-                        if (!f.checklistLines().isEmpty()) {
-                            service.setChecklistFromLines(created, f.checklistLines());
-                        }
-                        for (var predecessor : f.predecessors()) {
-                            service.linkCards(predecessor, created);
-                        }
-                        for (var successor : f.successors()) {
-                            service.linkCards(created, successor);
-                        }
-                        refresh();
-                        onOpenCardDetail(created);
-                    }));
-        });
-    }
-
-    /** Bottom arrows: links an EXISTING card as predecessor/successor. */
-    public void onProcessLinkExisting(com.personalkanban.domain.board.CardId anchor,
-                                      boolean asPredecessor) {
-        List<com.personalkanban.domain.board.Card> others = linkCandidatesFor(anchor);
-        dialogs.chooseCard(others, i18n.text(asPredecessor
-                        ? "process.link.predecessor.header" : "process.link.successor.header"))
-                .ifPresent(other -> guarded(() -> {
-                    if (asPredecessor) {
-                        service.linkCards(other.id(), anchor);
-                    } else {
-                        service.linkCards(anchor, other.id());
-                    }
-                    refresh();
-                }));
-    }
-
-    /**
-     * N-9: the cards offered when linking from a process card — only the
-     * members of the anchor's own process (excluding the anchor itself), so a
-     * chain stays self-contained. Falls back to every card when the anchor has
-     * no process; an unknown anchor yields no candidates.
-     */
-    List<com.personalkanban.domain.board.Card> linkCandidatesFor(CardId anchor) {
-        return service.board().findCard(anchor)
-                .map(anchorCard -> {
-                    var anchorProcess = anchorCard.processId();
-                    return service.board().allCards().stream()
-                            .filter(card -> !card.id().equals(anchor))
-                            .filter(card -> anchorProcess == null
-                                    || anchorProcess.equals(card.processId()))
-                            .toList();
-                })
-                .orElseGet(List::of);
-    }
-
-    /** The card with keyboard focus in the processes view, or null. */
-    public CardId processFocusId() {
-        return processFocusId;
-    }
-
-    /** Keyboard or mouse focus moved onto a card of the processes view. */
-    public void onProcessFocus(CardId id) {
-        processFocusId = id;
-        refreshProcessInspectors();
-    }
-
-    /** Escape in the processes view: drop the card focus. */
-    public void onClearProcessFocus() {
-        processFocusId = null;
-        refreshProcessInspectors();
-    }
-
-    /** Moves keyboard focus to a card of the processes view. */
-    public void focusProcessCard(CardId id) {
-        onProcessFocus(id);
-        findProcessCardNode(id).ifPresent(Node::requestFocus);
-    }
-
-    /** Removes every link of a process-view card, in both directions. */
-    public void onProcessUnlinkAll(CardId id) {
-        var board = service.board();
-        List<CardId> predecessors = new ArrayList<>(board.incomingPredecessorsOf(id));
-        List<CardId> successors = new ArrayList<>(board.outgoingSuccessorsOf(id));
-        int total = predecessors.size() + successors.size();
-        if (total == 0) {
-            dialogs.info(i18n.text("process.unlink.none"));
-            return;
-        }
-        if (!dialogs.confirm(i18n.text("process.unlink.all.confirm",
-                total, board.titleOf(id)))) {
-            return;
-        }
-        guarded(() -> {
-            for (CardId predecessor : predecessors) {
-                service.unlinkCards(predecessor, id);
-            }
-            for (CardId successor : successors) {
-                service.unlinkCards(id, successor);
-            }
-            refresh();
-        });
-    }
-
-    /** Suggested order of a process: dialog with the topological order. */
-    public void onShowSuggestedOrder(com.personalkanban.domain.board.ProcessId processId) {
-        var board = service.board();
-        var members = board.cardsOfProcess(processId);
-        if (members.isEmpty()) {
-            dialogs.info(i18n.text("process.order.empty"));
-            return;
-        }
-        List<com.personalkanban.domain.board.CardId> ids =
-                members.stream().map(com.personalkanban.domain.board.Card::id).toList();
-        var result = service.suggestedOrder(ids);
-        if (!result.cycleRemaining().isEmpty()) {
-            dialogs.info(i18n.text("process.order.cycle",
-                    result.cycleRemaining().size(),
-                    result.cycleRemaining().stream()
-                            .map(board::titleOf).collect(java.util.stream.Collectors.joining(", "))));
-        }
-        StringBuilder text = new StringBuilder();
-        int position = 1;
-        for (com.personalkanban.domain.board.CardId cardId : result.ordered()) {
-            text.append(position++).append("). ")
-                    .append(board.titleOf(cardId)).append('\n');
-        }
-        dialogs.info(i18n.text("process.order.title") + "\n\n" + text.toString().strip());
-    }
-
-    // ------------------------------------------------------------------
     // Intents: columns & cards (invoked by the view builders)
     // ------------------------------------------------------------------
 
@@ -3590,11 +3136,11 @@ public final class BoardController {
     private void onAddCardFull(com.personalkanban.domain.board.ColumnId columnId,
                                Dialogs.CardForm initial) {
         Optional<Dialogs.CardForm> form = dialogs.cardDialog(
-                initial, globalLabelVocabulary(), service.processes(),
+                initial, globalLabelVocabulary(),
                 service.board().allCards(), List.of(), List.of());
         form.ifPresent(f -> guarded(() -> {
             var created = service.addCard(columnId, f.title(), f.description(), f.color(),
-                    f.dueDate(), f.labels(), f.notes(), null, f.processId());
+                    f.dueDate(), f.labels(), f.notes(), null, null);
             if (!f.checklistLines().isEmpty()) {
                 service.setChecklistFromLines(created, f.checklistLines());
             }
@@ -3615,15 +3161,14 @@ public final class BoardController {
                     .toList();
             String oldNotes = card.notes();
             List<String> oldLines = List.copyOf(checklistLines);
-            var oldProcessId = card.processId();
             var oldPredecessors = List.copyOf(service.board().incomingPredecessorsOf(cardId));
             var oldSuccessors = List.copyOf(service.board().outgoingSuccessorsOf(cardId));
             var otherCards = service.board().allCards().stream()
                     .filter(other -> !other.id().equals(cardId)).toList();
             var initial = new Dialogs.CardForm(card.title(), card.description(), card.color(),
                     card.dueDate(), List.copyOf(card.labels()), card.notes(),
-                    checklistLines, card.processId());
-            dialogs.cardDialog(initial, globalLabelVocabulary(), service.processes(),
+                    checklistLines);
+            dialogs.cardDialog(initial, globalLabelVocabulary(),
                     otherCards, oldPredecessors, oldSuccessors)
                     .ifPresent(f -> guarded(() -> {
                         service.editCard(cardId, f.title(), f.description(), f.color(),
@@ -3635,17 +3180,6 @@ public final class BoardController {
                         }
                         if (!f.checklistLines().equals(oldLines)) {
                             service.setChecklistFromLines(cardId, f.checklistLines());
-                        }
-                        if (!java.util.Objects.equals(f.processId(), oldProcessId)) {
-                            if (f.processId() == null) {
-                                // "Ninguno": leaves the process AND
-                                // drops every arrow that touches this
-                                // card (TarjA→TarjX→TarjB becomes
-                                // TarjA … TarjB, unrelated).
-                                service.unassignCardFromProcess(cardId);
-                            } else {
-                                service.assignCardToProcess(cardId, f.processId());
-                            }
                         }
                         diffLinks(cardId, oldPredecessors, f.predecessors(), true);
                         diffLinks(cardId, oldSuccessors, f.successors(), false);
@@ -4037,62 +3571,6 @@ public final class BoardController {
         }
     }
 
-    /** Re-renders the relation inspector pinned to the bottom of the processes view. */
-    private void refreshProcessInspectors() {
-        com.personalkanban.domain.board.Card focused = processFocusId == null
-                ? null
-                : service.board().findCard(processFocusId).orElse(null);
-        if (focused == null) {
-            processFocusId = null;
-        }
-        forEachInspector(box ->
-                ProcessViewBuilder.renderInspector(box, service, i18n, this, focused));
-    }
-
-    /** Applies an update to the single relation inspector of the processes view. */
-    private void forEachInspector(Consumer<VBox> action) {
-        if (!processView) {
-            return;
-        }
-        Node content = boardScroller.getContent();
-        if (content instanceof Parent parent) {
-            collectInspectors(parent, action);
-        }
-    }
-
-    /** Recursively feeds every process-row inspector to the action. */
-    private void collectInspectors(Parent parent, Consumer<VBox> action) {
-        for (Node child : parent.getChildrenUnmodifiable()) {
-            if (child instanceof VBox box
-                    && child.getStyleClass().contains("process-inspector")) {
-                action.accept(box);
-            } else if (child instanceof Parent nested) {
-                collectInspectors(nested, action);
-            }
-        }
-    }
-
-    /** The node of a card in the processes view, if it is built. */
-    private Optional<Node> findProcessCardNode(CardId id) {
-        Node content = boardScroller.getContent();
-        return content == null ? Optional.empty() : findNodeWithData(content, id);
-    }
-
-    private Optional<Node> findNodeWithData(Node node, Object data) {
-        if (data.equals(node.getUserData())) {
-            return Optional.of(node);
-        }
-        if (node instanceof Parent parent) {
-            for (Node child : parent.getChildrenUnmodifiable()) {
-                Optional<Node> found = findNodeWithData(child, data);
-                if (found.isPresent()) {
-                    return found;
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
     // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
@@ -4110,14 +3588,10 @@ public final class BoardController {
         columnsRow.getChildren().setAll(
                 ColumnViewBuilder.buildAll(service, i18n, dialogs, this, undoRedo, filter, quickFilter,
                         selectionMode, collapsedColumns, themeManager.isDark(), columnWidths));
-        // The processes view always spans the full window width;
-        // the kanban view keeps content-sized columns.
-        boardScroller.setFitToWidth(processView);
-        boardScroller.setContent(processView
-                ? ProcessViewBuilder.buildAll(service, i18n, this)
-                : columnsRow);
+        // The kanban view keeps content-sized columns.
+        boardScroller.setFitToWidth(false);
+        boardScroller.setContent(columnsRow);
         rebuildBoardMenu(); // keep the active-board marker in sync
-        rebuildProcessMenu();
         syncCardViewMenu();
         syncViewMenu();
         // The "Tarjetas" menu follows the current card (session 16).
@@ -4127,14 +3601,6 @@ public final class BoardController {
         updateDueNotice();
         updateReminderNotice(service.dueReminders(LocalDateTime.now()));
         updateSelectionBarState();
-        // Keep the processes-view keyboard focus across the rebuild.
-        if (processView && processFocusId != null) {
-            if (service.board().findCard(processFocusId).isEmpty()) {
-                processFocusId = null;
-            } else {
-                findProcessCardNode(processFocusId).ifPresent(Node::requestFocus);
-            }
-        }
         // The "current" card must still exist after the rebuild (the card may
         // have been deleted or moved), and the node just built needs the
         // highlight re-painted — a data change rebuilt it from scratch.
@@ -4142,23 +3608,6 @@ public final class BoardController {
             cardFocused = null;
         }
         syncCurrentCardHighlight();
-    }
-
-    /** Switches between the kanban and the processes view. */
-    public void onToggleView() {
-        onSelectView(!processView);
-    }
-
-    /**
-     * Shows the board view (false) or the processes view (true): the toolbar
-     * toggle, the "Ver" menu and its accelerators all land here.
-     */
-    public void onSelectView(boolean processes) {
-        if (processView == processes) {
-            return;
-        }
-        processView = processes;
-        refresh();
     }
 
     private Button toolButton(String glyph, String textKey) {

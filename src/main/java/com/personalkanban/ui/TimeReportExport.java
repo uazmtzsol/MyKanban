@@ -33,11 +33,6 @@ final class TimeReportExport {
         return String.valueOf(Math.max(0, millis) / 60000L);
     }
 
-    /** Name of a process row; {@code null} is the "no process" remainder. */
-    static String processName(TimeReport.ProcessRow row, I18n i18n) {
-        return row.name() == null ? i18n.text("report.no.process") : row.name();
-    }
-
     /** Localized week label with its ISO week number, e.g. {@code "12 oct 2026 (W42)"}. */
     static String weekLabel(LocalDate weekStart, Locale locale) {
         String date = DateTimeFormatter.ofPattern("d MMM yyyy", locale).format(weekStart);
@@ -45,7 +40,7 @@ final class TimeReportExport {
         return date + " (W" + week + ")";
     }
 
-    /** CSV of the whole report: header, per-process table, per-week table. */
+    /** CSV of the whole report: header and per-week table. */
     static String csv(TimeReport report, String boardName, I18n i18n) {
         StringBuilder out = new StringBuilder();
         out.append(field(i18n.text("report.title"))).append(';')
@@ -59,19 +54,6 @@ final class TimeReportExport {
                 .append(hours(report.total())).append(';')
                 .append(minutes(report.total())).append('\n');
         out.append('\n');
-
-        out.append(field(i18n.text("report.col.process"))).append(';')
-                .append(field(i18n.text("report.col.cards"))).append(';')
-                .append(field(i18n.text("report.col.hours"))).append(';')
-                .append(field(i18n.text("report.col.minutes"))).append('\n');
-        for (TimeReport.ProcessRow row : report.byProcess()) {
-            out.append(field(processName(row, i18n))).append(';')
-                    .append(row.cardCount()).append(';')
-                    .append(hours(row.millis())).append(';')
-                    .append(minutes(row.millis())).append('\n');
-        }
-        out.append('\n');
-
         out.append(field(i18n.text("report.col.week"))).append(';')
                 .append(field(i18n.text("report.col.hours"))).append(';')
                 .append(field(i18n.text("report.col.minutes"))).append('\n');
@@ -97,14 +79,6 @@ final class TimeReportExport {
         out.append(i18n.text("report.total")).append(": ")
                 .append(hours(report.total())).append(" (").append(minutes(report.total()))
                 .append(' ').append(i18n.text("report.col.minutes")).append(")\n");
-
-        out.append('\n').append(i18n.text("report.by.process")).append('\n');
-        for (TimeReport.ProcessRow row : report.byProcess()) {
-            out.append("  ").append(processName(row, i18n))
-                    .append(" — ").append(hours(row.millis()))
-                    .append(" (").append(row.cardCount()).append(' ')
-                    .append(i18n.text("report.col.cards")).append(")\n");
-        }
 
         out.append('\n').append(i18n.text("report.by.week")).append('\n');
         for (TimeReport.WeekRow row : report.byWeek()) {

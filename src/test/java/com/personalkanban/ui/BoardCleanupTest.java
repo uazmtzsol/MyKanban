@@ -56,7 +56,7 @@ class BoardCleanupTest {
 
         assertThat(source("ColumnViewBuilder.java"))
                 .as("the renderer decides visibility through that filter")
-                .contains("board.matchesProcessFilter(card)");
+                .contains("board.matchesVisibilityGate(card)");
     }
 
     @Test

@@ -76,7 +76,7 @@ class KeyboardNavigationTest {
         assertThat(source).contains("KeyCode.DELETE");            // delete with confirm
         assertThat(source).contains("KeyCode.I");                 // Alt+I importante
         assertThat(source).contains("KeyCode.U");                 // Alt+U urgente
-        assertThat(source).contains("onEditCard(target)");        // Enter edits
+        assertThat(source).contains("onEditFocusedCard");            // Enter edits
         assertThat(source).contains("digitPosition");
     }
 
@@ -89,14 +89,6 @@ class KeyboardNavigationTest {
         assertThat(source)
                 .as("the field guard must run before the fixed bindings")
                 .contains("if (!inTextEntryContext()) {");
-    }
-
-    @Test
-    void theProcessesViewKeepsItsOwnKeys() throws IOException {
-        String source = controllerSource();
-        assertThat(source)
-                .as("ProcessViewBuilder owns arrows/Delete there; the map must step aside")
-                .contains("if (processView) {");
     }
 
     @Test
