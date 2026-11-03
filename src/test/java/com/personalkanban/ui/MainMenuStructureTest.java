@@ -224,7 +224,6 @@ class MainMenuStructureTest {
             itemByText(cards, "card.transfer.menu");
             itemByText(cards, "card.delete");
             submenuByText(cards, "card.reschedule.menu");
-            submenuByText(cards, "card.process.label");
             return true;
         });
 

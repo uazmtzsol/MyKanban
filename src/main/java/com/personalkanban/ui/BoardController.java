@@ -1663,14 +1663,6 @@ public final class BoardController {
         MenuItem reminders = itemOf("card.reminders.menu", this::onEditFocusedCardReminders);
         reminders.setDisable(!hasCard || card.dueDate() == null);
 
-        Menu process;
-        if (hasCard) {
-            process = CardViewBuilder.processMenu(i18n, this, card);
-        } else {
-            process = new Menu(i18n.text("card.process.label"));
-            process.setDisable(true);
-        }
-
         MenuItem archive = itemOf("card.archive.menu", this::onArchiveFocusedCard);
         MenuItem complete = itemOf(
                 hasCard && card.isDone() ? "card.reopen.menu" : "card.complete.menu",
@@ -1687,7 +1679,7 @@ public final class BoardController {
         cardsMenu.getItems().setAll(
                 open, edit, copy,
                 new SeparatorMenuItem(),
-                schedule, reminders, process,
+                schedule, reminders,
                 new SeparatorMenuItem(),
                 complete, archive, export, transfer,
                 new SeparatorMenuItem(),

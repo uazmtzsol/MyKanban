@@ -145,7 +145,6 @@ final class CardViewBuilder {
         addChecklistProgressIfPresent(i18n, card, view);
         addNotesIndicatorIfPresent(i18n, card, view);
         addAttachmentsIndicatorIfPresent(i18n, attachmentCount, view);
-        addProcessChipIfPresent(board, card, view);
         addRelationBadgesIfPresent(i18n, board, card, view);
         addLabelChipsIfPresent(i18n, board, card, view, dark);
 
@@ -237,10 +236,6 @@ final class CardViewBuilder {
             reminders.setDisable(card.dueDate() == null);
             reminders.setOnAction(e -> board.onEditReminders(card.id()));
             viewMenu.getItems().add(reminders);
-            // T9 · N-5 (user request): the card's process, right here, without
-            // entering selection mode. A radio menu, so the checked entry is the
-            // process the card is in; «Sin proceso» takes it out of it.
-            viewMenu.getItems().add(processMenu(i18n, board, card));
             view.setOnContextMenuRequested(event -> {
                 CardViewSettings.Mode effective = settings.effectiveMode(card.id().value());
                 // Only the "reset override" entry depends on the card having
@@ -268,34 +263,8 @@ final class CardViewBuilder {
      * assigns this single card — the same list and the same labels as the bulk
      * bar, so both routes cannot drift apart.
      */
-    static Menu processMenu(I18n i18n, BoardController board, Card card) {
-        Menu menu = new Menu(i18n.text("card.process.label"));
-        List<com.personalkanban.domain.board.Process> processes = board.currentProcesses();
-
-        javafx.scene.control.RadioMenuItem none = processItem(
-                i18n.text("card.process.none"), card.processId() == null,
-                () -> board.onAssignProcessToCard(card.id(), null));
-        menu.getItems().add(none);
-
-        for (com.personalkanban.domain.board.Process process : processes) {
-            menu.getItems().add(processItem("\u26AD " + process.name(),
-                    process.id().equals(card.processId()),
-                    () -> board.onAssignProcessToCard(card.id(), process.id())));
-        }
-        if (processes.isEmpty()) {
-            none.setDisable(true);
-        }
-        return menu;
-    }
 
     /** Radio entry of the process submenu: label + checked state + action. */
-    private static javafx.scene.control.RadioMenuItem processItem(
-            String label, boolean selected, Runnable action) {
-        javafx.scene.control.RadioMenuItem item = new javafx.scene.control.RadioMenuItem(label);
-        item.setSelected(selected);
-        item.setOnAction(e -> action.run());
-        return item;
-    }
 
     /**
      * The card's reschedule submenu (session 15 · T5/B3): quick dates that
@@ -412,19 +381,6 @@ final class CardViewBuilder {
     }
 
     /** Small chip naming the process the card belongs to (session 4.6). */
-    private static void addProcessChipIfPresent(BoardController board, Card card, VBox view) {
-        if (card.processId() == null) {
-            return;
-        }
-        board.currentProcesses().stream()
-                .filter(process -> process.id().equals(card.processId()))
-                .findFirst()
-                .ifPresent(process -> {
-                    Label chip = new Label("\u26AD " + process.name());
-                    chip.getStyleClass().add("card-process-chip");
-                    view.getChildren().add(chip);
-                });
-    }
 
     /** "\u2190n \u2192n" badges counting predecessors/successors (session 4.6). */
     private static void addRelationBadgesIfPresent(I18n i18n, BoardController board,
