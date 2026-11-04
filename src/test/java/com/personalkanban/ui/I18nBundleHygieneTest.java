@@ -33,13 +33,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class I18nBundleHygieneTest {
 
-    private static final List<String> BUNDLES = List.of(
-            "messages.properties",
-            "messages_en.properties",
-            "messages_de.properties",
-            "messages_es.properties",
-            "messages_fr.properties");
-
     /** A real key: dotted words, no spaces, no braces. */
     private static final Pattern KEY = Pattern.compile("[a-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+");
 
@@ -48,7 +41,7 @@ class I18nBundleHygieneTest {
 
     @Test
     void everyLineIsEitherAKeyOrAComment() throws IOException {
-        for (String bundle : BUNDLES) {
+        for (String bundle : bundles()) {
             Properties properties = load(bundle);
             Set<String> odd = new TreeSet<>();
             for (String key : properties.stringPropertyNames()) {
@@ -65,21 +58,22 @@ class I18nBundleHygieneTest {
 
     @Test
     void aTranslationKeepsTheSameArgumentsAsTheOthers() throws IOException {
+        String reference = referenceBundle();
         Map<String, Map<String, String>> texts = new LinkedHashMap<>();
-        for (String bundle : BUNDLES) {
+        for (String bundle : bundles()) {
             texts.put(bundle, texts(load(bundle)));
         }
 
         for (Map.Entry<String, Map<String, String>> entry : texts.entrySet()) {
             String bundle = entry.getKey();
-            Set<String> keys = new TreeSet<>(texts.get(BUNDLES.get(0)).keySet());
+            Set<String> keys = new TreeSet<>(texts.get(reference).keySet());
             keys.addAll(entry.getValue().keySet());
             for (String key : keys) {
-                Set<String> reference = placeholders(texts.get(BUNDLES.get(0)).get(key));
+                Set<String> expected = placeholders(texts.get(reference).get(key));
                 Set<String> translated = placeholders(entry.getValue().get(key));
                 assertThat(translated)
-                        .as("arguments of %s in %s (reference: %s)", key, bundle, reference)
-                        .isEqualTo(reference);
+                        .as("arguments of %s in %s (reference: %s)", key, bundle, expected)
+                        .isEqualTo(expected);
             }
         }
     }
@@ -87,7 +81,7 @@ class I18nBundleHygieneTest {
     /** Every translation with arguments must format without blowing up. */
     @Test
     void everyTranslationFormatsWithItsOwnArguments() throws IOException {
-        for (String bundle : BUNDLES) {
+        for (String bundle : bundles()) {
             for (Map.Entry<String, String> text : texts(load(bundle)).entrySet()) {
                 Set<String> placeholders = placeholders(text.getValue());
                 Object[] args = new Object[highest(placeholders) + 1];
@@ -108,7 +102,7 @@ class I18nBundleHygieneTest {
     /** The recovery text keeps its whole message (T17 · H-3 regression). */
     @Test
     void theRecoveryMessageKeepsEveryParagraph() throws IOException {
-        for (String bundle : BUNDLES) {
+        for (String bundle : bundles()) {
             String body = texts(load(bundle)).get("recovery.corrupt.body");
             assertThat(body).as("recovery.corrupt.body in %s", bundle).isNotBlank();
             String formatted = MessageFormat.format(body, "/ruta/kanban.db", "/ruta/backups/kanban-x.db");
@@ -120,6 +114,14 @@ class I18nBundleHygieneTest {
                     .as("the copy has a paragraph of its own in %s", bundle)
                     .isGreaterThanOrEqualTo(3);
         }
+    }
+
+    private static java.util.List<String> bundles() throws IOException {
+        return I18nCoverageTest.bundles();
+    }
+
+    private static String referenceBundle() throws IOException {
+        return I18nCoverageTest.referenceBundle();
     }
 
     private static Map<String, String> texts(Properties properties) {

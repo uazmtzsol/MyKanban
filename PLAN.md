@@ -188,7 +188,8 @@ empaquetado).
 **Reglas comunes a toda tarea** (no se repiten en cada una):
 1. Arquitectura hexagonal (`ArchitectureTest`): dominio puro; `application` sin
    JavaFX/JDBC/UI; `ui` sin JDBC/infraestructura.
-2. i18n en los **5** bundles (base + EN/ES/DE/FR): lo exige `I18nCoverageTest`.
+2. i18n en **todos** los bundles publicados (hoy solo `messages_es.properties`):
+   lo exige `I18nCoverageTest`, que descubre los que haya.
 3. **Sin dependencias nuevas** (el build es offline) ni cambios de build salvo
    que la tarea lo exija.
 4. **Test nuevo** que falle sin el cambio (mínimo: lógica pura + una prueba de
@@ -244,6 +245,7 @@ por tarea; el de **T13–T16** (B4–B8) y **T23** (B10) en §7; el resto en §8
 
 | Fecha | Tarea | Estado | Commit / notas |
 |---|---|---|---|
+| 2026-11-03 | **i18n: solo español** (a petición del usuario) | ✅ | `chore(i18n): ship Spanish only and keep the locale machinery` — fuera `messages.properties` (base EN), `_en`, `_de`, `_fr`: queda `messages_es.properties`. `I18n.SUPPORTED = [es]` (el menú Idioma muestra una sola entrada) y `I18n.DEFAULT_LOCALE = es`; cualquier locale sin bundle (un `ui.language=en` guardado por un build viejo, el locale del JVM en la ventana de recuperación) **cae a español** en vez de fallar. El mecanismo queda intacto: un idioma nuevo = `messages_<lang>.properties` + entrada en `SUPPORTED`. `I18nCoverageTest`/`I18nBundleHygieneTest` ahora **descubren** los bundles en disco (cubren los idiomas futuros sin editarlos); `I18nSwitchTest` reescrito para el nuevo contrato (incluye el fallback y la variante `es-MX`). `CardExporterTest` dejó de afirmar textos en inglés. Suite **607/607** (1 skip) — el recuento bajó 7 porque `clean` se llevó clases de test borradas que seguían compiladas en `target/` |
 | 2026-11-03 | **BUG · «Gestionar etiquetas» lanzaba NPE** | ✅ | `fix(labels): open the label manager again and keep the color on rename` — `LabelManagerDialog.updateButtons()` se ejecutaba antes de crear el combo de color → `NullPointerException` y la ventana no abría (reproducido con el stack real del usuario). Se reordena la construcción, se añaden guardas y `show()` se separa en `buildDialog()` para poder probarlo; de paso, renombrar una etiqueta **mueve** su regla de color y eliminarla la **limpia**. `LabelManagerDialogTest` (5, verificado que falla con el bug) → suite **614/614** (1 skip) |
 | 2026-11-03 | **RP-1…RP-6** quitar procesos (rama `remove-processes`) | ✅ hecho | `cf8943b` RP-2 · `c31869a` RP-1/3/4 (UI) · último commit RP-5/6 (dominio, persistencia, sync, i18n, CSS, docs). Suite 609/609 OK (1 skip) |
 | 2026-10-20 | **C-6** vista de procesos: A1 + B1 + C1 (§7.8) | ✅ | `fix(process-view): one click selects, double click opens, single bottom inspector (A1+B1+C1)` — **A1:** el clic en la tarjeta del diagrama ya no abre el detalle (era el `setOnMouseClicked` del título): un clic la selecciona y enfoca (y la hace «actual»), solo el **doble clic** abre, igual que el tablero; `Enter` sigue abriendo el editor. **B1:** el inspector de relaciones pasa de **uno por fila** a **una sola banda al pie de la vista**, oculta y fuera del layout hasta que hay tarjeta enfocada, con solo la cabecera (título: clic = enfocar, doble clic = abrir) y las dos listas de enlaces; fuera los 4 botones duplicados y la ayuda de teclado permanente (`process.inspector.hint` → `process.inspector.caption` ×5 idiomas). **C1:** `.process-card.card-current` marca la tarjeta actual en ambos temas. `ProcessViewInteractionTest` (3) → suite **622/622** (1 skip) |

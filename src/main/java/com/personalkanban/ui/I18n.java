@@ -10,14 +10,21 @@ import java.util.ResourceBundle;
  * Thin wrapper over {@link ResourceBundle} (Pure Fabrication): translates keys
  * to text for the current locale and exposes the supported locales for the
  * language menu. Bundle name: {@code i18n.messages}.
+ *
+ * <p>Only Spanish ships today, but everything stays per-locale on purpose:
+ * dropping {@code i18n/messages_<lang>.properties} into the resources and
+ * adding that locale to {@link #SUPPORTED} is all a new language needs — no
+ * other code changes.</p>
  */
 final class I18n {
 
     static final String BUNDLE_NAME = "i18n.messages";
 
-    /** The maintained languages: English, French, Spanish, German. */
-    static final List<Locale> SUPPORTED = List.of(
-            Locale.of("en"), Locale.of("fr"), Locale.of("es"), Locale.of("de"));
+    /** The language the app falls back to when the requested one has no bundle. */
+    static final Locale DEFAULT_LOCALE = Locale.of("es");
+
+    /** The languages offered in the menu: Spanish is the only one for now. */
+    static final List<Locale> SUPPORTED = List.of(DEFAULT_LOCALE);
 
     private ResourceBundle bundle;
 
@@ -27,11 +34,24 @@ final class I18n {
 
     void setLocale(Locale locale) {
         Objects.requireNonNull(locale);
+        // A locale without a bundle (a settings file from an older build that
+        // still remembers English, or the JVM's own locale) shows the default
+        // language instead of leaving the UI blank or failing to start.
+        ResourceBundle loaded = load(locale);
+        if (loaded == null) {
+            loaded = load(DEFAULT_LOCALE);
+        }
+        if (loaded == null) {
+            throw new IllegalStateException("Missing i18n bundle: " + BUNDLE_NAME);
+        }
+        this.bundle = loaded;
+    }
+
+    private static ResourceBundle load(Locale locale) {
         try {
-            this.bundle = ResourceBundle.getBundle(BUNDLE_NAME, locale,
-                    new UTF8Control());
+            return ResourceBundle.getBundle(BUNDLE_NAME, locale, new UTF8Control());
         } catch (MissingResourceException e) {
-            throw new IllegalStateException("Missing i18n bundle: " + BUNDLE_NAME, e);
+            return null;
         }
     }
 
@@ -48,8 +68,10 @@ final class I18n {
         return java.text.MessageFormat.format(text(key), args);
     }
 
+    /** The locale actually on screen (the fallback when the request had no bundle). */
     Locale locale() {
-        return bundle.getLocale().equals(new Locale("")) ? Locale.of("en") : bundle.getLocale();
+        Locale actual = bundle.getLocale();
+        return actual.equals(Locale.ROOT) ? DEFAULT_LOCALE : actual;
     }
 
     static final class UTF8Control extends ResourceBundle.Control {

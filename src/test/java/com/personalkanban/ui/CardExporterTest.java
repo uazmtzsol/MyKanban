@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class CardExporterTest {
 
-    private final I18n i18n = new I18n(Locale.of("en"));
+    private final I18n i18n = new I18n(I18n.DEFAULT_LOCALE);
 
     private final Board board = new Board(new BoardId("b1"));
 
@@ -73,16 +73,16 @@ class CardExporterTest {
         String out = render(CardExporter.Sections.all(), Set.of(0, 1), CardExporter.Format.TXT);
 
         assertThat(out).startsWith("Buy a gift\n" + "=".repeat("Buy a gift".length()));
-        assertThat(out).contains("Description:\nFirst line\nSecond line");
-        assertThat(out).contains("Due date: 2026-10-09");
-        assertThat(out).contains("Labels: home, Importante");
+        assertThat(out).contains(i18n.text("export.field.description") + ":\nFirst line\nSecond line");
+        assertThat(out).contains(i18n.text("export.field.due") + ": 2026-10-09");
+        assertThat(out).contains(i18n.text("export.field.labels") + ": home, Importante");
         assertThat(out).contains("- [x] done item");
         assertThat(out).contains("- [ ] pending item");
-        assertThat(out).contains("NOTES");
+        assertThat(out).contains(i18n.text("export.section.notes").toUpperCase(java.util.Locale.ROOT));
         assertThat(out).contains("Shopping");
         assertThat(out).contains("Reminders");
         assertThat(out).contains("Milk, bread");
-        assertThat(out).contains("TIME RECORDS");
+        assertThat(out).contains(i18n.text("export.section.time").toUpperCase(java.util.Locale.ROOT));
         assertThat(out).contains("2026-10-09 10:00 \u2013 2026-10-09 11:30 : worked");
         assertThat(out).contains("2026-10-09 10:00 \u2013 " + i18n.text("export.time.running"));
     }
@@ -95,17 +95,17 @@ class CardExporterTest {
 
         assertThat(onlyChecklist).contains("- [x] done item");
         assertThat(onlyChecklist).doesNotContain("Buy a gift");
-        assertThat(onlyChecklist).doesNotContain("Due date");
-        assertThat(onlyChecklist).doesNotContain("NOTES");
-        assertThat(onlyChecklist).doesNotContain("TIME RECORDS");
+        assertThat(onlyChecklist).doesNotContain(i18n.text("export.field.due"));
+        assertThat(onlyChecklist).doesNotContain(i18n.text("export.section.notes").toUpperCase(java.util.Locale.ROOT));
+        assertThat(onlyChecklist).doesNotContain(i18n.text("export.section.time").toUpperCase(java.util.Locale.ROOT));
 
         String onlyData = render(
                 new CardExporter.Sections(true, false, false, false),
                 Set.of(0, 1), CardExporter.Format.TXT);
 
-        assertThat(onlyData).contains("Due date: 2026-10-09");
+        assertThat(onlyData).contains(i18n.text("export.field.due") + ": 2026-10-09");
         assertThat(onlyData).doesNotContain("done item");
-        assertThat(onlyData).doesNotContain("NOTES");
+        assertThat(onlyData).doesNotContain(i18n.text("export.section.notes").toUpperCase(java.util.Locale.ROOT));
     }
 
     @Test
@@ -117,7 +117,7 @@ class CardExporterTest {
         assertThat(oneNote).doesNotContain("Milk, bread");
 
         String noNotes = render(CardExporter.Sections.all(), Set.of(), CardExporter.Format.TXT);
-        assertThat(noNotes).doesNotContain("NOTES");
+        assertThat(noNotes).doesNotContain(i18n.text("export.section.notes").toUpperCase(java.util.Locale.ROOT));
         assertThat(noNotes).doesNotContain("Milk, bread");
     }
 
@@ -156,7 +156,7 @@ class CardExporterTest {
         String out = render(CardExporter.Sections.all(), Set.of(0), CardExporter.Format.PDF);
 
         assertThat(out).startsWith("Buy a gift\n");
-        assertThat(out).contains("NOTES");
+        assertThat(out).contains(i18n.text("export.section.notes").toUpperCase(java.util.Locale.ROOT));
         assertThat(out).doesNotContain("# Buy a gift");
     }
 

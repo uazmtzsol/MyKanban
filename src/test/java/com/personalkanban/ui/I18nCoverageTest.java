@@ -42,14 +42,52 @@ class I18nCoverageTest {
     private static final Set<String> NOT_TRANSLATIONS = Set.of(
             "board.json", "board.pdf", "kanban.db", "i18n.messages", "user.home");
 
-    /** Every bundle shipped with the app (base = English, plus the
-     *  explicit English copy that prevents JVM fallback to the system locale). */
-    private static final List<String> BUNDLES = List.of(
-            "messages.properties",
-            "messages_en.properties",
-            "messages_de.properties",
-            "messages_es.properties",
-            "messages_fr.properties");
+    private static final String BUNDLE_DIR = "src/main/resources/i18n";
+
+    /**
+     * Every bundle shipped with the app, discovered from the resources instead
+     * of being listed by hand: adding a language later is automatically
+     * covered by this test without touching it.
+     */
+    static List<String> bundles() throws IOException {
+        Path dir = resolve(BUNDLE_DIR);
+        try (Stream<Path> files = Files.list(dir)) {
+            List<String> names = files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.startsWith("messages") && name.endsWith(".properties"))
+                    .sorted()
+                    .collect(Collectors.toList());
+            assertThat(names)
+                    .as("i18n bundles in %s (at least the default language)", dir)
+                    .isNotEmpty();
+            return names;
+        }
+    }
+
+    /** The bundle of {@link I18n#DEFAULT_LOCALE}: the reference for the others. */
+    static String referenceBundle() throws IOException {
+        return defaultBundle();
+    }
+
+    static String defaultBundle() throws IOException {
+        String expected = "messages_" + I18n.DEFAULT_LOCALE.getLanguage() + ".properties";
+        assertThat(bundles())
+                .as("a bundle for the default language %s", I18n.DEFAULT_LOCALE)
+                .contains(expected);
+        return expected;
+    }
+
+    private static Path resolve(String relative) {
+        Path cwd = Path.of("").toAbsolutePath();
+        Path candidate = cwd;
+        for (int depth = 0; depth < 4 && candidate != null; depth++) {
+            Path probe = candidate.resolve(relative);
+            if (Files.isDirectory(probe)) {
+                return probe;
+            }
+            candidate = candidate.getParent();
+        }
+        throw new IllegalStateException("Could not locate " + relative + " from " + cwd);
+    }
 
     private static Path uiSourcesRoot() {
         Path cwd = Path.of("").toAbsolutePath();
@@ -72,7 +110,7 @@ class I18nCoverageTest {
                 .as("expected i18n.text(\"...\") usages to be found in ui sources")
                 .isNotEmpty();
 
-        for (String bundle : BUNDLES) {
+        for (String bundle : bundles()) {
             Properties properties = loadBundle(bundle);
             Set<String> missing = usedKeys.stream()
                     .filter(key -> !properties.containsKey(key))
@@ -86,12 +124,9 @@ class I18nCoverageTest {
     @Test
     void wellKnownDialogButtonsAreTranslated() throws IOException {
         // Regression anchor for the markdown editor buttons bug.
-        Properties english = loadBundle("messages.properties");
-        Properties spanish = loadBundle("messages_es.properties");
-        assertThat(english.getProperty("dialog.ok")).isNotBlank();
-        assertThat(english.getProperty("dialog.cancel")).isNotBlank();
-        assertThat(spanish.getProperty("dialog.ok")).isNotBlank();
-        assertThat(spanish.getProperty("dialog.cancel")).isNotBlank();
+        Properties defaults = loadBundle(defaultBundle());
+        assertThat(defaults.getProperty("dialog.ok")).isNotBlank();
+        assertThat(defaults.getProperty("dialog.cancel")).isNotBlank();
     }
 
     /**
@@ -109,7 +144,7 @@ class I18nCoverageTest {
                 .as("expected dotted literals to be found in ui sources")
                 .isNotEmpty();
 
-        for (String bundle : BUNDLES) {
+        for (String bundle : bundles()) {
             Properties properties = loadBundle(bundle);
             Set<String> unknown = literals.stream()
                     .filter(literal -> !properties.containsKey(literal))

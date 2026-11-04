@@ -213,12 +213,18 @@ columna. El área de tarjetas completa es drop-target fallback (append al final)
 
 ## 5. i18n y temas
 
-- 4 bundles: `messages.properties` (en, base) + `_es, _de, _fr`.
-  UTF-8 vía `I18n.UTF8Control`.
+- **Un solo bundle hoy:** `i18n/messages_es.properties`. UTF-8 vía
+  `I18n.UTF8Control`.
+- El mecanismo sigue siendo **por locale**: para añadir un idioma basta con
+  `i18n/messages_<lang>.properties` + su entrada en `I18n.SUPPORTED` (que
+  alimenta el menú Idioma). No hay que tocar nada más.
+- Un locale **sin** bundle (un `ui.language` guardado por un build anterior, o
+  el locale del JVM) cae a `I18n.DEFAULT_LOCALE` (español): la ventana nunca
+  se queda en blanco ni falla al arrancar.
 - **Toda** cadena visible pasa por `i18n.text("clave")`. Claves nuevas →
-  añadir a los 4 archivos (lo enforcea `I18nCoverageTest`; la sesión 4 añadió
-  ~60 claves: `menu.file`, `file.exit`, `prefs.*`, `help.*`, `checklist.*`,
-  `card.tab.*`, `card.notes.*`, `card.relations.tip`).
+  añadir al bundle (lo enforcea `I18nCoverageTest`, que descubre los
+  `messages*.properties` presentes, así que cubre los idiomas futuros sin
+  editar el test).
   Clave faltante = se muestra la clave (bug de los botones del editor markdown, P0-2).
 - Cambiar idioma/tema/tablero/BD ⇒ `rebuildAll()` (grafo completo nuevo).
 - CSS: una sola hoja activa (light/dark). Clases de tarjetas: `.card`,
@@ -236,7 +242,7 @@ columna. El área de tarjetas completa es drop-target fallback (append al final)
 | Servicio | `application/BoardServiceTest.java` (con `port/InMemory*` fakes) |
 | SQLite | `infrastructure/sqlite/SqliteBoardRepositoryTest.java` (BD temp real) |
 | Contexto | `AppContextDatabaseManagementTest`, `AppContextRecentsTest` |
-| i18n | `ui/I18nCoverageTest.java` (claves usadas en ui ⊆ los 4 bundles) + `ui/DialogsParseLabelsTest` (5) + `ui/ParseNewBoardColumnsTest` (7) |
+| i18n | `ui/I18nCoverageTest.java` (claves usadas en ui ⊆ cada bundle presente) + `ui/I18nBundleHygieneTest.java` + `ui/I18nSwitchTest.java` + `ui/DialogsParseLabelsTest` (5) + `ui/ParseNewBoardColumnsTest` (7) |
 | Sesión 4 | `DependencyGuardTest` (9, política pura), `CardExtrasTest` (12, dominio), `SessionFourServiceTest` (8, undo/preferencias), `SqliteSessionFourRoundTripTest` (2, SQLite real) |
 | Arquitectura | `architecture/ArchitectureTest.java` |
 

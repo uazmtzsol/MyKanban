@@ -499,8 +499,9 @@ El **modo oscuro** también se cambia al vuelo con el botón 🌙 o **Ctrl+D**.
 
 ## 14. Idioma
 
-**Menú Idioma:** English, Español, Deutsch, Français. Se aplica al instante y
-se recuerda entre arranques.
+**Menú Idioma:** por ahora solo **Español**, la única traducción publicada. El
+selector se recuerda entre arranques y admitirá más idiomas sin cambiar nada
+del programa: cada idioma nuevo aparece en este mismo menú.
 
 ## 15. Atajos de teclado
 

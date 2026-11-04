@@ -150,6 +150,21 @@ class MainMenuStructureTest {
         assertThat(actual).isEqualTo(expected);
     }
 
+    /**
+     * Only the languages that actually ship appear in the menu (Spanish, for
+     * now). When a new bundle is added the menu grows on its own, because the
+     * items are built from {@link I18n#SUPPORTED}.
+     */
+    @Test
+    void theLanguageMenuOffersExactlyTheShippedLanguages() throws Exception {
+        List<String> items = fx(() -> menuByKey(menuBar(), "menu.language").getItems().stream()
+                .map(MenuItem::getText)
+                .collect(Collectors.toList()));
+
+        assertThat(items).hasSize(I18n.SUPPORTED.size());
+        assertThat(items).allSatisfy(text -> assertThat(text).contains("(es)"));
+    }
+
     @Test
     void theEditMenuGroupsTheEditingActions() throws Exception {
         List<String> items = fx(() -> {

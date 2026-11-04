@@ -416,7 +416,10 @@ public final class AppContext implements AutoCloseable {
     public Locale savedLocale() {
         return settings.get(SETTING_LANGUAGE)
                 .map(Locale::forLanguageTag)
-                .orElseGet(() -> Locale.of("en"));
+                // Spanish is the only language shipped, and therefore the
+                // default. A stored tag of a language that is not offered
+                // falls back to it when the bundle is loaded (I18n).
+                .orElseGet(() -> Locale.of("es"));
     }
 
     public void saveLocale(Locale locale) {

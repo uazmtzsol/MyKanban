@@ -226,9 +226,9 @@ sin deshacer.
 - **La UI solo lo pinta**: un diálogo en `ui/` que muestra la vista previa y
   recoge las decisiones; ningún cálculo en la vista.
 - **Aplicar es un comando deshacible** (memento), no una escritura suelta.
-- **i18n en los 5 bundles** (base + EN/ES/DE/FR) y las claves nuevas antes
-  de tocar la UI; lo exige `I18nCoverageTest`, y `ArchitectureTest` marca
-  dónde puede vivir cada pieza.
+- **i18n en el bundle de cada idioma publicado** (hoy solo
+  `messages_es.properties`) y las claves nuevas antes de tocar la UI; lo exige
+  `I18nCoverageTest`, y `ArchitectureTest` marca dónde puede vivir cada pieza.
 - **Nada de dependencias nuevas**: el parseo ya es Jackson y el merge ya
   está escrito.
 

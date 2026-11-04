@@ -66,7 +66,7 @@ src/main/java/com/personalkanban/
 src/main/resources/
 ├── css/light.css, dark.css          # temas (una hoja activa por escena)
 ├── db/migration/V1..V4__*.sql       # migraciones versionadas
-└── i18n/messages*.properties        # 4 idiomas: en, es, de, fr
+└── i18n/messages_es.properties      # un idioma por ahora: es (añadir _xx = nuevo idioma)
 src/test/java/...        # tests por capa + ArchitectureTest (ArchUnit)
 ```
 

@@ -444,9 +444,16 @@ un aviso.
 
 - **i18n reducido (Sesión 2):** solo EN, ES, DE, FR. Los bundles ru/hi/zh/ja
   fueron eliminados y `I18n.SUPPORTED` acortado. Porqué: menos superficies de
-  traducción que mantener. Un setting viejo `ui.language=ru|hi|zh|ja` cae al
-  bundle base (inglés) sin errores. Todo texto NUEVO solo necesita los 4
-  bundles (lo enforcea `I18nCoverageTest`).
+  traducción que mantener.
+- **i18n de un solo idioma (decisión del usuario, 2026-11-03):** se quedó
+  **solo español** — `i18n/messages_es.properties` y
+  `I18n.SUPPORTED = [es]`, así que el menú Idioma muestra una sola entrada.
+  Porqué: no mantener cuatro traducciones en paralelo mientras el programa
+  todavía cambia. **El mecanismo se conserva intacto**: un idioma nuevo es un
+  `messages_<lang>.properties` + su entrada en `SUPPORTED`, sin tocar código;
+  los tests descubren los bundles presentes, así que también lo cubren solos.
+  Un `ui.language` viejo (p. ej. `en`) cae a `I18n.DEFAULT_LOCALE` (español)
+  sin errores ni ventana en blanco.
 - **Acciones destructivas lejos del alcance del clic (Sesión 2b):** el botón
   "eliminar todas las tarjetas" se quitó del header de columna (fácil de
   equivocarse, palabras del usuario) y vive en el menú ⋯ de la columna. En su
