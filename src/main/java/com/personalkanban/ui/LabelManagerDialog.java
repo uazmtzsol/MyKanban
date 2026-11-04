@@ -62,6 +62,15 @@ final class LabelManagerDialog {
     }
 
     void show() {
+        buildDialog().showAndWait();
+    }
+
+    /**
+     * Builds the dialog (package-visible so a test can verify the wiring without
+     * waiting for the user). Every widget must exist before the first
+     * {@link #updateButtons()}, which is what the color chooser needs.
+     */
+    Dialog<Void> buildDialog() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle(i18n.text("labels.title"));
         dialog.setHeaderText(i18n.text("labels.header"));
@@ -91,7 +100,6 @@ final class LabelManagerDialog {
         rename.setOnAction(e -> onRename());
         remove = new Button(i18n.text("labels.remove"));
         remove.setOnAction(e -> onRemove());
-        updateButtons();
 
         Label hint = new Label(i18n.text("labels.hint"));
         hint.setWrapText(true);
@@ -131,17 +139,26 @@ final class LabelManagerDialog {
         dialog.getDialogPane().setPrefWidth(420);
 
         reload();
-        dialog.showAndWait();
+        return dialog;
     }
 
     /** Buttons act on the selection; reserved labels can only be listed. */
     private void updateButtons() {
+        // Defensive: this runs from listeners that can fire while the dialog is
+        // still being assembled (selecting an item, for instance).
+        if (list == null) {
+            return;
+        }
         String selected = list.getSelectionModel().getSelectedItem();
         boolean editable = selected != null && !labels.isReserved(selected);
-        rename.setDisable(!editable);
-        remove.setDisable(!editable);
-        colorBox.setDisable(selected == null);
-        syncColorBox(selected);
+        if (rename != null) {
+            rename.setDisable(!editable);
+            remove.setDisable(!editable);
+        }
+        if (colorBox != null) {
+            colorBox.setDisable(selected == null);
+            syncColorBox(selected);
+        }
     }
 
     /** Shows the selected label's saved color in the chooser (no side effect). */
@@ -228,6 +245,9 @@ final class LabelManagerDialog {
         }
         try {
             labels.renameLabel(current, newName);
+            // The color lives in a style rule keyed by the label name: move it
+            // with the label instead of leaving an orphan rule behind.
+            moveColorRule(current, labels.catalog().canonical(newName));
             reload();
             onChanged.run(); // the sweep rewrote cards of the active board too
         } catch (IllegalArgumentException rejected) {
@@ -246,11 +266,33 @@ final class LabelManagerDialog {
         }
         try {
             labels.removeLabel(current);
+            // A removed label cannot be painted again: drop its color rule so
+            // the preferences dialog does not list a rule for a gone label.
+            service.clearLabelStyle(StylePrefs.labelKey(current));
             reload();
             onChanged.run();
         } catch (IllegalArgumentException rejected) {
             dialogs.error(i18n.text("labels.error", rejected.getMessage()));
         }
+    }
+
+    /** Moves the saved colors of {@code oldName} to {@code newName} (both themes). */
+    void moveColorRule(String oldName, String newName) {
+        if (newName == null || newName.equals(oldName)) {
+            return;
+        }
+        String oldKey = StylePrefs.labelKey(oldName);
+        Optional<StylePrefs.StyleColors> light = service.labelStyle(oldKey, false);
+        Optional<StylePrefs.StyleColors> dark = service.labelStyle(oldKey, true);
+        if (light.isEmpty() && dark.isEmpty()) {
+            return;
+        }
+        String newKey = StylePrefs.labelKey(newName);
+        light.ifPresent(colors ->
+                service.setLabelStyle(newKey, false, colors.background(), colors.text()));
+        dark.ifPresent(colors ->
+                service.setLabelStyle(newKey, true, colors.background(), colors.text()));
+        service.clearLabelStyle(oldKey);
     }
 
     private void reload() {
